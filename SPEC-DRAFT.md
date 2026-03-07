@@ -8,7 +8,7 @@ A slick, mobile-first chat client for OpenClaw with integrated document editing,
 - **Chat-first**: the main view is always the conversation
 - **Documents inline**: files open in a sidebar/overlay, not a new page
 - **Voice-native**: record voice messages as easily as in Telegram
-- **Mobile-first**: works great on iPhone, ideally as a PWA with background audio
+- **Mobile + Desktop**: works great on iPhone as PWA AND as a desktop app (Electron or Tauri possible for native background audio + always-on). Web-first, native wrapper optional.
 
 ---
 
