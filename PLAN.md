@@ -8,15 +8,36 @@ Clavus is a mobile-first chat client for OpenClaw with integrated document editi
 
 ### 1.1 Frontend Stack
 
-| Layer         | Choice                                                                                                                  | Rationale                                                                                                                                                              |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Framework** | **Preact + HTM**                                                                                                        | ~3KB, JSX-compatible, no build step required for dev. Lighter than React, familiar API. Can upgrade to React if needed.                                                |
-| **Styling**   | **Tailwind CSS (standalone CLI)**                                                                                       | Utility-first, responsive-first. Dark mode via `class` strategy. No runtime cost.                                                                                      |
-| **Editor**    | **Marksense** Standalone ([github.com/BigBerny/Marksense-standalone](https://github.com/BigBerny/Marksense-standalone)) | Reuse our own Tiptap-based markdown editor/renderer. Already supports live editing, tables, images, frontmatter. Consistent rendering across Marksense Web and Clavus. |
-| **State**     | **Preact Signals**                                                                                                      | Fine-grained reactivity without Redux boilerplate. Built-in to Preact ecosystem.                                                                                       |
-| **Build**     | **Vite**                                                                                                                | Fast HMR, ESM-native, small bundle. Same toolchain as existing Control UI.                                                                                             |
-| **Audio**     | **MediaRecorder API**                                                                                                   | Native browser API. No dependencies needed.                                                                                                                            |
-| **PWA**       | **Workbox** (via vite-plugin-pwa)                                                                                       | Service worker generation, precaching, offline shell.                                                                                                                  |
+| Layer | Choice | Rationale |
+|-------|--------|-----------|
+| **Framework** | **React 19 + TypeScript** | Industry standard (v19.2.x stable), best ecosystem for LLM-generated code, strong Tiptap/library compatibility. React Compiler handles memoization automatically. |
+| **Styling** | **Tailwind CSS v4** | Utility-first, responsive-first. Dark mode via `class` strategy. Add CSS variable design tokens for theming. |
+| **Chat Rendering** | **markdown-it** or **remark/rehype** | Lightweight markdown renderer for chat messages. Optimized for streaming partial content, sanitization, code blocks. NOT Tiptap — too heavy for message display. |
+| **Document Editor** | **Marksense (Tiptap)** ([github.com/BigBerny/Marksense-standalone](https://github.com/BigBerny/Marksense-standalone)) | Our own Tiptap-based editor for document sidebar, review panels, and rich editing. Canvas-like experience for reviewing content with the AI. |
+| **State** | **Zustand** (UI/app state) + **TanStack Query** (server state) | Zustand for lightweight local state, TanStack Query for conversation list, settings, sync. Custom store for WebSocket/streaming state. |
+| **Persistence** | **Dexie (IndexedDB)** | Offline drafts, conversation cache, preferences. localStorage only for tiny settings. |
+| **Build** | **Vite** | Fast HMR, ESM-native, small bundle. Same toolchain as existing Control UI. |
+| **Audio** | **MediaRecorder API + ElevenLabs** | STT via Scribe v2, TTS via ElevenLabs API. Native MediaRecorder for capture. |
+| **PWA** | **Workbox** (via vite-plugin-pwa) | Service worker generation, precaching, offline shell. |
+| **Desktop** | **Tauri** (later) | Lightweight native wrapper when ready. PWA first, desktop second. |
+
+### 1.1.1 Two Rendering Pipelines
+
+Clavus uses **two separate rendering paths** for markdown:
+
+1. **Chat messages** → lightweight renderer (markdown-it/remark). Optimized for:
+   - Streaming partial AI responses without expensive re-renders
+   - Fast rendering of long conversation histories
+   - Code block syntax highlighting (deferred until message complete)
+   - Sanitization and safe HTML output
+
+2. **Document/Review surfaces** → Marksense (Tiptap). Used for:
+   - Document sidebar (editing workspace files)
+   - Canvas-like review panels ("Hey, can you look at this?")
+   - Rich text composer (when needed)
+   - Structured content editing
+
+This mirrors how humans work with an assistant: most communication is conversational (lightweight chat), but sometimes you need to **show something on screen** — a document, a config, a draft — and review it together. The Marksense editor provides that "shared screen" experience.
 
 ### 1.2 Directory Structure
 
@@ -720,12 +741,18 @@ Tasks:
 
 ## 13. Decisions (Resolved)
 
-1. **Tech Stack**: ~~Preact vs Lit~~ → Run the full tech stack through LLM Council for best-practice validation. Use whatever the Council recommends as modern best practice.
+1. **Framework**: ~~Preact vs Lit vs React~~ → **React 19 + TypeScript.** Best ecosystem for LLM-generated code, strongest library compatibility (Tiptap, TanStack, etc.), industry standard. Council consensus: React is the safest long-term choice for a complex chat client.
 
-2. **Transcription & TTS**: ~~Gateway transcription pipeline vs WASM Whisper~~ → **Use ElevenLabs for both STT and TTS.** Already proven in our OpenClaw setup (Scribe v2 for STT). No need to go through the Gateway transcription pipeline.
+2. **Markdown rendering**: **Two pipelines.** Lightweight renderer (markdown-it/remark) for chat messages (streaming-friendly, fast). Marksense (Tiptap) for document editing, review panels, and canvas-like surfaces. Council consensus: Tiptap too heavy for chat message display.
 
-3. **Standalone app**: ~~Standalone repo vs OpenClaw plugin~~ → **Standalone.** Must work across Smartphone, PC, and ideally Web. Connects to OpenClaw Gateway remotely.
+3. **State management**: **Zustand** (UI/app state) + **TanStack Query** (server/cache state) + custom store for WebSocket/streaming. **Dexie** (IndexedDB) for offline persistence.
 
-4. **Coexist with Control UI**: Confirmed. Clavus = daily-driver chat interface. Control UI = admin/config. Complementary, not a replacement.
+4. **Transcription & TTS**: **ElevenLabs for both STT and TTS.** Already proven in our OpenClaw setup (Scribe v2 for STT). No need for Gateway transcription pipeline.
 
-5. **Audio format**: Verify which formats ElevenLabs Scribe v2 accepts from browser clients (WebM/Opus from Chrome, MP4/AAC from Safari). Prototype and confirm.
+5. **Standalone app**: **Standalone repo.** Must work across Smartphone, PC, and Web. Connects to OpenClaw Gateway remotely. PWA first, Tauri desktop wrapper later.
+
+6. **Coexist with Control UI**: Confirmed. Clavus = daily-driver chat/voice interface. Control UI = admin/config. Complementary, not a replacement.
+
+7. **Audio format**: Verify which formats ElevenLabs Scribe v2 accepts from browser clients (WebM/Opus from Chrome, MP4/AAC from Safari). Prototype and confirm.
+
+8. **Styling**: **Tailwind CSS v4** with CSS variable design tokens for theming. Extract small component primitives (ChatBubble, Composer, SidebarItem, IconButton).
