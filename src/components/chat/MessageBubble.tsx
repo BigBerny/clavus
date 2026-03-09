@@ -1,4 +1,4 @@
-import { memo, useState, useCallback } from 'react'
+import { memo, useState, useCallback, useEffect } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -22,6 +22,13 @@ function relativeTime(timestamp: number): string {
   return `${Math.floor(hours / 24)}d ago`
 }
 
+function fullDateTime(timestamp: number): string {
+  return new Date(timestamp).toLocaleString(undefined, {
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function CodeBlock({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'> & { className?: string }) {
   const [copied, setCopied] = useState(false)
   const isInline = !className
@@ -33,7 +40,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
     )
   }
   return (
-    <div className="relative group/code my-2">
+    <div className="relative group/code my-2 max-w-full">
       <button
         onClick={() => {
           const text = String(children).replace(/\n$/, '')
@@ -41,12 +48,12 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
           setCopied(true)
           setTimeout(() => setCopied(false), 1500)
         }}
-        className="inline-btn absolute top-2 right-2 opacity-0 group-hover/code:opacity-100 px-2 py-1 text-xs rounded-md bg-white/10 text-text-dark-muted hover:text-text-dark transition-opacity backdrop-blur-sm"
+        className="inline-btn absolute top-2 right-2 opacity-100 px-2 py-1 text-xs rounded-md bg-black/20 dark:bg-white/10 text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors backdrop-blur-sm z-10"
         aria-label="Copy code"
       >
         {copied ? 'Copied!' : 'Copy'}
       </button>
-      <code className={`${className} block overflow-x-auto p-4 rounded-xl bg-surface-light-2 dark:bg-[#0d1117] text-[13px] font-mono whitespace-pre leading-relaxed`} {...props}>
+      <code className={`${className} block overflow-x-auto p-4 rounded-xl bg-surface-light-2 dark:bg-[#0d1117] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} {...props}>
         {children}
       </code>
     </div>
@@ -73,6 +80,14 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const isAssistant = message.role === 'assistant'
   const isError = isSystem && message.content.startsWith('Error:')
   const [copied, setCopied] = useState(false)
+  const [showFullTime, setShowFullTime] = useState(false)
+  const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
+
+  // Update relative time periodically
+  useEffect(() => {
+    const interval = setInterval(() => setRelTime(relativeTime(message.timestamp)), 30000)
+    return () => clearInterval(interval)
+  }, [message.timestamp])
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
@@ -111,18 +126,18 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           J
         </div>
       )}
-      <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[70%] ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[70%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`px-4 py-2.5 ${
+          className={`px-4 py-2.5 overflow-hidden min-w-0 max-w-full ${
             isUser
               ? 'bg-accent text-white rounded-2xl rounded-br-lg shadow-sm shadow-accent/20'
               : 'bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark rounded-2xl rounded-bl-lg shadow-sm shadow-black/5 dark:shadow-black/20'
           }`}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed select-text break-words">{message.content}</p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed select-text" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text break-words">
+            <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               <Markdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}
@@ -137,8 +152,12 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           )}
         </div>
         <div className={`flex items-center gap-2 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
-          <span className="text-[10px] text-text-light-muted/70 dark:text-text-dark-muted/70">
-            {relativeTime(message.timestamp)}
+          <span
+            className="text-[10px] text-text-light-muted/70 dark:text-text-dark-muted/70 cursor-pointer select-none"
+            onClick={() => setShowFullTime((v) => !v)}
+            title={fullDateTime(message.timestamp)}
+          >
+            {showFullTime ? fullDateTime(message.timestamp) : relTime}
           </span>
           {!message.streaming && message.content && (
             <button

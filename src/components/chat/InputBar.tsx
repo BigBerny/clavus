@@ -10,6 +10,7 @@ interface Props {
 
 export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Props) {
   const [value, setValue] = useState('')
+  const [sendAnim, setSendAnim] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const voice = useVoiceRecorder({
@@ -50,6 +51,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed || isStreaming) return
+    setSendAnim(true)
+    setTimeout(() => setSendAnim(false), 300)
     onSend(trimmed.slice(0, 10000))
     setValue('')
     if (textareaRef.current) {
@@ -82,7 +85,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
   const hasText = value.trim().length > 0
 
   return (
-    <div className="border-t border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl safe-area-bottom">
+    <div className="border-t border-surface-light-3/50 dark:border-surface-dark-3/50 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_-1px_3px_rgba(0,0,0,0.2)] bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl safe-area-bottom">
       <div className="max-w-3xl mx-auto px-3 py-2.5">
         {/* Voice error */}
         {voice.error && (
@@ -144,7 +147,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
             <button
               onClick={handleSubmit}
               disabled={!value.trim()}
-              className="flex-none w-10 h-10 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-accent/25"
+              className={`flex-none w-10 h-10 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-accent/25 ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
               aria-label="Send message"
               title="Send"
             >
