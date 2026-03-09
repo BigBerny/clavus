@@ -22,6 +22,7 @@ function relativeTime(timestamp: number): string {
 }
 
 function CodeBlock({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'> & { className?: string }) {
+  const [copied, setCopied] = useState(false)
   const isInline = !className
   if (isInline) {
     return (
@@ -31,20 +32,37 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
     )
   }
   return (
-    <div className="relative group my-2">
+    <div className="relative group/code my-2">
       <button
         onClick={() => {
           const text = String(children).replace(/\n$/, '')
           navigator.clipboard.writeText(text)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 1500)
         }}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 px-2 py-1 text-xs rounded bg-surface-dark-3/80 text-text-dark-muted hover:text-text-dark transition-opacity"
+        className="inline-btn absolute top-2 right-2 opacity-0 group-hover/code:opacity-100 px-2 py-1 text-xs rounded bg-surface-dark-3/80 text-text-dark-muted hover:text-text-dark transition-opacity"
+        aria-label="Copy code"
       >
-        Copy
+        {copied ? 'Copied!' : 'Copy'}
       </button>
-      <code className={`${className} block overflow-x-auto p-4 rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-sm font-mono`} {...props}>
+      <code className={`${className} block overflow-x-auto p-4 rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-sm font-mono whitespace-pre`} {...props}>
         {children}
       </code>
     </div>
+  )
+}
+
+function ExternalLink({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-accent hover:underline"
+      {...props}
+    >
+      {children}
+    </a>
   )
 }
 
@@ -68,7 +86,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   // System/error messages
   if (isSystem) {
     return (
-      <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out]">
+      <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out]" role="status">
         <div className={`max-w-[90%] px-4 py-2 rounded-lg text-xs text-center ${
           isError
             ? 'bg-red-500/10 text-red-400 border border-red-500/20'
@@ -81,7 +99,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   }
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}>
+    <div
+      className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}
+      role="article"
+      aria-label={`${isUser ? 'You' : 'Assistant'}: ${message.content.slice(0, 80)}`}
+    >
       <div className="flex flex-col gap-1 max-w-[85%] md:max-w-[70%]">
         <div
           className={`px-4 py-2.5 rounded-2xl ${
@@ -91,20 +113,20 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           }`}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed select-text">{message.content}</p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed select-text break-words">{message.content}</p>
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text">
+            <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text break-words">
               <Markdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}
-                components={{ code: CodeBlock }}
+                components={{ code: CodeBlock, a: ExternalLink }}
               >
                 {message.content || ' '}
               </Markdown>
             </div>
           )}
           {message.streaming && (
-            <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse rounded-sm" />
+            <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse rounded-sm" aria-label="Typing" />
           )}
         </div>
         <div className={`flex items-center gap-2 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -114,7 +136,8 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           {!message.streaming && message.content && (
             <button
               onClick={handleCopy}
-              className="opacity-0 group-hover/msg:opacity-100 text-[10px] text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-opacity"
+              className="inline-btn opacity-0 group-hover/msg:opacity-100 text-[10px] text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-opacity"
+              aria-label="Copy message"
             >
               {copied ? 'Copied!' : 'Copy'}
             </button>
@@ -123,9 +146,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           {isAssistant && !message.streaming && message.content && onSpeak && (
             <button
               onClick={handleSpeak}
-              className={`opacity-0 group-hover/msg:opacity-100 p-0.5 rounded text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-opacity ${
+              className={`inline-btn opacity-0 group-hover/msg:opacity-100 p-0.5 rounded text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-opacity ${
                 isSpeaking ? '!opacity-100 text-accent' : ''
               }`}
+              aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
               title={isSpeaking ? 'Stop speaking' : 'Read aloud'}
             >
               {isSpeaking ? (

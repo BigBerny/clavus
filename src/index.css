@@ -71,6 +71,19 @@ button.inline-btn {
   min-width: auto;
 }
 
+/* Subtle chat background */
+.chat-bg {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(59, 130, 246, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
+}
+.dark .chat-bg {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+    linear-gradient(to bottom, #0f172a, #0c1322);
+}
+
 /* Message fade + slide animation */
 @keyframes fadeSlideIn {
   from { opacity: 0; transform: translateY(8px); }
@@ -129,6 +142,11 @@ button.inline-btn {
 pre code.hljs {
   background: #f1f5f9;
 }
+
+/* Prose overrides for markdown lists */
+.prose ul { list-style-type: disc; padding-left: 1.25em; }
+.prose ol { list-style-type: decimal; padding-left: 1.25em; }
+.prose li { margin-top: 0.25em; margin-bottom: 0.25em; }
 
 /* Theme transition (no flash on load, smooth after) */
 html.theme-ready,

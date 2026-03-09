@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Header } from './components/layout/Header.tsx'
 import { Settings } from './components/layout/Settings.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
@@ -6,20 +6,67 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { checkGateway } from './gateway/chat.ts'
-import { getConfig } from './gateway/config.ts'
+import { getConfig, hasToken } from './gateway/config.ts'
+
+function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
+  const [token, setToken] = useState('')
+
+  return (
+    <div className="h-full flex items-center justify-center bg-surface-light dark:bg-surface-dark p-6">
+      <div className="w-full max-w-sm space-y-6">
+        <div className="text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-accent/10 flex items-center justify-center">
+            <span className="text-3xl font-bold text-accent">C</span>
+          </div>
+          <h1 className="text-xl font-semibold text-text-light dark:text-text-dark mb-1">Welcome to Clavus</h1>
+          <p className="text-sm text-text-light-muted dark:text-text-dark-muted">
+            Enter your OpenClaw gateway token to get started.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && token.trim() && onSave(token.trim())}
+            placeholder="Gateway token..."
+            autoFocus
+            aria-label="Gateway token"
+            className="w-full px-4 py-3 text-sm rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted dark:placeholder:text-text-dark-muted border border-surface-light-3 dark:border-surface-dark-3 focus:outline-none focus:ring-2 focus:ring-accent/50"
+          />
+          <button
+            onClick={() => token.trim() && onSave(token.trim())}
+            disabled={!token.trim()}
+            className="w-full py-3 text-sm font-medium rounded-xl bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Connect
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function App() {
-  const { messages, isStreaming, send, abort } = useChat()
+  const { messages, isStreaming, send, abort, clearMessages } = useChat()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
+  const setGatewayToken = useUIStore((s) => s.setGatewayToken)
+  const [needsToken, setNeedsToken] = useState(!hasToken())
+
+  const handleTokenSave = useCallback((token: string) => {
+    setGatewayToken(token)
+    setNeedsToken(false)
+  }, [setGatewayToken])
 
   // Check gateway connectivity
   useEffect(() => {
+    if (needsToken) return
     const config = getConfig()
     setConnectionStatus('checking')
     checkGateway(config).then((ok) => {
       setConnectionStatus(ok ? 'connected' : 'disconnected')
     })
-  }, [setConnectionStatus])
+  }, [setConnectionStatus, needsToken])
 
   // Prevent pull-to-refresh in standalone PWA
   useEffect(() => {
@@ -61,9 +108,13 @@ export function App() {
     }
   }, [])
 
+  if (needsToken) {
+    return <TokenPrompt onSave={handleTokenSave} />
+  }
+
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
-      <Header />
+      <Header onNewConversation={clearMessages} />
       <ChatView messages={messages} />
       <InputBar onSend={send} onAbort={abort} isStreaming={isStreaming} />
       <Settings />
