@@ -8,3 +8,8 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Enable theme transitions after initial paint to prevent flash
+requestAnimationFrame(() => {
+  document.documentElement.classList.add('theme-ready')
+})

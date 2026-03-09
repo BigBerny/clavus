@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
+import { TypingIndicator } from './TypingIndicator'
 import { useTTS } from '../../hooks/useTTS'
 import type { Message } from '../../state/chat'
 
@@ -36,12 +37,19 @@ export function ChatView({ messages }: Props) {
     if (atBottom) setShowNewMessages(false)
   }, [])
 
+  // Detect if last message is assistant with empty content (waiting for first token)
+  const lastMsg = messages[messages.length - 1]
+  const showTyping = lastMsg?.streaming && lastMsg.content === ''
+
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center text-text-light-muted dark:text-text-dark-muted">
-        <div className="text-center">
-          <p className="text-2xl mb-2">Clavus</p>
-          <p className="text-sm">Send a message to start chatting</p>
+      <div className="flex-1 flex items-center justify-center text-text-light-muted dark:text-text-dark-muted select-none">
+        <div className="text-center px-8">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-accent/10 flex items-center justify-center">
+            <span className="text-3xl font-bold text-accent">C</span>
+          </div>
+          <p className="text-xl font-semibold text-text-light dark:text-text-dark mb-1">Welcome to Clavus</p>
+          <p className="text-sm">Your OpenClaw chat assistant. Send a message or tap the mic to start.</p>
         </div>
       </div>
     )
@@ -52,7 +60,8 @@ export function ChatView({ messages }: Props) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        className="h-full overflow-y-auto px-4 py-4 space-y-3"
+        className="h-full overflow-y-auto overscroll-none px-4 py-4 space-y-3"
+        style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {messages.map((msg) => (
           <MessageBubble
@@ -62,6 +71,7 @@ export function ChatView({ messages }: Props) {
             onSpeak={tts.speak}
           />
         ))}
+        {showTyping && <TypingIndicator />}
         <div ref={bottomRef} />
       </div>
 

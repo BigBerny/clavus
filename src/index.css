@@ -16,17 +16,22 @@
   --color-text-dark-muted: #94a3b8;
   --color-text-light: #0f172a;
   --color-text-light-muted: #64748b;
+  --color-border-dark: #334155;
+  --color-border-light: #e2e8f0;
 }
 
 html, body, #root {
   height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* Scrollbar styling */
@@ -41,23 +46,60 @@ body {
   border-radius: 3px;
 }
 
-/* Safe area */
+/* Safe areas */
+.safe-area-top {
+  padding-top: env(safe-area-inset-top);
+}
 .safe-area-bottom {
   padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
 }
 
+/* Prevent text selection on UI (but allow in messages via select-text class) */
+button, header, nav, [role="toolbar"] {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Touch targets minimum size */
+button {
+  min-height: 44px;
+  min-width: 44px;
+}
+/* Exception for inline/small buttons */
+button.inline-btn {
+  min-height: auto;
+  min-width: auto;
+}
+
+/* Message fade + slide animation */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Voice recording */
-.recording-pulse {
-  animation: recordingDot 1.2s ease-in-out infinite;
+/* Settings slide-in */
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
+
+/* Bounce animation for typing indicator dots */
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Voice recording */
 @keyframes recordingDot {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.5; transform: scale(1.2); }
+}
+.recording-pulse {
+  animation: recordingDot 1.2s ease-in-out infinite;
 }
 
 @keyframes voicePulse {
@@ -86,4 +128,12 @@ body {
 }
 pre code.hljs {
   background: #f1f5f9;
+}
+
+/* Theme transition (no flash on load, smooth after) */
+html.theme-ready,
+html.theme-ready *,
+html.theme-ready *::before,
+html.theme-ready *::after {
+  transition: background-color 0.2s ease, color 0.15s ease, border-color 0.2s ease;
 }

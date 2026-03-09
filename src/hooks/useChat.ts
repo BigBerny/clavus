@@ -1,9 +1,16 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream } from '../gateway/chat.ts'
+import { sendChatStream, checkGateway } from '../gateway/chat.ts'
 import { getConfig } from '../gateway/config.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
+
+const MAX_RETRIES = 2
+const RETRY_DELAY = 1500
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 export function useChat() {
   const {
@@ -19,18 +26,58 @@ export function useChat() {
   } = useChatStore()
 
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
+  const offlineQueueRef = useRef<string[]>([])
+  const sendRef = useRef<((content: string, retryCount?: number) => Promise<void>) | undefined>(undefined)
 
-  const send = useCallback(async (content: string) => {
-    if (!content.trim() || isStreaming) return
+  // Online/offline detection + reconnect
+  useEffect(() => {
+    const handleOnline = async () => {
+      setConnectionStatus('reconnecting')
+      const config = getConfig()
+      const ok = await checkGateway(config)
+      setConnectionStatus(ok ? 'connected' : 'disconnected')
 
-    addMessage({ role: 'user', content: content.trim() })
+      if (ok && offlineQueueRef.current.length > 0) {
+        const queued = offlineQueueRef.current.splice(0)
+        for (const content of queued) {
+          sendRef.current?.(content)
+        }
+      }
+    }
 
-    const apiMessages: ChatCompletionMessage[] = [
-      ...useChatStore.getState().messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
-    ]
+    const handleOffline = () => {
+      setConnectionStatus('disconnected')
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [setConnectionStatus])
+
+  const send = useCallback(async (content: string, retryCount = 0) => {
+    if (!content.trim()) return
+    const store = useChatStore.getState()
+    if (store.isStreaming) return
+
+    // If offline, queue
+    if (!navigator.onLine) {
+      addMessage({ role: 'user', content: content.trim() })
+      addMessage({ role: 'system', content: 'You are offline. Message will be sent when connection is restored.' })
+      offlineQueueRef.current.push(content.trim())
+      return
+    }
+
+    if (retryCount === 0) {
+      addMessage({ role: 'user', content: content.trim() })
+    }
+
+    const apiMessages: ChatCompletionMessage[] = useChatStore
+      .getState()
+      .messages.filter((m) => m.role !== 'system')
+      .map((m) => ({ role: m.role, content: m.content }))
 
     const assistantId = useChatStore.getState().addMessage({
       role: 'assistant',
@@ -59,7 +106,15 @@ export function useChat() {
             setStreaming(false)
             setAbortController(null)
             if (error.name !== 'AbortError') {
-              appendToMessage(assistantId, `\n\n*Error: ${error.message}*`)
+              // Remove empty assistant message
+              const state = useChatStore.getState()
+              const msg = state.messages.find((m) => m.id === assistantId)
+              if (msg && !msg.content) {
+                useChatStore.setState({
+                  messages: state.messages.filter((m) => m.id !== assistantId),
+                })
+              }
+              addMessage({ role: 'system', content: `Error: ${error.message}` })
             }
           },
         },
@@ -69,12 +124,36 @@ export function useChat() {
       finalizeMessage(assistantId)
       setStreaming(false)
       setAbortController(null)
-      if (error instanceof Error && error.name !== 'AbortError') {
-        appendToMessage(assistantId, error.message || 'Connection failed')
-        setConnectionStatus('disconnected')
+
+      if (error instanceof Error && error.name === 'AbortError') return
+
+      // Remove empty assistant message
+      const state = useChatStore.getState()
+      const msg = state.messages.find((m) => m.id === assistantId)
+      if (msg && !msg.content) {
+        useChatStore.setState({
+          messages: state.messages.filter((m) => m.id !== assistantId),
+        })
       }
+
+      // Retry
+      if (retryCount < MAX_RETRIES) {
+        setConnectionStatus('reconnecting')
+        addMessage({ role: 'system', content: `Connection failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})` })
+        await delay(RETRY_DELAY)
+        return send(content, retryCount + 1)
+      }
+
+      setConnectionStatus('disconnected')
+      addMessage({
+        role: 'system',
+        content: `Error: ${error instanceof Error ? error.message : 'Connection failed'}`,
+      })
     }
-  }, [isStreaming, addMessage, appendToMessage, finalizeMessage, setStreaming, setAbortController, setConnectionStatus])
+  }, [addMessage, appendToMessage, finalizeMessage, setStreaming, setAbortController, setConnectionStatus])
+
+  // Keep ref updated for offline queue flush
+  sendRef.current = send
 
   const abort = useCallback(() => {
     abortController?.abort()
