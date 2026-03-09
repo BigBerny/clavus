@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { useVoiceRecorder } from '../../hooks/useVoiceRecorder.ts'
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 
 interface Props {
   onSend: (message: string) => void
@@ -13,7 +13,8 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
-      onSend(text)
+      setValue((prev) => (prev ? prev + ' ' + text : text))
+      setTimeout(() => textareaRef.current?.focus(), 50)
     },
   })
 
@@ -78,7 +79,7 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
             </button>
             <div className="flex items-center gap-2">
               <WaveformDisplay levels={voice.levels} />
-              <span className={`text-xs font-mono tabular-nums ${voice.warning ? 'text-red-400' : 'text-text-dark-muted dark:text-text-dark-muted'}`}>
+              <span className={`text-xs font-mono tabular-nums ${voice.warning ? 'text-red-400' : 'text-text-light-muted dark:text-text-dark-muted'}`}>
                 {voice.formattedDuration}
               </span>
             </div>

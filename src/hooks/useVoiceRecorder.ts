@@ -1,25 +1,29 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { getConfig } from '../gateway/config'
 
 export type RecordingState = 'idle' | 'recording' | 'transcribing'
 
-interface UseVoiceRecorderOptions {
-  maxDuration?: number // ms
-  warningAt?: number // ms before max
-  onTranscription: (text: string) => void
-}
+const MAX_DURATION_MS = 5 * 60 * 1000 // 5 minutes
+const WARNING_AT_MS = 4 * 60 * 1000 + 45 * 1000 // 4:45
 
 function getSupportedMimeType(): string {
+  if (typeof MediaRecorder === 'undefined') return 'audio/webm'
   if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) return 'audio/webm;codecs=opus'
   if (MediaRecorder.isTypeSupported('audio/webm')) return 'audio/webm'
   if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4'
   return 'audio/webm'
 }
 
-export function useVoiceRecorder({
-  maxDuration = 120_000,
-  warningAt = 105_000,
-  onTranscription,
-}: UseVoiceRecorderOptions) {
+function fileExtForMime(mime: string): string {
+  if (mime.includes('mp4')) return 'mp4'
+  return 'webm'
+}
+
+interface UseVoiceRecorderOptions {
+  onTranscription: (text: string) => void
+}
+
+export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
   const [state, setState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
   const [warning, setWarning] = useState(false)
@@ -29,10 +33,11 @@ export function useVoiceRecorder({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const startTimeRef = useRef(0)
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const animFrameRef = useRef<number>(0)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const startTimeRef = useRef(0)
   const cancelledRef = useRef(false)
 
   const cleanup = useCallback(() => {
@@ -48,6 +53,10 @@ export function useVoiceRecorder({
       streamRef.current.getTracks().forEach((t) => t.stop())
       streamRef.current = null
     }
+    if (audioCtxRef.current) {
+      audioCtxRef.current.close().catch(() => {})
+      audioCtxRef.current = null
+    }
     analyserRef.current = null
     mediaRecorderRef.current = null
     chunksRef.current = []
@@ -56,44 +65,40 @@ export function useVoiceRecorder({
     setLevels([])
   }, [])
 
-  // Cleanup on unmount
   useEffect(() => cleanup, [cleanup])
 
   const transcribe = useCallback(
     async (blob: Blob) => {
       setState('transcribing')
       try {
+        const config = getConfig()
+        const apiKey = config.openaiApiKey
+        if (!apiKey) {
+          setError('OpenAI API key not configured')
+          setState('idle')
+          return
+        }
+
         const formData = new FormData()
-        formData.append('file', blob, `recording.${blob.type.includes('mp4') ? 'mp4' : 'webm'}`)
+        formData.append('file', blob, `recording.${fileExtForMime(blob.type)}`)
         formData.append('model', 'whisper-1')
 
-        const res = await fetch('http://127.0.0.1:18789/v1/audio/transcriptions', {
+        const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
           method: 'POST',
-          headers: {
-            Authorization: 'Bearer a3896d6e948a4123c1e5a1f0c03884ba6e2d3c4c364fe863',
-          },
+          headers: { Authorization: `Bearer ${apiKey}` },
           body: formData,
         })
 
-        if (!res.ok) throw new Error(`Transcription failed: ${res.status}`)
+        if (!res.ok) {
+          const body = await res.text().catch(() => '')
+          throw new Error(`Transcription failed (${res.status}): ${body}`)
+        }
+
         const data = await res.json()
         const text = data.text?.trim()
-        if (text) {
-          onTranscription(text)
-        }
-      } catch {
-        // Fallback: send audio as base64 data URL
-        try {
-          const reader = new FileReader()
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            reader.onload = () => resolve(reader.result as string)
-            reader.onerror = reject
-            reader.readAsDataURL(blob)
-          })
-          onTranscription(dataUrl)
-        } catch {
-          setError('Transcription failed')
-        }
+        if (text) onTranscription(text)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Transcription failed')
       } finally {
         setState('idle')
       }
@@ -103,6 +108,7 @@ export function useVoiceRecorder({
 
   const startAnalyser = useCallback((stream: MediaStream) => {
     const ctx = new AudioContext()
+    audioCtxRef.current = ctx
     const source = ctx.createMediaStreamSource(stream)
     const analyser = ctx.createAnalyser()
     analyser.fftSize = 64
@@ -113,9 +119,8 @@ export function useVoiceRecorder({
     const update = () => {
       if (!analyserRef.current) return
       analyserRef.current.getByteFrequencyData(dataArray)
-      // Take 8 evenly spaced bars
       const bars: number[] = []
-      const step = Math.floor(dataArray.length / 8)
+      const step = Math.max(1, Math.floor(dataArray.length / 8))
       for (let i = 0; i < 8; i++) {
         bars.push(dataArray[i * step] / 255)
       }
@@ -156,17 +161,16 @@ export function useVoiceRecorder({
         }
       }
 
-      recorder.start(250) // collect chunks every 250ms
+      recorder.start(250)
       startTimeRef.current = Date.now()
       setState('recording')
-
       startAnalyser(stream)
 
       timerRef.current = setInterval(() => {
         const elapsed = Date.now() - startTimeRef.current
         setDuration(elapsed)
-        if (elapsed >= warningAt) setWarning(true)
-        if (elapsed >= maxDuration) {
+        if (elapsed >= WARNING_AT_MS) setWarning(true)
+        if (elapsed >= MAX_DURATION_MS) {
           recorder.stop()
         }
       }, 100)
@@ -179,7 +183,7 @@ export function useVoiceRecorder({
         setError('Could not start recording')
       }
     }
-  }, [cleanup, maxDuration, warningAt, transcribe, startAnalyser])
+  }, [cleanup, transcribe, startAnalyser])
 
   const stop = useCallback(() => {
     if (mediaRecorderRef.current?.state === 'recording') {

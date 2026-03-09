@@ -10,12 +10,7 @@ import { getConfig } from './gateway/config.ts'
 export function App() {
   const { messages, isStreaming, send, abort } = useChat()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
-  const theme = useUIStore((s) => s.theme)
-
-  // Set initial theme class
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme])
+  // Theme is applied automatically by the UI store's applyTheme function
 
   // Check gateway connectivity
   useEffect(() => {

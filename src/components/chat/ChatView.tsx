@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { MessageBubble } from './MessageBubble.tsx'
-import type { Message } from '../../state/chat.ts'
+import { MessageBubble } from './MessageBubble'
+import { useTTS } from '../../hooks/useTTS'
+import type { Message } from '../../state/chat'
 
 interface Props {
   messages: Message[]
@@ -11,6 +12,7 @@ export function ChatView({ messages }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const [showNewMessages, setShowNewMessages] = useState(false)
   const [autoScroll, setAutoScroll] = useState(true)
+  const tts = useTTS()
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -53,7 +55,12 @@ export function ChatView({ messages }: Props) {
         className="h-full overflow-y-auto px-4 py-4 space-y-3"
       >
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            isSpeaking={tts.speakingId === msg.id}
+            onSpeak={tts.speak}
+          />
         ))}
         <div ref={bottomRef} />
       </div>

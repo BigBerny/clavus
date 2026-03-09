@@ -2,14 +2,20 @@ import { useUIStore } from '../../state/ui.ts'
 import { useChatStore } from '../../state/chat.ts'
 
 export function Header() {
-  const { theme, toggleTheme, connectionStatus } = useUIStore()
+  const resolvedTheme = useUIStore((s) => s.resolvedTheme)
+  const setThemeChoice = useUIStore((s) => s.setThemeChoice)
+  const connectionStatus = useUIStore((s) => s.connectionStatus)
   const clearMessages = useChatStore((s) => s.clearMessages)
 
-  const statusColor = {
+  const statusColor: Record<string, string> = {
     connected: 'bg-emerald-500',
     disconnected: 'bg-red-500',
     checking: 'bg-amber-500 animate-pulse',
-  }[connectionStatus]
+    reconnecting: 'bg-amber-500 animate-pulse',
+  }
+
+  const toggleTheme = () => setThemeChoice(resolvedTheme === 'dark' ? 'light' : 'dark')
+  const theme = resolvedTheme
 
   return (
     <header className="flex items-center justify-between px-4 py-3 border-b border-surface-dark-3 dark:border-surface-dark-3 bg-surface-light dark:bg-surface-dark">
@@ -18,7 +24,7 @@ export function Header() {
           Clavus
         </h1>
         <div className="flex items-center gap-1.5">
-          <div className={`w-2 h-2 rounded-full ${statusColor}`} />
+          <div className={`w-2 h-2 rounded-full ${statusColor[connectionStatus]}`} />
           <span className="text-xs text-text-light-muted dark:text-text-dark-muted">
             {connectionStatus}
           </span>

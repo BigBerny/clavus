@@ -1,31 +1,75 @@
 import { create } from 'zustand'
 
-type Theme = 'dark' | 'light'
+export type ThemeChoice = 'dark' | 'light' | 'system'
+type ResolvedTheme = 'dark' | 'light'
 
 interface UIState {
-  theme: Theme
-  connectionStatus: 'connected' | 'disconnected' | 'checking'
-  toggleTheme: () => void
+  themeChoice: ThemeChoice
+  resolvedTheme: ResolvedTheme
+  connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
+  settingsOpen: boolean
+  gatewayUrl: string
+
+  setThemeChoice: (choice: ThemeChoice) => void
   setConnectionStatus: (status: UIState['connectionStatus']) => void
+  setSettingsOpen: (open: boolean) => void
+  setGatewayUrl: (url: string) => void
 }
 
-function getInitialTheme(): Theme {
+function resolveTheme(choice: ThemeChoice): ResolvedTheme {
+  if (choice === 'system') {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  }
+  return choice
+}
+
+function getInitialThemeChoice(): ThemeChoice {
   const stored = localStorage.getItem('clavus-theme')
-  if (stored === 'light' || stored === 'dark') return stored
+  if (stored === 'light' || stored === 'dark' || stored === 'system') return stored
   return 'dark'
 }
 
-export const useUIStore = create<UIState>((set) => ({
-  theme: getInitialTheme(),
-  connectionStatus: 'checking',
+function applyTheme(resolved: ResolvedTheme) {
+  document.documentElement.classList.toggle('dark', resolved === 'dark')
+  const metaDark = document.querySelector('meta[name="theme-color"][media*="dark"]')
+  const metaLight = document.querySelector('meta[name="theme-color"][media*="light"]')
+  if (metaDark) metaDark.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#ffffff')
+  if (metaLight) metaLight.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#ffffff')
+}
 
-  toggleTheme: () =>
-    set((state) => {
-      const next = state.theme === 'dark' ? 'light' : 'dark'
-      localStorage.setItem('clavus-theme', next)
-      document.documentElement.classList.toggle('dark', next === 'dark')
-      return { theme: next }
-    }),
+const initialChoice = getInitialThemeChoice()
+const initialResolved = resolveTheme(initialChoice)
+applyTheme(initialResolved)
+
+export const useUIStore = create<UIState>((set) => ({
+  themeChoice: initialChoice,
+  resolvedTheme: initialResolved,
+  connectionStatus: 'checking',
+  settingsOpen: false,
+  gatewayUrl: localStorage.getItem('clavus-gateway-url') || '',
+
+  setThemeChoice: (choice) => {
+    const resolved = resolveTheme(choice)
+    localStorage.setItem('clavus-theme', choice)
+    applyTheme(resolved)
+    set({ themeChoice: choice, resolvedTheme: resolved })
+  },
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+
+  setGatewayUrl: (url) => {
+    localStorage.setItem('clavus-gateway-url', url)
+    set({ gatewayUrl: url })
+  },
 }))
+
+// Listen for system theme changes
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+  const state = useUIStore.getState()
+  if (state.themeChoice === 'system') {
+    const resolved = resolveTheme('system')
+    applyTheme(resolved)
+    useUIStore.setState({ resolvedTheme: resolved })
+  }
+})
