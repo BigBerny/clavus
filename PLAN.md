@@ -8,16 +8,15 @@ Clavus is a mobile-first chat client for OpenClaw with integrated document editi
 
 ### 1.1 Frontend Stack
 
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| **Framework** | **Preact + HTM** | ~3KB, JSX-compatible, no build step required for dev. Lighter than React, familiar API. Can upgrade to React if needed. |
-| **Styling** | **Tailwind CSS (standalone CLI)** | Utility-first, responsive-first. Dark mode via `class` strategy. No runtime cost. |
-| **Markdown** | **Marksense** ([github.com/BigBerny/Marksense-standalone](https://github.com/BigBerny/Marksense-standalone)) | Reuse our own Tiptap-based markdown editor/renderer. Already supports live editing, tables, images, frontmatter. Consistent rendering across Marksense Web and Clavus. |
-| **Editor** | **Marksense (Tiptap)** | Same Tiptap editor from Marksense — no need for CodeMirror. Reuse existing components for the document sidebar. |
-| **State** | **Preact Signals** | Fine-grained reactivity without Redux boilerplate. Built-in to Preact ecosystem. |
-| **Build** | **Vite** | Fast HMR, ESM-native, small bundle. Same toolchain as existing Control UI. |
-| **Audio** | **MediaRecorder API** | Native browser API. No dependencies needed. |
-| **PWA** | **Workbox** (via vite-plugin-pwa) | Service worker generation, precaching, offline shell. |
+| Layer         | Choice                                                                                                                  | Rationale                                                                                                                                                              |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Framework** | **Preact + HTM**                                                                                                        | ~3KB, JSX-compatible, no build step required for dev. Lighter than React, familiar API. Can upgrade to React if needed.                                                |
+| **Styling**   | **Tailwind CSS (standalone CLI)**                                                                                       | Utility-first, responsive-first. Dark mode via `class` strategy. No runtime cost.                                                                                      |
+| **Editor**    | **Marksense** Standalone ([github.com/BigBerny/Marksense-standalone](https://github.com/BigBerny/Marksense-standalone)) | Reuse our own Tiptap-based markdown editor/renderer. Already supports live editing, tables, images, frontmatter. Consistent rendering across Marksense Web and Clavus. |
+| **State**     | **Preact Signals**                                                                                                      | Fine-grained reactivity without Redux boilerplate. Built-in to Preact ecosystem.                                                                                       |
+| **Build**     | **Vite**                                                                                                                | Fast HMR, ESM-native, small bundle. Same toolchain as existing Control UI.                                                                                             |
+| **Audio**     | **MediaRecorder API**                                                                                                   | Native browser API. No dependencies needed.                                                                                                                            |
+| **PWA**       | **Workbox** (via vite-plugin-pwa)                                                                                       | Service worker generation, precaching, offline shell.                                                                                                                  |
 
 ### 1.2 Directory Structure
 
@@ -82,6 +81,7 @@ clavus/
 ### 2.1 Connection & Authentication
 
 #### Transport
+
 - WebSocket on Gateway port (default `ws://127.0.0.1:18789`)
 - Text frames, JSON payloads
 - First frame **must** be a `connect` request
@@ -116,6 +116,7 @@ clavus/
 ```
 
 #### Device Identity (Ed25519)
+
 1. On first launch, generate an Ed25519 keypair using WebCrypto (`crypto.subtle`)
 2. Store keypair in localStorage (or IndexedDB)
 3. `device.id` = fingerprint of the public key
@@ -124,6 +125,7 @@ clavus/
 6. Local connections (127.0.0.1) auto-approve pairing; remote requires `openclaw devices approve`
 
 #### Auth Modes
+
 - **Token**: `auth.token` in connect params (from `OPENCLAW_GATEWAY_TOKEN`)
 - **Password**: `auth.password` in connect params
 - **Tailscale**: Header-based when behind Tailscale Serve
@@ -161,6 +163,7 @@ The gateway broadcasts `event: "chat"` with payload containing transcript update
 | `agent` | `{sessionKey, content, idempotencyKey}` | `{runId, status:"accepted"}` | Streaming response via `agent` events. |
 
 Agent event flow:
+
 ```
 req(method:"agent") → res({runId, status:"accepted"})
                     → event("agent", {streaming text/tool calls...})
@@ -195,6 +198,7 @@ File access is via the **Tools Invoke HTTP API** or by calling tools through the
 | **WS RPC** | `agents.files.set` | Write agent file content |
 
 Tools Invoke example:
+
 ```
 POST /tools/invoke
 Authorization: Bearer <token>
@@ -208,6 +212,7 @@ Content-Type: application/json
 ```
 
 #### Workspace File Structure
+
 Default workspace: `~/.openclaw/workspace`
 
 Key files: `AGENTS.md`, `SOUL.md`, `USER.md`, `IDENTITY.md`, `MEMORY.md`, `memory/*.md`, `skills/*`, `canvas/*`
@@ -507,6 +512,7 @@ The Gateway does **not** push file-change events over WebSocket. The Control UI 
 3. Apply the updated content to the Marksense (Tiptap) editor, preserving cursor position where possible
 
 **Detection logic:**
+
 ```
 on event("chat") or event("agent"):
   if payload contains tool_call with name in ["write", "edit", "apply_patch"]:
@@ -712,14 +718,14 @@ Tasks:
 
 ---
 
-## 13. Open Decisions
+## 13. Decisions (Resolved)
 
-1. **Preact vs Lit**: Spec mentions LitElement (like Control UI). Plan recommends Preact for richer component model and larger ecosystem. Either works. Decision: go with Preact unless there's a strong reason to match Control UI's stack.
+1. **Tech Stack**: ~~Preact vs Lit~~ → Run the full tech stack through LLM Council for best-practice validation. Use whatever the Council recommends as modern best practice.
 
-2. **Transcription path**: `/tools/invoke` with a transcription tool vs `/v1/responses` with audio upload vs client-side WASM Whisper. Need to prototype which path the Gateway actually supports for raw audio from a browser client.
+2. **Transcription & TTS**: ~~Gateway transcription pipeline vs WASM Whisper~~ → **Use ElevenLabs for both STT and TTS.** Already proven in our OpenClaw setup (Scribe v2 for STT). No need to go through the Gateway transcription pipeline.
 
-3. **Standalone repo vs OpenClaw plugin**: Building as a standalone repo (this one) that connects to the Gateway. Can be upstreamed or packaged as a plugin later.
+3. **Standalone app**: ~~Standalone repo vs OpenClaw plugin~~ → **Standalone.** Must work across Smartphone, PC, and ideally Web. Connects to OpenClaw Gateway remotely.
 
-4. **Coexist with Control UI**: Clavus is a complementary app, not a replacement. Control UI stays for admin/config. Clavus is the daily-driver chat interface.
+4. **Coexist with Control UI**: Confirmed. Clavus = daily-driver chat interface. Control UI = admin/config. Complementary, not a replacement.
 
-5. **Audio format for transcription**: Need to verify which formats the Gateway's transcription pipeline accepts from a browser POST. WebM/Opus from Chrome, MP4/AAC from Safari.
+5. **Audio format**: Verify which formats ElevenLabs Scribe v2 accepts from browser clients (WebM/Opus from Chrome, MP4/AAC from Safari). Prototype and confirm.
