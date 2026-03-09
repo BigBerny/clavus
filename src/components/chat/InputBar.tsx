@@ -5,15 +5,12 @@ interface Props {
   onSend: (message: string) => void
   onAbort: () => void
   isStreaming: boolean
+  onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
 }
 
-const HOLD_THRESHOLD_MS = 300
-
-export function InputBar({ onSend, onAbort, isStreaming }: Props) {
+export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Props) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const isHoldingRef = useRef(false)
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
@@ -21,6 +18,23 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
       setTimeout(() => textareaRef.current?.focus(), 50)
     },
   })
+
+  // Report recording state changes to parent (for header recording bar)
+  useEffect(() => {
+    onRecordingChange?.(voice.state === 'recording', voice.formattedDuration, voice.cancel)
+  }, [voice.state, voice.formattedDuration, voice.cancel, onRecordingChange])
+
+  // Listen for suggestion clicks from empty state
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const text = (e as CustomEvent).detail
+      if (text && typeof text === 'string') {
+        onSend(text)
+      }
+    }
+    window.addEventListener('clavus:send', handler)
+    return () => window.removeEventListener('clavus:send', handler)
+  }, [onSend])
 
   const adjustHeight = useCallback(() => {
     const el = textareaRef.current
@@ -54,44 +68,14 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
     [handleSubmit],
   )
 
-  // Hold-to-record: pointer down starts timer, if held long enough it's hold mode
-  const handleMicPointerDown = useCallback(() => {
-    if (voice.state !== 'idle') return
-    isHoldingRef.current = false
-    holdTimerRef.current = setTimeout(() => {
-      isHoldingRef.current = true
-      voice.start()
-    }, HOLD_THRESHOLD_MS)
-  }, [voice])
-
-  const handleMicPointerUp = useCallback(() => {
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current)
-      holdTimerRef.current = null
-    }
-    if (isHoldingRef.current && voice.state === 'recording') {
-      // Release after hold -> stop & transcribe
-      voice.stop()
-      isHoldingRef.current = false
-    }
-  }, [voice])
-
-  // Tap-to-toggle: quick tap (no hold)
+  // Tap-to-toggle: simple tap to start/stop recording
   const handleMicClick = useCallback(() => {
-    if (isHoldingRef.current) return // was a hold, not a tap
     if (voice.state === 'recording') {
       voice.stop()
     } else if (voice.state === 'idle') {
       voice.start()
     }
   }, [voice])
-
-  // Cleanup hold timer on unmount
-  useEffect(() => {
-    return () => {
-      if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
-    }
-  }, [])
 
   const isRecording = voice.state === 'recording'
   const isTranscribing = voice.state === 'transcribing'
@@ -103,27 +87,6 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
         {/* Voice error */}
         {voice.error && (
           <div className="text-red-400 text-xs mb-2 text-center animate-[fadeSlideIn_0.2s_ease-out]" role="alert">{voice.error}</div>
-        )}
-
-        {/* Recording overlay */}
-        {isRecording && (
-          <div className="flex items-center justify-between mb-2 px-1 animate-[fadeSlideIn_0.2s_ease-out]">
-            <button
-              onClick={voice.cancel}
-              className="inline-btn text-red-400 hover:text-red-300 text-xs font-medium transition-colors px-2 py-1"
-              aria-label="Cancel recording"
-            >
-              Cancel
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="recording-dot w-2 h-2 rounded-full bg-red-500" />
-              <WaveformDisplay levels={voice.levels} />
-              <span className={`text-xs font-mono tabular-nums ${voice.warning ? 'text-red-400' : 'text-text-light-muted dark:text-text-dark-muted'}`}>
-                {voice.formattedDuration}
-              </span>
-            </div>
-            <div className="w-14" />
-          </div>
         )}
 
         {/* Transcribing state */}
@@ -140,9 +103,9 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={isRecording ? 'Recording...' : 'Message...'}
+            placeholder={isRecording ? 'Recording... tap mic to stop' : 'Message...'}
             rows={1}
-            disabled={isRecording || isTranscribing}
+            disabled={isTranscribing}
             aria-label="Chat message input"
             maxLength={10000}
             className={`flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/60 dark:placeholder:text-text-dark-muted/60 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 transition-all ${
@@ -163,10 +126,10 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
             <button
               onClick={voice.stop}
               className="flex-none w-10 h-10 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse"
-              aria-label="Stop recording"
+              aria-label="Stop recording and transcribe"
               title="Stop recording"
             >
-              <StopIcon />
+              <MicIcon />
             </button>
           ) : isTranscribing ? (
             <button
@@ -190,11 +153,8 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
           ) : (
             <button
               onClick={handleMicClick}
-              onPointerDown={handleMicPointerDown}
-              onPointerUp={handleMicPointerUp}
-              onPointerLeave={handleMicPointerUp}
               className="flex-none w-10 h-10 flex items-center justify-center rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:bg-accent hover:text-white active:scale-95 transition-all"
-              aria-label="Start voice input (tap or hold)"
+              aria-label="Start voice input (tap to toggle)"
               title="Voice input"
             >
               <MicIcon />
@@ -202,20 +162,6 @@ export function InputBar({ onSend, onAbort, isStreaming }: Props) {
           )}
         </div>
       </div>
-    </div>
-  )
-}
-
-function WaveformDisplay({ levels }: { levels: number[] }) {
-  return (
-    <div className="flex items-center gap-0.5 h-5" aria-hidden="true">
-      {levels.map((level, i) => (
-        <div
-          key={i}
-          className="w-0.5 bg-red-400 rounded-full transition-all duration-75"
-          style={{ height: `${Math.max(4, level * 20)}px` }}
-        />
-      ))}
     </div>
   )
 }

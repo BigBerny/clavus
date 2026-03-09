@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useThreadsStore, loadThreadMessages, saveThreadMessages } from './threads'
 
 export interface Message {
   id: string
@@ -20,36 +21,31 @@ interface ChatState {
   setStreaming: (streaming: boolean) => void
   setAbortController: (controller: AbortController | null) => void
   clearMessages: () => void
+  loadThread: (threadId: string) => void
 }
-
-const STORAGE_KEY = 'clavus-messages'
-const MAX_MESSAGES = 100
 
 const WELCOME_MESSAGE: Message = {
   id: 'msg-welcome',
   role: 'assistant',
-  content: 'Hi! I\'m your OpenClaw assistant. How can I help you today?',
+  content: 'Hi! I\'m Jane, your OpenClaw assistant. How can I help you today?',
   timestamp: Date.now(),
 }
 
 function loadMessages(): Message[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return [WELCOME_MESSAGE]
-    const parsed = JSON.parse(raw) as Message[]
-    if (!Array.isArray(parsed) || parsed.length === 0) return [WELCOME_MESSAGE]
-    return parsed.map((m) => ({ ...m, streaming: false }))
-  } catch {
-    return [WELCOME_MESSAGE]
-  }
+  const threadId = useThreadsStore.getState().activeThreadId
+  const msgs = loadThreadMessages(threadId)
+  if (msgs.length === 0) return [{ ...WELCOME_MESSAGE, timestamp: Date.now() }]
+  return msgs
 }
 
 function saveMessages(messages: Message[]) {
-  try {
-    const toSave = messages.slice(-MAX_MESSAGES)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
-  } catch {
-    // localStorage full or unavailable
+  const threadId = useThreadsStore.getState().activeThreadId
+  saveThreadMessages(threadId, messages)
+
+  // Update thread preview with last non-system message
+  const lastMsg = [...messages].reverse().find((m) => m.role !== 'system')
+  if (lastMsg) {
+    useThreadsStore.getState().updateThreadPreview(threadId, lastMsg.content)
   }
 }
 
@@ -65,6 +61,16 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => {
       const messages = [...state.messages, { ...msg, id, timestamp: Date.now() }]
       if (!msg.streaming) saveMessages(messages)
+
+      // Auto-set thread title from first user message
+      if (msg.role === 'user') {
+        const threadId = useThreadsStore.getState().activeThreadId
+        const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
+        if (thread && thread.title === 'New conversation') {
+          useThreadsStore.getState().updateThreadTitle(threadId, msg.content.slice(0, 50))
+        }
+      }
+
       return { messages }
     })
     return id
@@ -103,5 +109,11 @@ export const useChatStore = create<ChatState>((set) => ({
     const messages = [{ ...WELCOME_MESSAGE, timestamp: Date.now() }]
     saveMessages(messages)
     set({ messages })
+  },
+
+  loadThread: (threadId: string) => {
+    const msgs = loadThreadMessages(threadId)
+    const messages = msgs.length === 0 ? [{ ...WELCOME_MESSAGE, timestamp: Date.now() }] : msgs
+    set({ messages, isStreaming: false, abortController: null })
   },
 }))

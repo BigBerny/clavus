@@ -94,9 +94,15 @@ button.inline-btn {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Settings slide-in */
+/* Settings slide-in (from right) */
 @keyframes slideIn {
   from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+/* Sidebar slide-in (from left) */
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
   to { transform: translateX(0); }
 }
 
@@ -143,10 +149,26 @@ pre code.hljs {
   background: #f1f5f9;
 }
 
-/* Prose overrides for markdown lists */
-.prose ul { list-style-type: disc; padding-left: 1.25em; }
-.prose ol { list-style-type: decimal; padding-left: 1.25em; }
+/* Prose overrides for markdown */
+.prose ul { list-style-type: disc; padding-left: 1.25em; margin: 0.5em 0; }
+.prose ol { list-style-type: decimal; padding-left: 1.25em; margin: 0.5em 0; }
 .prose li { margin-top: 0.25em; margin-bottom: 0.25em; }
+.prose li > ul, .prose li > ol { margin-top: 0.25em; margin-bottom: 0.25em; }
+.prose h1 { font-size: 1.25em; font-weight: 700; margin: 0.75em 0 0.5em; }
+.prose h2 { font-size: 1.125em; font-weight: 600; margin: 0.75em 0 0.5em; }
+.prose h3 { font-size: 1em; font-weight: 600; margin: 0.5em 0 0.25em; }
+.prose a { color: var(--color-accent); text-decoration: none; }
+.prose a:hover { text-decoration: underline; }
+.prose blockquote {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 0.75em;
+  margin: 0.5em 0;
+  opacity: 0.85;
+}
+.prose hr { border-color: #334155; margin: 0.75em 0; }
+.prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.85em; }
+.prose th, .prose td { border: 1px solid #334155; padding: 0.375em 0.625em; text-align: left; }
+.prose th { font-weight: 600; background: rgba(255,255,255,0.03); }
 
 /* Theme transition (no flash on load, smooth after) */
 html.theme-ready,

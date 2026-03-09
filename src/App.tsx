@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Header } from './components/layout/Header.tsx'
 import { Settings } from './components/layout/Settings.tsx'
+import { Sidebar } from './components/layout/Sidebar.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { useChat } from './hooks/useChat.ts'
@@ -48,10 +49,13 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
 }
 
 export function App() {
-  const { messages, isStreaming, send, abort, clearMessages } = useChat()
+  const { messages, isStreaming, send, abort } = useChat()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const [needsToken, setNeedsToken] = useState(!hasToken())
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState('0:00')
+  const cancelRecordingRef = useRef<(() => void) | null>(null)
 
   const handleTokenSave = useCallback((token: string) => {
     setGatewayToken(token)
@@ -108,15 +112,31 @@ export function App() {
     }
   }, [])
 
+  const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
+    setIsRecording(recording)
+    setRecordingDuration(duration)
+    cancelRecordingRef.current = cancel
+  }, [])
+
   if (needsToken) {
     return <TokenPrompt onSave={handleTokenSave} />
   }
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
-      <Header onNewConversation={clearMessages} />
+      <Header
+        isRecording={isRecording}
+        recordingDuration={recordingDuration}
+        onCancelRecording={() => cancelRecordingRef.current?.()}
+      />
       <ChatView messages={messages} />
-      <InputBar onSend={send} onAbort={abort} isStreaming={isStreaming} />
+      <InputBar
+        onSend={send}
+        onAbort={abort}
+        isStreaming={isStreaming}
+        onRecordingChange={handleRecordingChange}
+      />
+      <Sidebar />
       <Settings />
     </div>
   )

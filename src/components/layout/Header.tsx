@@ -1,35 +1,81 @@
 import { useUIStore } from '../../state/ui.ts'
+import { useThreadsStore } from '../../state/threads.ts'
+import { useChatStore } from '../../state/chat.ts'
 
 interface Props {
-  onNewConversation: () => void
+  isRecording?: boolean
+  recordingDuration?: string
+  onCancelRecording?: () => void
 }
 
-export function Header({ onNewConversation }: Props) {
+export function Header({ isRecording, recordingDuration, onCancelRecording }: Props) {
   const connectionStatus = useUIStore((s) => s.connectionStatus)
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen)
+  const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
+  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
+  const threads = useThreadsStore((s) => s.threads)
+  const createThread = useThreadsStore((s) => s.createThread)
+  const loadThread = useChatStore((s) => s.loadThread)
+
+  const activeThread = threads.find((t) => t.id === activeThreadId)
+  const threadTitle = activeThread?.title || 'Clavus'
 
   const statusColor: Record<string, string> = {
     connected: 'bg-emerald-500',
-    disconnected: 'bg-red-500',
+    disconnected: 'bg-amber-500',
     checking: 'bg-amber-500 animate-pulse',
     reconnecting: 'bg-amber-500 animate-pulse',
   }
 
+  const handleNewConversation = () => {
+    const id = createThread()
+    loadThread(id)
+  }
+
   return (
     <>
-      <header className="flex items-center justify-between px-4 py-2.5 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl safe-area-top select-none">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-base font-semibold text-text-light dark:text-text-dark tracking-tight">
-            Clavus
-          </h1>
-          <div className="flex items-center" role="status" aria-label={`Connection: ${connectionStatus}`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${statusColor[connectionStatus]}`} />
+      {/* Recording bar at top */}
+      {isRecording && (
+        <div className="flex items-center justify-between px-4 py-2 bg-red-500 text-white select-none safe-area-top animate-[fadeSlideIn_0.2s_ease-out]" role="alert">
+          <button
+            onClick={onCancelRecording}
+            className="inline-btn text-white/80 hover:text-white text-xs font-medium transition-colors px-2 py-1"
+          >
+            Cancel
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-white recording-pulse" />
+            <span className="text-sm font-medium">Recording</span>
+          </div>
+          <span className="text-xs font-mono tabular-nums opacity-80">{recordingDuration}</span>
+        </div>
+      )}
+
+      <header className={`flex items-center justify-between px-2 py-2.5 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl select-none ${!isRecording ? 'safe-area-top' : ''}`}>
+        {/* Left: hamburger + title */}
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 rounded-xl text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 active:scale-95 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
+            aria-label="Open conversations"
+            title="Conversations"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div className="flex items-center gap-2 min-w-0">
+            <h1 className="text-sm font-semibold text-text-light dark:text-text-dark tracking-tight truncate">
+              {threadTitle}
+            </h1>
+            <div className="flex items-center flex-shrink-0" role="status" aria-label={`Connection: ${connectionStatus}`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${statusColor[connectionStatus]}`} />
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-0.5">
+        {/* Right: new chat + settings */}
+        <div className="flex items-center gap-0.5 flex-shrink-0">
           <button
-            onClick={onNewConversation}
+            onClick={handleNewConversation}
             className="p-2 rounded-xl text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 active:scale-95 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="New conversation"
             title="New conversation"
@@ -46,17 +92,6 @@ export function Header({ onNewConversation }: Props) {
           </button>
         </div>
       </header>
-
-      {connectionStatus === 'reconnecting' && (
-        <div className="bg-amber-500/90 text-white text-xs text-center py-1 font-medium animate-pulse select-none" role="alert">
-          Reconnecting...
-        </div>
-      )}
-      {connectionStatus === 'disconnected' && (
-        <div className="bg-red-500/90 text-white text-xs text-center py-1 font-medium select-none" role="alert">
-          Disconnected
-        </div>
-      )}
     </>
   )
 }

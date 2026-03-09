@@ -8,12 +8,14 @@ interface UIState {
   resolvedTheme: ResolvedTheme
   connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
   settingsOpen: boolean
+  sidebarOpen: boolean
   gatewayUrl: string
   gatewayToken: string
 
   setThemeChoice: (choice: ThemeChoice) => void
   setConnectionStatus: (status: UIState['connectionStatus']) => void
   setSettingsOpen: (open: boolean) => void
+  setSidebarOpen: (open: boolean) => void
   setGatewayUrl: (url: string) => void
   setGatewayToken: (token: string) => void
 }
@@ -48,6 +50,7 @@ export const useUIStore = create<UIState>((set) => ({
   resolvedTheme: initialResolved,
   connectionStatus: 'checking',
   settingsOpen: false,
+  sidebarOpen: false,
   gatewayUrl: localStorage.getItem('clavus-gateway-url') || '',
   gatewayToken: localStorage.getItem('clavus-gateway-token') || '',
 
@@ -60,6 +63,7 @@ export const useUIStore = create<UIState>((set) => ({
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 
   setGatewayUrl: (url) => {
     localStorage.setItem('clavus-gateway-url', url)

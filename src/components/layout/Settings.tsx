@@ -1,14 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUIStore } from '../../state/ui.ts'
 import { useChatStore } from '../../state/chat.ts'
+import { useThreadsStore } from '../../state/threads.ts'
 import type { ThemeChoice } from '../../state/ui.ts'
 
 export function Settings() {
-  const { settingsOpen, setSettingsOpen, themeChoice, setThemeChoice, gatewayUrl, setGatewayUrl, gatewayToken, setGatewayToken } = useUIStore()
+  const { settingsOpen, setSettingsOpen, themeChoice, setThemeChoice, connectionStatus, gatewayUrl, setGatewayUrl, gatewayToken, setGatewayToken } = useUIStore()
   const clearMessages = useChatStore((s) => s.clearMessages)
+  const threads = useThreadsStore((s) => s.threads)
   const [urlDraft, setUrlDraft] = useState(gatewayUrl)
   const [tokenDraft, setTokenDraft] = useState(gatewayToken)
   const panelRef = useRef<HTMLDivElement>(null)
+  const [showUrlSaved, setShowUrlSaved] = useState(false)
+  const [showTokenSaved, setShowTokenSaved] = useState(false)
 
   useEffect(() => {
     setUrlDraft(gatewayUrl)
@@ -18,7 +22,6 @@ export function Settings() {
     setTokenDraft(gatewayToken)
   }, [gatewayToken])
 
-  // Trap focus / close on Escape
   useEffect(() => {
     if (!settingsOpen) return
     const handleKey = (e: KeyboardEvent) => {
@@ -30,10 +33,14 @@ export function Settings() {
 
   const handleSaveUrl = useCallback(() => {
     setGatewayUrl(urlDraft.trim())
+    setShowUrlSaved(true)
+    setTimeout(() => setShowUrlSaved(false), 1500)
   }, [urlDraft, setGatewayUrl])
 
   const handleSaveToken = useCallback(() => {
     setGatewayToken(tokenDraft.trim())
+    setShowTokenSaved(true)
+    setTimeout(() => setShowTokenSaved(false), 1500)
   }, [tokenDraft, setGatewayToken])
 
   const handleClear = useCallback(() => {
@@ -43,10 +50,23 @@ export function Settings() {
 
   if (!settingsOpen) return null
 
+  const statusLabel: Record<string, string> = {
+    connected: 'Connected',
+    disconnected: 'Disconnected',
+    checking: 'Checking...',
+    reconnecting: 'Reconnecting...',
+  }
+  const statusDot: Record<string, string> = {
+    connected: 'bg-emerald-500',
+    disconnected: 'bg-amber-500',
+    checking: 'bg-amber-500 animate-pulse',
+    reconnecting: 'bg-amber-500 animate-pulse',
+  }
+
   return (
     <>
       <div
-        className="fixed inset-0 bg-black/40 z-40 transition-opacity"
+        className="fixed inset-0 bg-black/40 z-40 animate-[fadeIn_0.15s_ease-out]"
         onClick={() => setSettingsOpen(false)}
         aria-hidden="true"
       />
@@ -57,7 +77,7 @@ export function Settings() {
         aria-modal="true"
         className="fixed right-0 top-0 bottom-0 w-80 max-w-[85vw] bg-surface-light dark:bg-surface-dark z-50 shadow-xl flex flex-col animate-[slideIn_0.2s_ease-out]"
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-surface-light-3 dark:border-surface-dark-3">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-top">
           <h2 className="text-base font-semibold text-text-light dark:text-text-dark">Settings</h2>
           <button
             onClick={() => setSettingsOpen(false)}
@@ -68,20 +88,35 @@ export function Settings() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {/* Theme */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>
+          {/* Status */}
+          <section className="rounded-xl bg-surface-light-2/50 dark:bg-surface-dark-2/50 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Gateway</span>
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${statusDot[connectionStatus]}`} />
+                <span className="text-xs text-text-light dark:text-text-dark">{statusLabel[connectionStatus]}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Conversations</span>
+              <span className="text-xs text-text-light dark:text-text-dark">{threads.length}</span>
+            </div>
+          </section>
+
+          {/* Appearance */}
           <section>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">Theme</label>
-            <div className="flex gap-1 bg-surface-light-2 dark:bg-surface-dark-2 p-1 rounded-lg" role="radiogroup" aria-label="Theme selection">
+            <h3 className="text-xs font-semibold text-text-light-muted dark:text-text-dark-muted uppercase tracking-wider mb-2">Appearance</h3>
+            <div className="flex gap-1 bg-surface-light-2 dark:bg-surface-dark-2 p-1 rounded-xl" role="radiogroup" aria-label="Theme selection">
               {(['dark', 'light', 'system'] as ThemeChoice[]).map((opt) => (
                 <button
                   key={opt}
                   onClick={() => setThemeChoice(opt)}
                   role="radio"
                   aria-checked={themeChoice === opt}
-                  className={`flex-1 py-1.5 text-xs rounded-md capitalize transition-colors ${
+                  className={`flex-1 py-2 text-xs rounded-lg capitalize transition-all ${
                     themeChoice === opt
-                      ? 'bg-accent text-white'
+                      ? 'bg-accent text-white shadow-sm'
                       : 'text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark'
                   }`}
                 >
@@ -91,64 +126,70 @@ export function Settings() {
             </div>
           </section>
 
-          {/* Gateway URL */}
+          {/* Connection */}
           <section>
-            <label htmlFor="settings-gateway-url" className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">Gateway URL</label>
-            <div className="flex gap-2">
-              <input
-                id="settings-gateway-url"
-                type="text"
-                value={urlDraft}
-                onChange={(e) => setUrlDraft(e.target.value)}
-                placeholder="http://127.0.0.1:18789"
-                className="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted dark:placeholder:text-text-dark-muted border border-surface-light-3 dark:border-surface-dark-3 focus:outline-none focus:ring-2 focus:ring-accent/50"
-              />
-              <button
-                onClick={handleSaveUrl}
-                className="px-3 py-2 text-sm rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors"
-              >
-                Save
-              </button>
+            <h3 className="text-xs font-semibold text-text-light-muted dark:text-text-dark-muted uppercase tracking-wider mb-2">Connection</h3>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="settings-gateway-url" className="block text-xs text-text-light-muted dark:text-text-dark-muted mb-1">Gateway URL</label>
+                <div className="flex gap-2">
+                  <input
+                    id="settings-gateway-url"
+                    type="text"
+                    value={urlDraft}
+                    onChange={(e) => setUrlDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveUrl()}
+                    placeholder="http://127.0.0.1:18789"
+                    className="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/50 dark:placeholder:text-text-dark-muted/50 border border-surface-light-3/50 dark:border-surface-dark-3/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
+                  />
+                  <button
+                    onClick={handleSaveUrl}
+                    className="inline-btn px-3 py-2 text-xs rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors font-medium"
+                  >
+                    {showUrlSaved ? 'Saved!' : 'Save'}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label htmlFor="settings-gateway-token" className="block text-xs text-text-light-muted dark:text-text-dark-muted mb-1">Token</label>
+                <div className="flex gap-2">
+                  <input
+                    id="settings-gateway-token"
+                    type="password"
+                    value={tokenDraft}
+                    onChange={(e) => setTokenDraft(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSaveToken()}
+                    placeholder="Enter token..."
+                    className="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/50 dark:placeholder:text-text-dark-muted/50 border border-surface-light-3/50 dark:border-surface-dark-3/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
+                  />
+                  <button
+                    onClick={handleSaveToken}
+                    className="inline-btn px-3 py-2 text-xs rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors font-medium"
+                  >
+                    {showTokenSaved ? 'Saved!' : 'Save'}
+                  </button>
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-text-light-muted dark:text-text-dark-muted mt-1">
-              Leave empty to use default
-            </p>
           </section>
 
-          {/* Gateway Token */}
+          {/* Data */}
           <section>
-            <label htmlFor="settings-gateway-token" className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">Gateway Token</label>
-            <div className="flex gap-2">
-              <input
-                id="settings-gateway-token"
-                type="password"
-                value={tokenDraft}
-                onChange={(e) => setTokenDraft(e.target.value)}
-                placeholder="Enter token..."
-                className="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted dark:placeholder:text-text-dark-muted border border-surface-light-3 dark:border-surface-dark-3 focus:outline-none focus:ring-2 focus:ring-accent/50"
-              />
-              <button
-                onClick={handleSaveToken}
-                className="px-3 py-2 text-sm rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors"
-              >
-                Save
-              </button>
-            </div>
-            <p className="text-xs text-text-light-muted dark:text-text-dark-muted mt-1">
-              Overrides .env token when set
-            </p>
-          </section>
-
-          {/* Clear conversation */}
-          <section>
-            <label className="block text-sm font-medium text-text-light dark:text-text-dark mb-2">Conversation</label>
+            <h3 className="text-xs font-semibold text-text-light-muted dark:text-text-dark-muted uppercase tracking-wider mb-2">Data</h3>
             <button
               onClick={handleClear}
-              className="w-full py-2 text-sm rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-colors"
+              className="w-full py-2.5 text-sm rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium active:scale-[0.98]"
             >
-              Clear conversation
+              Clear current conversation
             </button>
           </section>
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-bottom">
+          <p className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40 text-center">
+            Clavus v2.0 by OpenClaw
+          </p>
         </div>
       </div>
     </>

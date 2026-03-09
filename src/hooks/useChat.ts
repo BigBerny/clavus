@@ -141,7 +141,7 @@ export function useChat() {
         setConnectionStatus('reconnecting')
         addMessage({ role: 'system', content: `Connection failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})` })
         await delay(RETRY_DELAY)
-        return send(content, retryCount + 1)
+        return sendRef.current?.(content, retryCount + 1)
       }
 
       setConnectionStatus('disconnected')
@@ -153,7 +153,9 @@ export function useChat() {
   }, [addMessage, appendToMessage, finalizeMessage, setStreaming, setAbortController, setConnectionStatus])
 
   // Keep ref updated for offline queue flush
-  sendRef.current = send
+  useEffect(() => {
+    sendRef.current = send
+  }, [send])
 
   const abort = useCallback(() => {
     abortController?.abort()

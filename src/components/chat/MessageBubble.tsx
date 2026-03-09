@@ -103,8 +103,14 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     <div
       className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}
       role="article"
-      aria-label={`${isUser ? 'You' : 'Assistant'}: ${message.content.slice(0, 80)}`}
+      aria-label={`${isUser ? 'You' : 'Jane'}: ${message.content.slice(0, 80)}`}
     >
+      {/* Assistant avatar */}
+      {isAssistant && (
+        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shadow-sm">
+          J
+        </div>
+      )}
       <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[70%] ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className={`px-4 py-2.5 ${
