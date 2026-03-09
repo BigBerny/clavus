@@ -17,23 +17,20 @@ export function Header({ onNewConversation }: Props) {
 
   return (
     <>
-      <header className="flex items-center justify-between px-4 py-3 border-b border-surface-light-3 dark:border-surface-dark-3 bg-surface-light dark:bg-surface-dark safe-area-top select-none">
-        <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold text-text-light dark:text-text-dark">
+      <header className="flex items-center justify-between px-4 py-2.5 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl safe-area-top select-none">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-base font-semibold text-text-light dark:text-text-dark tracking-tight">
             Clavus
           </h1>
-          <div className="flex items-center gap-1.5" role="status" aria-label={`Connection: ${connectionStatus}`}>
-            <div className={`w-2 h-2 rounded-full ${statusColor[connectionStatus]}`} />
-            <span className="text-xs text-text-light-muted dark:text-text-dark-muted">
-              {connectionStatus}
-            </span>
+          <div className="flex items-center" role="status" aria-label={`Connection: ${connectionStatus}`}>
+            <div className={`w-1.5 h-1.5 rounded-full ${statusColor[connectionStatus]}`} />
           </div>
         </div>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             onClick={onNewConversation}
-            className="p-2 rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="p-2 rounded-xl text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 active:scale-95 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="New conversation"
             title="New conversation"
           >
@@ -41,7 +38,7 @@ export function Header({ onNewConversation }: Props) {
           </button>
           <button
             onClick={() => setSettingsOpen(true)}
-            className="p-2 rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center"
+            className="p-2 rounded-xl text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 active:scale-95 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center"
             aria-label="Open settings"
             title="Settings"
           >
@@ -51,12 +48,12 @@ export function Header({ onNewConversation }: Props) {
       </header>
 
       {connectionStatus === 'reconnecting' && (
-        <div className="bg-amber-500 text-white text-xs text-center py-1.5 font-medium animate-pulse select-none" role="alert">
+        <div className="bg-amber-500/90 text-white text-xs text-center py-1 font-medium animate-pulse select-none" role="alert">
           Reconnecting...
         </div>
       )}
       {connectionStatus === 'disconnected' && (
-        <div className="bg-red-500 text-white text-xs text-center py-1.5 font-medium select-none" role="alert">
+        <div className="bg-red-500/90 text-white text-xs text-center py-1 font-medium select-none" role="alert">
           Disconnected
         </div>
       )}

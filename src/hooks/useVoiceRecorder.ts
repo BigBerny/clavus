@@ -72,20 +72,20 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
       setState('transcribing')
       try {
         const config = getConfig()
-        const apiKey = config.openaiApiKey
+        const apiKey = config.elevenLabsApiKey
         if (!apiKey) {
-          setError('OpenAI API key not configured')
+          setError('ElevenLabs API key not configured')
           setState('idle')
           return
         }
 
         const formData = new FormData()
         formData.append('file', blob, `recording.${fileExtForMime(blob.type)}`)
-        formData.append('model', 'whisper-1')
+        formData.append('model_id', 'scribe_v1')
 
-        const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        const res = await fetch('/elevenlabs/v1/speech-to-text', {
           method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey}` },
+          headers: { 'xi-api-key': apiKey },
           body: formData,
         })
 

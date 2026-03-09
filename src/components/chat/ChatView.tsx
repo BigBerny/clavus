@@ -57,6 +57,7 @@ export function ChatView({ messages }: Props) {
             key={msg.id}
             message={msg}
             isSpeaking={tts.speakingId === msg.id}
+            ttsLoading={tts.loading && tts.speakingId === msg.id}
             onSpeak={tts.speak}
           />
         ))}
@@ -67,7 +68,7 @@ export function ChatView({ messages }: Props) {
       {showNewMessages && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-accent text-white text-sm shadow-lg hover:bg-accent-hover transition-colors"
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-accent text-white text-xs font-medium shadow-lg shadow-accent/25 hover:bg-accent-hover active:scale-95 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
           aria-label="Scroll to new messages"
         >
           New messages

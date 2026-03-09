@@ -4,6 +4,22 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  server: {
+    host: '0.0.0.0',
+    port: 5173,
+    allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net'],
+    proxy: {
+      '/v1': {
+        target: 'http://127.0.0.1:18789',
+        changeOrigin: true,
+      },
+      '/elevenlabs': {
+        target: 'https://api.elevenlabs.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/elevenlabs/, ''),
+      },
+    },
+  },
   plugins: [
     react(),
     tailwindcss(),
