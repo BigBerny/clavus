@@ -12,8 +12,8 @@ Clavus is a mobile-first chat client for OpenClaw with integrated document editi
 |-------|--------|-----------|
 | **Framework** | **Preact + HTM** | ~3KB, JSX-compatible, no build step required for dev. Lighter than React, familiar API. Can upgrade to React if needed. |
 | **Styling** | **Tailwind CSS (standalone CLI)** | Utility-first, responsive-first. Dark mode via `class` strategy. No runtime cost. |
-| **Markdown** | **markdown-it** + plugins | Lightweight, extensible. Plugins for syntax highlighting (highlight.js), task lists, etc. |
-| **Editor** | **CodeMirror 6** | Lightweight, mobile-friendly markdown editor. Supports extensions, vim mode, syntax highlighting. Used for the document sidebar. |
+| **Markdown** | **Marksense** ([github.com/BigBerny/Marksense-standalone](https://github.com/BigBerny/Marksense-standalone)) | Reuse our own Tiptap-based markdown editor/renderer. Already supports live editing, tables, images, frontmatter. Consistent rendering across Marksense Web and Clavus. |
+| **Editor** | **Marksense (Tiptap)** | Same Tiptap editor from Marksense — no need for CodeMirror. Reuse existing components for the document sidebar. |
 | **State** | **Preact Signals** | Fine-grained reactivity without Redux boilerplate. Built-in to Preact ecosystem. |
 | **Build** | **Vite** | Fast HMR, ESM-native, small bundle. Same toolchain as existing Control UI. |
 | **Audio** | **MediaRecorder API** | Native browser API. No dependencies needed. |
@@ -367,7 +367,7 @@ For Clavus, the recommended approach:
 | `ToolCallCard` | Collapsible card showing tool name, args, result. Inline in assistant messages. |
 | `InputBar` | Text input (auto-growing textarea), send button, voice record button, attachment indicator (shows selected text context). |
 | `VoiceRecorder` | Hold-to-record / toggle-to-record button. Waveform animation during recording. Duration timer. |
-| `DocumentPanel` | Slide-in sidebar (right on desktop, full-screen overlay on mobile). CodeMirror editor + save button. |
+| `DocumentPanel` | Slide-in sidebar (right on desktop, full-screen overlay on mobile). Marksense (Tiptap) editor + save button. |
 | `FileBrowser` | Collapsible tree of workspace files. Click to open in DocumentPanel. |
 | `StatusBar` | Bottom bar showing connection state, active session, recording indicator. |
 
@@ -469,7 +469,7 @@ Fallback consideration:
 
 ### 7.1 Capture Mechanism
 
-1. In `DocumentPanel`, attach a `selectionchange` listener to the CodeMirror editor
+1. In `DocumentPanel`, attach a `selectionchange` listener to the Marksense (Tiptap) editor
 2. On selection change, read `editor.state.selection` to get selected text + range
 3. Store in a signal: `{file: string, text: string, startLine: number, endLine: number}`
 4. In `InputBar`, show a pill/badge when selection context is active: "📎 lines 12-18 of AGENTS.md"
@@ -504,7 +504,7 @@ The Gateway does **not** push file-change events over WebSocket. The Control UI 
 
 1. When the agent runs (streaming `agent` events), watch for tool calls that modify files (`write`, `edit`, `apply_patch`)
 2. When a tool call targets the currently-open file, re-fetch the file content via `agents.files.get` after the tool call completes
-3. Apply the updated content to the CodeMirror editor, preserving cursor position where possible
+3. Apply the updated content to the Marksense (Tiptap) editor, preserving cursor position where possible
 
 **Detection logic:**
 ```
@@ -573,7 +573,7 @@ Tasks:
 - [ ] `Shell` layout component (responsive: mobile full-width, desktop with sidebar space)
 - [ ] `Header` with connection status indicator
 - [ ] `ChatView` — scrollable message thread with auto-scroll
-- [ ] `MessageBubble` — markdown rendering (markdown-it), user/assistant/system styles
+- [ ] `MessageBubble` — markdown rendering (Marksense/Tiptap), user/assistant/system styles
 - [ ] `ToolCallCard` — collapsible tool call display within messages
 - [ ] `InputBar` — auto-growing textarea + send button
 - [ ] `chat.history` on connect, `chat.send` on submit
@@ -614,7 +614,7 @@ Tasks:
   - [ ] Click to open file in DocumentPanel
 - [ ] `DocumentPanel` component
   - [ ] Slide-in panel (right side desktop, full-screen overlay mobile)
-  - [ ] CodeMirror 6 editor with markdown mode
+  - [ ] Marksense (Tiptap) editor with markdown mode
   - [ ] Load file content via `agents.files.get`
   - [ ] Save file via `agents.files.set`
   - [ ] Unsaved changes indicator
@@ -622,7 +622,7 @@ Tasks:
   - [ ] Parse file paths/links in assistant messages
   - [ ] Click to open in DocumentPanel
 - [ ] Text selection context (`useSelection` hook)
-  - [ ] Capture CodeMirror selection
+  - [ ] Capture Marksense editor selection
   - [ ] Store as signal: `{file, text, startLine, endLine}`
   - [ ] Show context pill in InputBar
   - [ ] Prepend context to chat.send content
@@ -692,7 +692,7 @@ Tasks:
 | **Large chat histories causing UI lag** | Medium | Medium | Virtual scrolling for message list. Limit `chat.history` to ~100 entries. Lazy-load older messages on scroll-up. |
 | **WebSocket reconnection losing state** | Medium | Low | Re-fetch `chat.history` + `sessions.list` on reconnect. Idempotency keys prevent duplicate sends. Show reconnection UI. |
 | **Gateway serving custom static apps** | Low | Medium | If Gateway can't serve Clavus natively, use separate static server behind same reverse proxy. Option B deployment works fine. |
-| **CodeMirror bundle size** | Low | Low | CodeMirror 6 is modular. Import only markdown mode + minimal extensions. Tree-shaking via Vite keeps it manageable (~50-80KB gzipped). |
+| **Marksense bundle size** | Low | Low | Marksense reuses our existing Tiptap editor. Reuses existing Tiptap components from Marksense. Shared codebase means smaller incremental bundle. |
 | **PWA install prompt on iOS** | Low | Confirmed | iOS doesn't show install prompts. Add a manual "Add to Home Screen" instruction modal. |
 
 ---
