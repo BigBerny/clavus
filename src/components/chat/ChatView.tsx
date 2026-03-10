@@ -31,8 +31,15 @@ export function ChatView({ messages }: Props) {
     prevMessagesLenRef.current = messages.length
   }, [messages, autoScroll])
 
-  // Show "new messages" badge when not auto-scrolling and messages change
-  const hasNewMessages = !autoScroll && messages.length > prevMessagesLenRef.current
+  // Track count of unseen messages when scrolled up
+  const unseenCountRef = useRef(0)
+  if (!autoScroll && messages.length > prevMessagesLenRef.current) {
+    unseenCountRef.current += messages.length - prevMessagesLenRef.current
+  }
+  if (autoScroll) {
+    unseenCountRef.current = 0
+  }
+  const unseenCount = unseenCountRef.current
 
   const handleScroll = useCallback(() => {
     const el = containerRef.current
@@ -147,7 +154,7 @@ export function ChatView({ messages }: Props) {
           aria-label="Scroll to bottom"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
-          {hasNewMessages ? 'New messages' : 'Scroll down'}
+          {unseenCount > 0 ? `${unseenCount} new` : 'Scroll down'}
         </button>
       )}
     </div>

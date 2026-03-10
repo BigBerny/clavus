@@ -170,8 +170,18 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         <div
           className={`px-4 py-2.5 overflow-hidden min-w-0 max-w-full ${
             isUser
-              ? 'bg-accent text-white rounded-2xl rounded-br-lg shadow-sm shadow-accent/20'
-              : 'bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark rounded-2xl rounded-bl-lg shadow-sm shadow-black/5 dark:shadow-black/20'
+              ? `bg-accent text-white shadow-sm shadow-accent/20 ${
+                  showAvatar && isLastInGroup ? 'rounded-2xl rounded-br-md' :
+                  showAvatar ? 'rounded-2xl rounded-br-md' :
+                  isLastInGroup ? 'rounded-2xl rounded-tr-md rounded-br-md' :
+                  'rounded-2xl rounded-r-md'
+                }`
+              : `bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark shadow-sm shadow-black/5 dark:shadow-black/20 ${
+                  showAvatar && isLastInGroup ? 'rounded-2xl rounded-bl-md' :
+                  showAvatar ? 'rounded-2xl rounded-bl-md' :
+                  isLastInGroup ? 'rounded-2xl rounded-tl-md rounded-bl-md' :
+                  'rounded-2xl rounded-l-md'
+                }`
           }`}
         >
           {/* Image attachments */}
