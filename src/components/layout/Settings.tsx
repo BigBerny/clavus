@@ -207,7 +207,7 @@ export function Settings() {
                   {showElevenLabsSaved ? 'Saved!' : 'Save'}
                 </button>
               </div>
-              <p className="text-[10px] text-text-light-muted/50 dark:text-text-dark-muted/50 mt-1">
+              <p className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50 mt-1">
                 Required for voice input (STT) and text-to-speech (TTS).
               </p>
             </div>
@@ -244,7 +244,7 @@ export function Settings() {
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-bottom">
-          <p className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40 text-center">
+          <p className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 text-center">
             Clavus v2.0 by OpenClaw
           </p>
         </div>

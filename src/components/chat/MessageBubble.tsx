@@ -47,7 +47,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
   return (
     <div className="relative group/code my-2.5 -mx-1 max-w-[calc(100%+0.5rem)]">
       <div className="flex items-center justify-between px-3.5 py-1.5 rounded-t-xl bg-surface-light-3/50 dark:bg-[#0d0f14] border-b border-surface-light-3/30 dark:border-white/[0.04]">
-        <span className="text-[10px] font-medium text-text-light-muted/60 dark:text-text-dark-muted/50 uppercase tracking-wider">
+        <span className="text-[11px] font-medium text-text-light-muted/60 dark:text-text-dark-muted/50 uppercase tracking-wider">
           {lang || 'code'}
         </span>
         <button
@@ -57,7 +57,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           }}
-          className="inline-btn px-2 py-0.5 text-[10px] rounded-md text-text-light-muted/60 dark:text-text-dark-muted/50 hover:text-text-light dark:hover:text-text-dark transition-colors"
+          className="inline-btn px-2 py-0.5 text-[11px] rounded-md text-text-light-muted/60 dark:text-text-dark-muted/50 hover:text-text-light dark:hover:text-text-dark transition-colors"
           aria-label="Copy code"
         >
           {copied ? 'Copied!' : 'Copy'}
@@ -86,7 +86,7 @@ function MarksenseCard({ href }: { href: string }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-accent truncate">{filename}</p>
-        <p className="text-[11px] text-text-light-muted dark:text-text-dark-muted">Open in Marksense</p>
+        <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Open in Marksense</p>
       </div>
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted flex-shrink-0"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
     </a>
@@ -156,7 +156,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   if (isSystem) {
     return (
       <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out] py-0.5" role="status">
-        <div className={`max-w-[85%] px-3.5 py-2 rounded-xl text-[11px] text-center leading-snug ${
+        <div className={`max-w-[85%] px-3.5 py-2 rounded-xl text-[12px] text-center leading-snug ${
           isError
             ? 'bg-red-500/8 text-red-500/90 dark:text-red-400/90 border border-red-500/15'
             : 'bg-surface-light-2/60 dark:bg-surface-dark-2/60 text-text-light-muted/70 dark:text-text-dark-muted/70'
@@ -245,7 +245,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100 h-0 group-hover/msg:h-auto overflow-hidden transition-all duration-200'
         }`}>
           <span
-            className="text-[10px] text-text-light-muted/55 dark:text-text-dark-muted/55 cursor-pointer select-none hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
+            className="text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55 cursor-pointer select-none hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
             onClick={() => setShowFullTime((v) => !v)}
             title={fullDateTime(message.timestamp)}
           >
@@ -254,10 +254,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           {!message.streaming && message.content && (
             <button
               onClick={handleCopy}
-              className={`inline-btn text-[10px] transition-all duration-200 ${
+              className={`inline-btn text-[11px] transition-all duration-200 ${
                 copied
-                  ? 'text-accent opacity-100'
-                  : 'text-text-light-muted/45 dark:text-text-dark-muted/45 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-text-light-muted dark:hover:text-text-dark-muted'
+                  ? 'text-accent'
+                  : 'text-text-light-muted/45 dark:text-text-dark-muted/45 hover:text-text-light-muted dark:hover:text-text-dark-muted'
               }`}
               aria-label="Copy message"
             >
@@ -272,8 +272,8 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 isSpeaking
                   ? 'opacity-100 text-accent'
                   : ttsLoading
-                    ? 'opacity-100 text-text-dark-muted'
-                    : 'text-text-light-muted/45 dark:text-text-dark-muted/45 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-accent'
+                    ? 'text-text-dark-muted'
+                    : 'text-text-light-muted/45 dark:text-text-dark-muted/45 hover:text-accent'
               }`}
               aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
               title={isSpeaking ? 'Stop' : 'Read aloud'}

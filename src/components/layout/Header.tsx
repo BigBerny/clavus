@@ -48,9 +48,9 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
           </button>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-white recording-pulse" />
-            <span className="text-[13px] font-medium tracking-wide">Recording</span>
+            <span className="text-sm font-medium tracking-wide">Recording</span>
           </div>
-          <span className="text-xs font-mono tabular-nums text-white/75">{recordingDuration}</span>
+          <span className="text-[13px] font-mono tabular-nums text-white/80">{recordingDuration}</span>
         </div>
       )}
 
@@ -79,11 +79,11 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
                 </h1>
               </div>
               {isStreaming ? (
-                <p className="text-[10px] text-accent truncate leading-tight -mt-0.5 animate-pulse">
+                <p className="text-[11px] text-accent truncate leading-tight -mt-0.5 animate-pulse">
                   typing...
                 </p>
               ) : threadSubtitle ? (
-                <p className="text-[10px] text-text-light-muted dark:text-text-dark-muted truncate leading-tight -mt-0.5">
+                <p className="text-[11px] text-text-light-muted dark:text-text-dark-muted truncate leading-tight -mt-0.5">
                   {threadSubtitle}
                 </p>
               ) : null}

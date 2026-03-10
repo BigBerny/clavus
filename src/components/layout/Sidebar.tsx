@@ -95,12 +95,12 @@ function ThreadItem({ thread, isActive, onSelect, onDelete }: {
               }`}>
                 {thread.title}
               </p>
-              <span className="text-[10px] text-text-light-muted/60 dark:text-text-dark-muted/60 flex-shrink-0">
+              <span className="text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 flex-shrink-0">
                 {relativeTime(thread.updatedAt)}
               </span>
             </div>
             {thread.lastMessagePreview && (
-              <p className="text-[11px] text-text-light-muted dark:text-text-dark-muted truncate mt-0.5 leading-snug">
+              <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted truncate mt-0.5 leading-snug">
                 {thread.lastMessagePreview}
               </p>
             )}
@@ -209,7 +209,7 @@ export function Sidebar() {
         <div className="px-3 py-2 space-y-2">
           <button
             onClick={handleNewThread}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-accent text-white text-[13px] font-medium hover:bg-accent-hover active:scale-[0.98] transition-all shadow-sm shadow-accent/20"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover active:scale-[0.98] transition-all shadow-sm shadow-accent/20"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             New conversation
@@ -251,7 +251,7 @@ export function Sidebar() {
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-bottom">
-          <p className="text-[10px] text-text-light-muted/50 dark:text-text-dark-muted/50 text-center">
+          <p className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50 text-center">
             {threads.length} conversation{threads.length !== 1 ? 's' : ''}
           </p>
         </div>

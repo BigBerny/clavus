@@ -11,7 +11,7 @@ export function TypingIndicator() {
             <span className="w-1.5 h-1.5 rounded-full bg-text-light-muted/60 dark:bg-text-dark-muted/60 animate-[bounce_1.4s_ease-in-out_0.2s_infinite]" />
             <span className="w-1.5 h-1.5 rounded-full bg-text-light-muted/60 dark:bg-text-dark-muted/60 animate-[bounce_1.4s_ease-in-out_0.4s_infinite]" />
           </div>
-          <span className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50 ml-0.5">Thinking</span>
+          <span className="text-[12px] text-text-light-muted/50 dark:text-text-dark-muted/50 ml-0.5">Thinking</span>
         </div>
       </div>
     </div>

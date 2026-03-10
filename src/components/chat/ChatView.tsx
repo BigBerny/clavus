@@ -88,7 +88,7 @@ export function ChatView({ messages }: Props) {
                 return 'Late night, huh?'
               })()}
             </h2>
-            <p className="text-[13px] text-text-light-muted dark:text-text-dark-muted max-w-[260px] leading-relaxed">
+            <p className="text-sm text-text-light-muted dark:text-text-dark-muted max-w-[280px] leading-relaxed">
               I'm Jane, your AI assistant. Ask me anything, send images, or use voice.
             </p>
             <div className="grid grid-cols-2 gap-2.5 mt-8 w-full max-w-[320px]">
@@ -104,7 +104,7 @@ export function ChatView({ messages }: Props) {
                     const event = new CustomEvent('clavus:send', { detail: text })
                     window.dispatchEvent(event)
                   }}
-                  className="inline-btn flex items-center gap-2.5 px-3.5 py-3 text-[13px] text-left rounded-xl border border-surface-light-3/60 dark:border-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 hover:text-text-light dark:hover:text-text-dark hover:border-accent/25 transition-all active:scale-[0.97] animate-[fadeSlideIn_0.3s_ease-out_both]"
+                  className="inline-btn flex items-center gap-2.5 px-4 py-3.5 text-sm text-left rounded-xl border border-surface-light-3/60 dark:border-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 hover:text-text-light dark:hover:text-text-dark hover:border-accent/25 transition-all active:scale-[0.97] animate-[fadeSlideIn_0.3s_ease-out_both]"
                   style={{ animationDelay: `${0.35 + i * 0.07}s` }}
                 >
                   <span className="text-base">{icon}</span>
@@ -137,7 +137,7 @@ export function ChatView({ messages }: Props) {
                   {showDate && (
                     <div className="flex items-center gap-3 py-1.5 mb-1">
                       <div className="flex-1 h-px bg-surface-light-3/40 dark:bg-surface-dark-3/40" />
-                      <span className="text-[10px] text-text-light-muted/50 dark:text-text-dark-muted/50 font-medium tracking-wide uppercase">
+                      <span className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50 font-medium tracking-wide uppercase">
                         {new Date(msg.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
                       <div className="flex-1 h-px bg-surface-light-3/40 dark:bg-surface-dark-3/40" />
@@ -145,7 +145,7 @@ export function ChatView({ messages }: Props) {
                   )}
                   {showTimeGap && !showDate && (
                     <div className="flex justify-center py-1 mb-0.5">
-                      <span className="text-[10px] text-text-light-muted/35 dark:text-text-dark-muted/35 font-medium">
+                      <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 font-medium">
                         {new Date(msg.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
@@ -175,7 +175,7 @@ export function ChatView({ messages }: Props) {
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
           {unseenCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/30">
+            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-accent text-white text-[11px] font-bold shadow-sm shadow-accent/30">
               {unseenCount > 99 ? '99+' : unseenCount}
             </span>
           )}
