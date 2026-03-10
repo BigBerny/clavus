@@ -36,7 +36,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
   const isInline = !className
   if (isInline) {
     return (
-      <code className="px-1.5 py-0.5 rounded-md bg-black/5 dark:bg-white/10 text-[13px] font-mono" {...props}>
+      <code className="px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.08] text-[13px] font-mono" {...props}>
         {children}
       </code>
     )
@@ -45,9 +45,9 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
   const langMatch = className?.match(/language-(\w+)/)
   const lang = langMatch?.[1]
   return (
-    <div className="relative group/code my-2 -mx-1 max-w-[calc(100%+0.5rem)]">
-      <div className="flex items-center justify-between px-3.5 py-1.5 rounded-t-xl bg-surface-light-3/60 dark:bg-[#0d0f14] border-b border-surface-light-3/40 dark:border-white/5">
-        <span className="text-[10px] font-medium text-text-light-muted/70 dark:text-text-dark-muted/60 uppercase tracking-wider">
+    <div className="relative group/code my-2.5 -mx-1 max-w-[calc(100%+0.5rem)]">
+      <div className="flex items-center justify-between px-3.5 py-1.5 rounded-t-xl bg-surface-light-3/50 dark:bg-[#0d0f14] border-b border-surface-light-3/30 dark:border-white/[0.04]">
+        <span className="text-[10px] font-medium text-text-light-muted/60 dark:text-text-dark-muted/50 uppercase tracking-wider">
           {lang || 'code'}
         </span>
         <button
@@ -57,13 +57,13 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
             setCopied(true)
             setTimeout(() => setCopied(false), 1500)
           }}
-          className="inline-btn px-2 py-0.5 text-[10px] rounded-md text-text-light-muted/70 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark transition-colors"
+          className="inline-btn px-2 py-0.5 text-[10px] rounded-md text-text-light-muted/60 dark:text-text-dark-muted/50 hover:text-text-light dark:hover:text-text-dark transition-colors"
           aria-label="Copy code"
         >
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <code className={`${className} block overflow-x-auto p-3.5 rounded-b-xl bg-surface-light-2 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
+      <code className={`${className} block overflow-x-auto p-3.5 rounded-b-xl bg-surface-light-2/80 dark:bg-[#141720] text-[12.5px] font-mono whitespace-pre leading-[1.65] max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
         {children}
       </code>
     </div>
@@ -138,15 +138,15 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   // System/error messages
   if (isSystem) {
     return (
-      <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out]" role="status">
-        <div className={`max-w-[90%] px-4 py-2 rounded-xl text-xs text-center ${
+      <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out] py-0.5" role="status">
+        <div className={`max-w-[85%] px-3.5 py-2 rounded-xl text-[11px] text-center leading-snug ${
           isError
-            ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-            : 'bg-surface-light-2/80 dark:bg-surface-dark-2/80 text-text-light-muted dark:text-text-dark-muted'
+            ? 'bg-red-500/8 text-red-500/90 dark:text-red-400/90 border border-red-500/15'
+            : 'bg-surface-light-2/60 dark:bg-surface-dark-2/60 text-text-light-muted/70 dark:text-text-dark-muted/70'
         }`}>
           {isError ? (
             <div className="flex items-center justify-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-80"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <span>{message.content.replace(/^Error:\s*/, '')}</span>
             </div>
           ) : (
@@ -178,15 +178,15 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           className={`px-4 py-2.5 overflow-hidden min-w-0 max-w-full ${
             isUser
               ? `bg-accent text-white shadow-sm shadow-accent/20 ${
-                  showAvatar && isLastInGroup ? 'rounded-2xl rounded-br-md' :
+                  showAvatar && isLastInGroup ? 'rounded-2xl' :
                   showAvatar ? 'rounded-2xl rounded-br-md' :
-                  isLastInGroup ? 'rounded-2xl rounded-tr-md rounded-br-md' :
+                  isLastInGroup ? 'rounded-2xl rounded-tr-md' :
                   'rounded-2xl rounded-r-md'
                 }`
               : `bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark shadow-sm shadow-black/5 dark:shadow-black/20 ${
-                  showAvatar && isLastInGroup ? 'rounded-2xl rounded-bl-md' :
+                  showAvatar && isLastInGroup ? 'rounded-2xl' :
                   showAvatar ? 'rounded-2xl rounded-bl-md' :
-                  isLastInGroup ? 'rounded-2xl rounded-tl-md rounded-bl-md' :
+                  isLastInGroup ? 'rounded-2xl rounded-tl-md' :
                   'rounded-2xl rounded-l-md'
                 }`
           }`}
@@ -203,10 +203,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           )}
           {isUser ? (
             message.content ? (
-              <p className="whitespace-pre-wrap text-sm leading-relaxed select-text" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
+              <p className="whitespace-pre-wrap text-[15px] leading-[1.55] select-text" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               <Markdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}

@@ -144,15 +144,15 @@ export function App() {
         onCancelRecording={() => cancelRecordingRef.current?.()}
       />
       {connectionStatus === 'disconnected' && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 animate-[fadeSlideIn_0.2s_ease-out]">
-          <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-          <span className="text-xs text-amber-600 dark:text-amber-400">Connection lost. Messages will be sent when reconnected.</span>
+        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15 animate-[fadeSlideIn_0.2s_ease-out]">
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80" />
+          <span className="text-[11px] text-amber-600 dark:text-amber-400/90">Connection lost. Messages will be sent when reconnected.</span>
         </div>
       )}
       {connectionStatus === 'reconnecting' && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 animate-[fadeSlideIn_0.2s_ease-out]">
-          <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-          <span className="text-xs text-amber-600 dark:text-amber-400">Reconnecting...</span>
+        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15 animate-[fadeSlideIn_0.2s_ease-out]">
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80 animate-pulse" />
+          <span className="text-[11px] text-amber-600 dark:text-amber-400/90">Reconnecting...</span>
         </div>
       )}
       <ChatView key={activeThreadId} messages={messages} />
