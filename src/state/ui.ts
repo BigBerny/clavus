@@ -9,6 +9,7 @@ interface UIState {
   connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
   settingsOpen: boolean
   sidebarOpen: boolean
+  fileBrowserOpen: boolean
   gatewayUrl: string
   gatewayToken: string
   elevenLabsApiKey: string
@@ -17,6 +18,7 @@ interface UIState {
   setConnectionStatus: (status: UIState['connectionStatus']) => void
   setSettingsOpen: (open: boolean) => void
   setSidebarOpen: (open: boolean) => void
+  setFileBrowserOpen: (open: boolean) => void
   setGatewayUrl: (url: string) => void
   setGatewayToken: (token: string) => void
   setElevenLabsApiKey: (key: string) => void
@@ -53,6 +55,7 @@ export const useUIStore = create<UIState>((set) => ({
   connectionStatus: 'checking',
   settingsOpen: false,
   sidebarOpen: false,
+  fileBrowserOpen: false,
   gatewayUrl: localStorage.getItem('clavus-gateway-url') || '',
   gatewayToken: localStorage.getItem('clavus-gateway-token') || '',
   elevenLabsApiKey: localStorage.getItem('clavus-elevenlabs-key') || '',
@@ -67,6 +70,7 @@ export const useUIStore = create<UIState>((set) => ({
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setFileBrowserOpen: (open) => set({ fileBrowserOpen: open }),
 
   setGatewayUrl: (url) => {
     localStorage.setItem('clavus-gateway-url', url)

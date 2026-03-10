@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { memo, useState, useCallback, useEffect, useRef } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -74,22 +74,90 @@ const MARKSENSE_PATTERN = /mac-mini-von-janis\.taild2ad59\.ts\.net\/file\//
 
 function MarksenseCard({ href }: { href: string }) {
   const filename = decodeURIComponent(href.split('/file/').pop() || 'Document')
+  const [content, setContent] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    const filePath = href.split('/file/').pop()
+    if (!filePath) return
+    setLoading(true)
+    fetch(`/marksense/file/${filePath}`)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed')
+        return res.text()
+      })
+      .then(text => {
+        setContent(text)
+        setLoading(false)
+      })
+      .catch(() => {
+        setFailed(true)
+        setLoading(false)
+      })
+  }, [href])
+
+  // Fallback to link card if fetch failed
+  if (failed) {
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 my-2 rounded-xl bg-accent/10 dark:bg-accent/15 border border-accent/20 hover:bg-accent/20 dark:hover:bg-accent/25 transition-colors no-underline">
+        <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-accent truncate">{filename}</p>
+          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Open in Marksense</p>
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted flex-shrink-0"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      </a>
+    )
+  }
+
+  const lines = content?.split('\n') || []
+  const isLong = lines.length > 12
+  const displayContent = expanded ? content || '' : lines.slice(0, 10).join('\n')
+
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="flex items-center gap-3 px-4 py-3 my-2 rounded-xl bg-accent/10 dark:bg-accent/15 border border-accent/20 hover:bg-accent/20 dark:hover:bg-accent/25 transition-colors no-underline"
-    >
-      <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <div className="my-2 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-accent/15">
+        <div className="flex items-center gap-2 min-w-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span className="text-[13px] font-medium text-accent truncate">{filename}</span>
+        </div>
+        <a href={href} target="_blank" rel="noopener noreferrer" className="inline-btn flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-colors no-underline whitespace-nowrap">
+          Open
+          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </a>
       </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-accent truncate">{filename}</p>
-        <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Open in Marksense</p>
+      {/* Content */}
+      <div className="px-4 py-3">
+        {loading ? (
+          <div className="flex items-center gap-2 py-2">
+            <div className="voice-spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
+            <span className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Loading...</span>
+          </div>
+        ) : (
+          <>
+            <div className={`prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${!expanded && isLong ? 'max-h-[200px] overflow-hidden relative' : ''}`}>
+              <Markdown remarkPlugins={[remarkGfm]}>{displayContent}</Markdown>
+              {!expanded && isLong && (
+                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-accent/5 dark:from-accent/8 to-transparent pointer-events-none" />
+              )}
+            </div>
+            {isLong && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="inline-btn mt-2 text-[12px] text-accent hover:text-accent/80 font-medium transition-colors"
+              >
+                {expanded ? 'Show less' : `Show more (${lines.length} lines)`}
+              </button>
+            )}
+          </>
+        )}
       </div>
-      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted flex-shrink-0"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-    </a>
+    </div>
   )
 }
 
@@ -118,8 +186,6 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const [copied, setCopied] = useState(false)
   const [showFullTime, setShowFullTime] = useState(false)
   const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Update relative time periodically
@@ -128,23 +194,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     return () => clearInterval(interval)
   }, [message.timestamp])
 
-  // Close menu when clicking outside
-  useEffect(() => {
-    if (!menuOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', handleClickOutside)
-    return () => document.removeEventListener('pointerdown', handleClickOutside)
-  }, [menuOpen])
-
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
     navigator.vibrate?.(10)
     setCopied(true)
-    setMenuOpen(false)
     setTimeout(() => setCopied(false), 1500)
   }, [message.content])
 
@@ -165,13 +218,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   const handleSpeak = useCallback(() => {
     onSpeak?.(message.id, message.content)
-    setMenuOpen(false)
   }, [onSpeak, message.id, message.content])
-
-  const toggleMenu = useCallback((e: ReactMouseEvent) => {
-    e.stopPropagation()
-    setMenuOpen((v) => !v)
-  }, [])
 
   // System/error messages
   if (isSystem) {
@@ -261,8 +308,8 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             <span className="streaming-cursor" aria-label="Typing" />
           )}
         </div>
-        {/* Metadata row: timestamp + action menu */}
-        <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'} transition-opacity duration-200 ${
+        {/* Metadata row: timestamp + direct action buttons */}
+        <div className={`flex items-center gap-1 px-1 ${isUser ? 'justify-end' : 'justify-start'} transition-opacity duration-200 ${
           isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'
         }`}>
           <span
@@ -272,57 +319,44 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           >
             {showFullTime ? fullDateTime(message.timestamp) : relTime}
           </span>
-          {/* Copied feedback (shown briefly after copy) */}
-          {copied && (
-            <span className="text-[11px] text-accent animate-[fadeSlideIn_0.15s_ease-out]">Copied!</span>
-          )}
-          {/* Action menu trigger */}
-          {!message.streaming && message.content && !copied && (
-            <div className="relative" ref={menuRef}>
+          {/* Direct action buttons */}
+          {!message.streaming && message.content && (
+            <>
               <button
-                onClick={toggleMenu}
-                className={`inline-btn px-1 py-0.5 rounded-md text-[11px] transition-all duration-200 ${
-                  menuOpen
-                    ? 'text-text-light-muted dark:text-text-dark-muted'
-                    : 'opacity-0 group-hover/msg:opacity-100 text-text-light-muted/45 dark:text-text-dark-muted/45 hover:text-text-light-muted dark:hover:text-text-dark-muted'
-                }`}
-                aria-label="Message actions"
+                onClick={handleCopy}
+                className="inline-btn p-1.5 rounded-lg text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light-muted dark:hover:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 active:scale-90 transition-all"
+                aria-label={copied ? 'Copied' : 'Copy message'}
+                title={copied ? 'Copied!' : 'Copy'}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                {copied ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                )}
               </button>
-              {menuOpen && (
-                <div className={`absolute bottom-full mb-1 ${isUser ? 'right-0' : 'left-0'} flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-surface-light/95 dark:bg-surface-dark-2/95 shadow-lg shadow-black/10 dark:shadow-black/30 border border-surface-light-3/40 dark:border-surface-dark-3/40 backdrop-blur-sm animate-[fadeSlideIn_0.15s_ease-out] z-10`}>
-                  <button
-                    onClick={handleCopy}
-                    className="inline-btn flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 transition-colors whitespace-nowrap"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                    Copy
-                  </button>
-                  {isAssistant && onSpeak && (
-                    <button
-                      onClick={handleSpeak}
-                      className={`inline-btn flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md transition-colors whitespace-nowrap ${
-                        isSpeaking
-                          ? 'text-accent'
-                          : ttsLoading
-                            ? 'text-text-dark-muted'
-                            : 'text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-2 dark:hover:bg-surface-dark-3'
-                      }`}
-                    >
-                      {ttsLoading ? (
-                        <div className="voice-spinner" style={{ width: 13, height: 13, borderWidth: 1.5 }} />
-                      ) : isSpeaking ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
-                      )}
-                      {isSpeaking ? 'Stop' : 'Listen'}
-                    </button>
+              {isAssistant && onSpeak && (
+                <button
+                  onClick={handleSpeak}
+                  className={`inline-btn p-1.5 rounded-lg active:scale-90 transition-all ${
+                    isSpeaking
+                      ? 'text-accent hover:text-accent/80'
+                      : ttsLoading
+                        ? 'text-text-light-muted/40 dark:text-text-dark-muted/40'
+                        : 'text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light-muted dark:hover:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80'
+                  }`}
+                  aria-label={isSpeaking ? 'Stop speaking' : 'Listen to message'}
+                  title={isSpeaking ? 'Stop' : 'Listen'}
+                >
+                  {ttsLoading ? (
+                    <div className="voice-spinner" style={{ width: 15, height: 15, borderWidth: 1.5 }} />
+                  ) : isSpeaking ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
                   )}
-                </div>
+                </button>
               )}
-            </div>
+            </>
           )}
         </div>
       </div>

@@ -250,10 +250,17 @@ export function Sidebar() {
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-bottom">
-          <p className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50 text-center">
-            {threads.length} conversation{threads.length !== 1 ? 's' : ''}
-          </p>
+        <div className="px-3 py-2 border-t border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-bottom">
+          <button
+            onClick={() => {
+              setSidebarOpen(false)
+              useUIStore.getState().setFileBrowserOpen(true)
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 hover:text-text-light dark:hover:text-text-dark transition-colors font-medium"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+            Files
+          </button>
         </div>
       </div>
     </>

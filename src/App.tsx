@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Header } from './components/layout/Header.tsx'
 import { Settings } from './components/layout/Settings.tsx'
 import { Sidebar } from './components/layout/Sidebar.tsx'
+import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { useChat } from './hooks/useChat.ts'
@@ -134,6 +135,8 @@ export function App() {
   }
 
   const connectionStatus = useUIStore((s) => s.connectionStatus)
+  const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
+  const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
   const activeThreadId = useThreadsStore((s) => s.activeThreadId)
 
   return (
@@ -175,6 +178,10 @@ export function App() {
       />
       <Sidebar />
       <Settings />
+      <FileBrowser
+        open={fileBrowserOpen}
+        onClose={() => setFileBrowserOpen(false)}
+      />
     </div>
   )
 }
