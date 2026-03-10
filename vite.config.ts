@@ -29,8 +29,8 @@ export default defineConfig({
         name: 'Clavus — OpenClaw Chat',
         short_name: 'Clavus',
         description: 'Mobile-first chat client for OpenClaw',
-        theme_color: '#0f172a',
-        background_color: '#0f172a',
+        theme_color: '#111318',
+        background_color: '#111318',
         display: 'standalone',
         icons: [
           { src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },

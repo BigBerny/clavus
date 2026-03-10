@@ -116,53 +116,55 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
             }`}
           />
 
-          {isStreaming ? (
-            <button
-              onClick={onAbort}
-              className="flex-none w-10 h-10 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all shadow-lg shadow-red-500/25"
-              aria-label="Stop generating"
-              title="Stop"
-            >
-              <StopIcon />
-            </button>
-          ) : isRecording ? (
-            <button
-              onClick={voice.stop}
-              className="flex-none w-10 h-10 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse"
-              aria-label="Stop recording and transcribe"
-              title="Stop recording"
-            >
-              <MicIcon />
-            </button>
-          ) : isTranscribing ? (
-            <button
-              disabled
-              className="flex-none w-10 h-10 flex items-center justify-center rounded-full bg-surface-light-3 dark:bg-surface-dark-3 text-text-light-muted dark:text-text-dark-muted opacity-50 cursor-not-allowed"
-              aria-label="Transcribing audio"
-              title="Transcribing"
-            >
-              <MicIcon />
-            </button>
-          ) : hasText ? (
-            <button
-              onClick={handleSubmit}
-              disabled={!value.trim()}
-              className={`flex-none w-10 h-10 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-accent/25 ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
-              aria-label="Send message"
-              title="Send"
-            >
-              <SendIcon />
-            </button>
-          ) : (
-            <button
-              onClick={handleMicClick}
-              className="flex-none w-10 h-10 flex items-center justify-center rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:bg-accent hover:text-white active:scale-95 transition-all"
-              aria-label="Start voice input (tap to toggle)"
-              title="Voice input"
-            >
-              <MicIcon />
-            </button>
-          )}
+          <div className="relative flex-none w-10 h-10">
+            {isStreaming ? (
+              <button
+                onClick={onAbort}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all shadow-lg shadow-red-500/25 animate-[btnFadeIn_0.15s_ease-out]"
+                aria-label="Stop generating"
+                title="Stop"
+              >
+                <StopIcon />
+              </button>
+            ) : isRecording ? (
+              <button
+                onClick={voice.stop}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse animate-[btnFadeIn_0.15s_ease-out]"
+                aria-label="Stop recording and transcribe"
+                title="Stop recording"
+              >
+                <MicIcon />
+              </button>
+            ) : isTranscribing ? (
+              <button
+                disabled
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-surface-light-3 dark:bg-surface-dark-3 text-text-light-muted dark:text-text-dark-muted opacity-50 cursor-not-allowed"
+                aria-label="Transcribing audio"
+                title="Transcribing"
+              >
+                <MicIcon />
+              </button>
+            ) : hasText ? (
+              <button
+                onClick={handleSubmit}
+                disabled={!value.trim()}
+                className={`absolute inset-0 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
+                aria-label="Send message"
+                title="Send"
+              >
+                <SendIcon />
+              </button>
+            ) : (
+              <button
+                onClick={handleMicClick}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
+                aria-label="Start voice input (tap to toggle)"
+                title="Voice input"
+              >
+                <MicIcon />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

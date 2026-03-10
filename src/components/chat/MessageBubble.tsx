@@ -53,14 +53,40 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
       >
         {copied ? 'Copied!' : 'Copy'}
       </button>
-      <code className={`${className} block overflow-x-auto p-4 rounded-xl bg-surface-light-2 dark:bg-[#0d1117] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} {...props}>
+      <code className={`${className} block overflow-x-auto p-4 rounded-xl bg-surface-light-2 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} {...props}>
         {children}
       </code>
     </div>
   )
 }
 
+const MARKSENSE_PATTERN = /mac-mini-von-janis\.taild2ad59\.ts\.net\/file\//
+
+function MarksenseCard({ href }: { href: string }) {
+  const filename = decodeURIComponent(href.split('/file/').pop() || 'Document')
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="flex items-center gap-3 px-4 py-3 my-2 rounded-xl bg-accent/10 dark:bg-accent/15 border border-accent/20 hover:bg-accent/20 dark:hover:bg-accent/25 transition-colors no-underline"
+    >
+      <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-accent truncate">{filename}</p>
+        <p className="text-[11px] text-text-light-muted dark:text-text-dark-muted">Open in Marksense</p>
+      </div>
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted flex-shrink-0"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+    </a>
+  )
+}
+
 function ExternalLink({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
+  if (href && MARKSENSE_PATTERN.test(href)) {
+    return <MarksenseCard href={href} />
+  }
   return (
     <a
       href={href}
