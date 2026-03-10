@@ -5,25 +5,32 @@ export type RecordingState = 'idle' | 'recording' | 'transcribing'
 
 const MAX_DURATION_MS = 5 * 60 * 1000 // 5 minutes
 const WARNING_AT_MS = 4 * 60 * 1000 + 45 * 1000 // 4:45
+const SILENCE_THRESHOLD = 0.02 // Normalized amplitude threshold for "silence"
+const SILENCE_TIMEOUT_MS = 2500 // Auto-stop after 2.5s of silence
 
 function getSupportedMimeType(): string {
-  if (typeof MediaRecorder === 'undefined') return 'audio/webm'
+  if (typeof MediaRecorder === 'undefined') return 'audio/mp4'
+  // iOS Safari supports audio/mp4 natively, webm is not supported
   if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) return 'audio/webm;codecs=opus'
   if (MediaRecorder.isTypeSupported('audio/webm')) return 'audio/webm'
   if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4'
-  return 'audio/webm'
+  if (MediaRecorder.isTypeSupported('audio/aac')) return 'audio/aac'
+  // Last resort: let browser pick default
+  return ''
 }
 
 function fileExtForMime(mime: string): string {
-  if (mime.includes('mp4')) return 'mp4'
+  if (mime.includes('mp4') || mime.includes('aac')) return 'm4a'
+  if (mime.includes('webm')) return 'webm'
   return 'webm'
 }
 
 interface UseVoiceRecorderOptions {
   onTranscription: (text: string) => void
+  silenceAutoStop?: boolean // Enable auto-stop on silence detection
 }
 
-export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
+export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: UseVoiceRecorderOptions) {
   const [state, setState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
   const [warning, setWarning] = useState(false)
@@ -39,6 +46,8 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef(0)
   const cancelledRef = useRef(false)
+  const silenceStartRef = useRef<number | null>(null)
+  const hasSpokenRef = useRef(false) // Track if user has spoken at all
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -60,6 +69,8 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
     analyserRef.current = null
     mediaRecorderRef.current = null
     chunksRef.current = []
+    silenceStartRef.current = null
+    hasSpokenRef.current = false
     setDuration(0)
     setWarning(false)
     setLevels([])
@@ -107,8 +118,18 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
   )
 
   const startAnalyser = useCallback((stream: MediaStream) => {
-    const ctx = new AudioContext()
+    // Use webkitAudioContext for older iOS Safari
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+    if (!AudioCtx) return
+
+    const ctx = new AudioCtx()
     audioCtxRef.current = ctx
+
+    // iOS Safari requires explicit resume within user gesture
+    if (ctx.state === 'suspended') {
+      ctx.resume().catch(() => {})
+    }
+
     const source = ctx.createMediaStreamSource(stream)
     const analyser = ctx.createAnalyser()
     analyser.fftSize = 64
@@ -125,20 +146,59 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
         bars.push(dataArray[i * step] / 255)
       }
       setLevels(bars)
+
+      // Voice activity detection for auto-stop
+      if (silenceAutoStop) {
+        const maxLevel = Math.max(...bars)
+        if (maxLevel > SILENCE_THRESHOLD) {
+          // User is speaking
+          hasSpokenRef.current = true
+          silenceStartRef.current = null
+        } else if (hasSpokenRef.current) {
+          // Silence detected after speech
+          if (silenceStartRef.current === null) {
+            silenceStartRef.current = Date.now()
+          } else if (Date.now() - silenceStartRef.current > SILENCE_TIMEOUT_MS) {
+            // Auto-stop after sustained silence
+            if (mediaRecorderRef.current?.state === 'recording') {
+              navigator.vibrate?.(15)
+              mediaRecorderRef.current.stop()
+            }
+            return // Stop the animation frame loop
+          }
+        }
+      }
+
       animFrameRef.current = requestAnimationFrame(update)
     }
     update()
-  }, [])
+  }, [silenceAutoStop])
 
   const start = useCallback(async () => {
     setError(null)
     cancelledRef.current = false
+
+    // Check for MediaRecorder support
+    if (typeof MediaRecorder === 'undefined') {
+      setError('Voice recording is not supported in this browser. Try updating to the latest version.')
+      return
+    }
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          // Prefer higher sample rate for better transcription quality
+          sampleRate: { ideal: 44100 },
+        },
+      })
       streamRef.current = stream
 
       const mimeType = getSupportedMimeType()
-      const recorder = new MediaRecorder(stream, { mimeType })
+      const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {}
+      const recorder = new MediaRecorder(stream, recorderOptions)
       mediaRecorderRef.current = recorder
       chunksRef.current = []
 
@@ -152,7 +212,8 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
           setState('idle')
           return
         }
-        const blob = new Blob(chunksRef.current, { type: mimeType })
+        const actualMimeType = recorder.mimeType || mimeType
+        const blob = new Blob(chunksRef.current, { type: actualMimeType })
         cleanup()
         if (blob.size > 0) {
           transcribe(blob)
@@ -161,7 +222,8 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
         }
       }
 
-      recorder.start(250)
+      // Use smaller timeslice for more responsive data collection
+      recorder.start(200)
       startTimeRef.current = Date.now()
       setState('recording')
       startAnalyser(stream)
@@ -181,6 +243,8 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
         setError('Microphone access denied. Check Settings > Safari > Microphone.')
       } else if (err instanceof DOMException && err.name === 'NotFoundError') {
         setError('No microphone found on this device.')
+      } else if (err instanceof DOMException && err.name === 'NotReadableError') {
+        setError('Microphone is in use by another app. Close other apps and try again.')
       } else {
         setError('Could not start recording. Please try again.')
       }
