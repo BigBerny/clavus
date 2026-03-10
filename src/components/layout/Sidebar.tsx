@@ -72,30 +72,39 @@ function ThreadItem({ thread, isActive, onSelect, onDelete }: {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className={`relative px-4 py-3 cursor-pointer transition-all duration-150 ${
+        className={`relative px-3 py-3 cursor-pointer transition-all duration-150 ${
           isActive
-            ? 'bg-accent/10 border-l-2 border-accent'
+            ? 'bg-accent/8 border-l-2 border-accent'
             : 'hover:bg-surface-light-2/50 dark:hover:bg-surface-dark-2/50 border-l-2 border-transparent'
         }`}
       >
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex items-start gap-3">
+          <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center mt-0.5 ${
+            isActive
+              ? 'bg-accent/15 text-accent'
+              : 'bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted'
+          }`}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          </div>
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium truncate ${
-              isActive
-                ? 'text-accent'
-                : 'text-text-light dark:text-text-dark'
-            }`}>
-              {thread.title}
-            </p>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className={`text-sm font-medium truncate ${
+                isActive
+                  ? 'text-accent'
+                  : 'text-text-light dark:text-text-dark'
+              }`}>
+                {thread.title}
+              </p>
+              <span className="text-[10px] text-text-light-muted/60 dark:text-text-dark-muted/60 flex-shrink-0">
+                {relativeTime(thread.updatedAt)}
+              </span>
+            </div>
             {thread.lastMessagePreview && (
-              <p className="text-xs text-text-light-muted dark:text-text-dark-muted truncate mt-0.5">
+              <p className="text-[11px] text-text-light-muted dark:text-text-dark-muted truncate mt-0.5 leading-snug">
                 {thread.lastMessagePreview}
               </p>
             )}
           </div>
-          <span className="text-[10px] text-text-light-muted/70 dark:text-text-dark-muted/70 flex-shrink-0 mt-0.5">
-            {relativeTime(thread.updatedAt)}
-          </span>
         </div>
       </div>
     </div>

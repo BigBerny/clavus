@@ -59,6 +59,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
     if (isStreaming) return
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
+    // Haptic feedback on send
+    navigator.vibrate?.(10)
     onSend(trimmed.slice(0, 10000), pendingImages.length > 0 ? pendingImages : undefined)
     setValue('')
     setPendingImages([])
@@ -80,6 +82,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
 
   // Tap-to-toggle: simple tap to start/stop recording
   const handleMicClick = useCallback(() => {
+    navigator.vibrate?.(10)
     if (voice.state === 'recording') {
       voice.stop()
     } else if (voice.state === 'idle') {
