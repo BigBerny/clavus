@@ -162,7 +162,9 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
       <div className="max-w-3xl mx-auto px-3 py-2">
         {/* Voice error */}
         {voice.error && (
-          <div className="text-red-400 text-xs mb-2 text-center animate-[fadeSlideIn_0.2s_ease-out]" role="alert">{voice.error}</div>
+          <div className="flex items-center justify-center gap-2 text-red-400 text-xs mb-2 animate-[fadeSlideIn_0.2s_ease-out] px-3 py-1.5 rounded-lg bg-red-500/8" role="alert">
+            <span className="text-center">{voice.error}</span>
+          </div>
         )}
 
         {/* Transcribing state */}

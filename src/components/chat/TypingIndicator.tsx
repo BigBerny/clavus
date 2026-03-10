@@ -5,13 +5,12 @@ export function TypingIndicator() {
         J
       </div>
       <div className="px-4 py-3 rounded-[20px] rounded-bl-[6px] bg-surface-light-2 dark:bg-surface-dark-2 shadow-sm shadow-black/5 dark:shadow-black/20">
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-[3px]">
-            <span className="w-1.5 h-1.5 rounded-full bg-text-light-muted/60 dark:bg-text-dark-muted/60 animate-[bounce_1.4s_ease-in-out_infinite]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-text-light-muted/60 dark:bg-text-dark-muted/60 animate-[bounce_1.4s_ease-in-out_0.2s_infinite]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-text-light-muted/60 dark:bg-text-dark-muted/60 animate-[bounce_1.4s_ease-in-out_0.4s_infinite]" />
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-[4px]">
+            <span className="w-[5px] h-[5px] rounded-full bg-accent/60 animate-[bounce_1.4s_ease-in-out_infinite]" />
+            <span className="w-[5px] h-[5px] rounded-full bg-accent/60 animate-[bounce_1.4s_ease-in-out_0.2s_infinite]" />
+            <span className="w-[5px] h-[5px] rounded-full bg-accent/60 animate-[bounce_1.4s_ease-in-out_0.4s_infinite]" />
           </div>
-          <span className="text-[12px] text-text-light-muted/50 dark:text-text-dark-muted/50 ml-0.5">Thinking</span>
         </div>
       </div>
     </div>
