@@ -36,7 +36,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
   const isInline = !className
   if (isInline) {
     return (
-      <code className="px-1.5 py-0.5 rounded-md bg-black/[0.04] dark:bg-white/[0.08] text-[13px] font-mono" {...props}>
+      <code className="px-1.5 py-0.5 rounded-md bg-black/[0.05] dark:bg-white/[0.08] text-[13px] font-mono" {...props}>
         {children}
       </code>
     )
@@ -63,7 +63,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <code className={`${className} block overflow-x-auto p-3.5 rounded-b-xl bg-surface-light-2/80 dark:bg-[#141720] text-[12.5px] font-mono whitespace-pre leading-[1.65] max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
+      <code className={`${className} block overflow-x-auto p-3.5 rounded-b-xl bg-surface-light-2/80 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-[1.65] max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
         {children}
       </code>
     </div>
@@ -163,7 +163,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         }`}>
           {isError ? (
             <div className="flex items-center justify-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-80"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-80"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <span>{message.content.replace(/^Error:\s*/, '')}</span>
             </div>
           ) : (
@@ -240,9 +240,9 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             <span className="streaming-cursor" aria-label="Typing" />
           )}
         </div>
-        {/* Metadata row: show for last in group, or on hover for others */}
-        <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'} ${
-          isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100 h-0 group-hover/msg:h-auto overflow-hidden transition-all duration-200'
+        {/* Metadata row: always visible for last in group, faded for others */}
+        <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'} transition-opacity duration-200 ${
+          isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'
         }`}>
           <span
             className="text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55 cursor-pointer select-none hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
@@ -279,11 +279,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               title={isSpeaking ? 'Stop' : 'Read aloud'}
             >
               {ttsLoading ? (
-                <div className="voice-spinner" style={{ width: 12, height: 12, borderWidth: 1.5 }} />
+                <div className="voice-spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
               ) : isSpeaking ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
               ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
               )}
             </button>
           )}

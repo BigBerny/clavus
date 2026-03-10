@@ -254,7 +254,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
 
           {/* Character count near limit */}
           {value.length > 9000 && (
-            <span className={`self-center text-[10px] font-mono tabular-nums ${
+            <span className={`self-center text-[11px] font-mono tabular-nums ${
               value.length > 9800 ? 'text-red-400' : 'text-text-light-muted/60 dark:text-text-dark-muted/60'
             }`}>
               {value.length.toLocaleString()}/10,000
