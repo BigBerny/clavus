@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUIStore } from '../../state/ui.ts'
 import { useChatStore } from '../../state/chat.ts'
-import { useThreadsStore } from '../../state/threads.ts'
+import { useThreadsStore, getMessagesKey } from '../../state/threads.ts'
 import type { ThemeChoice } from '../../state/ui.ts'
 
 export function Settings() {
@@ -176,12 +176,29 @@ export function Settings() {
           {/* Data */}
           <section>
             <h3 className="text-xs font-semibold text-text-light-muted dark:text-text-dark-muted uppercase tracking-wider mb-2">Data</h3>
-            <button
-              onClick={handleClear}
-              className="w-full py-2.5 text-sm rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium active:scale-[0.98]"
-            >
-              Clear current conversation
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={handleClear}
+                className="w-full py-2.5 text-sm rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors font-medium active:scale-[0.98]"
+              >
+                Clear current conversation
+              </button>
+              <button
+                onClick={() => {
+                  if (!confirm('Delete all conversations? This cannot be undone.')) return
+                  // Clear all thread messages from localStorage
+                  for (const t of threads) {
+                    localStorage.removeItem(getMessagesKey(t.id))
+                  }
+                  localStorage.removeItem('clavus-threads')
+                  localStorage.removeItem('clavus-active-thread')
+                  window.location.reload()
+                }}
+                className="w-full py-2.5 text-sm rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors font-medium active:scale-[0.98]"
+              >
+                Delete all data
+              </button>
+            </div>
           </section>
         </div>
 

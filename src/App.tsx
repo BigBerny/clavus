@@ -6,6 +6,7 @@ import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
+import { useThreadsStore } from './state/threads.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 
@@ -123,6 +124,7 @@ export function App() {
   }
 
   const connectionStatus = useUIStore((s) => s.connectionStatus)
+  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
@@ -143,7 +145,7 @@ export function App() {
           <span className="text-xs text-amber-600 dark:text-amber-400">Reconnecting...</span>
         </div>
       )}
-      <ChatView messages={messages} />
+      <ChatView key={activeThreadId} messages={messages} />
       <InputBar
         onSend={send}
         onAbort={abort}
