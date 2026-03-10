@@ -6,9 +6,10 @@ interface Props {
   isRecording?: boolean
   recordingDuration?: string
   onCancelRecording?: () => void
+  isStreaming?: boolean
 }
 
-export function Header({ isRecording, recordingDuration, onCancelRecording }: Props) {
+export function Header({ isRecording, recordingDuration, onCancelRecording, isStreaming }: Props) {
   const connectionStatus = useUIStore((s) => s.connectionStatus)
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen)
   const setSidebarOpen = useUIStore((s) => s.setSidebarOpen)
@@ -38,18 +39,18 @@ export function Header({ isRecording, recordingDuration, onCancelRecording }: Pr
     <>
       {/* Recording bar at top */}
       {isRecording && (
-        <div className="flex items-center justify-between px-4 py-2 bg-red-500 text-white select-none safe-area-top animate-[fadeSlideIn_0.2s_ease-out]" role="alert">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white select-none safe-area-top animate-[fadeSlideIn_0.2s_ease-out]" role="alert">
           <button
             onClick={onCancelRecording}
-            className="inline-btn text-white/80 hover:text-white text-xs font-medium transition-colors px-2 py-1"
+            className="inline-btn text-white/80 hover:text-white text-xs font-medium transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
           >
             Cancel
           </button>
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-white recording-pulse" />
-            <span className="text-sm font-medium">Recording</span>
+            <span className="text-[13px] font-medium tracking-wide">Recording</span>
           </div>
-          <span className="text-xs font-mono tabular-nums opacity-80">{recordingDuration}</span>
+          <span className="text-xs font-mono tabular-nums text-white/75">{recordingDuration}</span>
         </div>
       )}
 
@@ -77,11 +78,15 @@ export function Header({ isRecording, recordingDuration, onCancelRecording }: Pr
                   Jane
                 </h1>
               </div>
-              {threadSubtitle && (
+              {isStreaming ? (
+                <p className="text-[10px] text-accent truncate leading-tight -mt-0.5 animate-pulse">
+                  typing...
+                </p>
+              ) : threadSubtitle ? (
                 <p className="text-[10px] text-text-light-muted dark:text-text-dark-muted truncate leading-tight -mt-0.5">
                   {threadSubtitle}
                 </p>
-              )}
+              ) : null}
             </div>
           </div>
         </div>

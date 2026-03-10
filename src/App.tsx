@@ -142,6 +142,7 @@ export function App() {
         isRecording={isRecording}
         recordingDuration={recordingDuration}
         onCancelRecording={() => cancelRecordingRef.current?.()}
+        isStreaming={isStreaming}
       />
       {connectionStatus === 'disconnected' && (
         <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15 animate-[fadeSlideIn_0.2s_ease-out]">

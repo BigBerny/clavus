@@ -221,11 +221,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           )}
         </div>
         {/* Metadata row: show for last in group, or on hover for others */}
-        <div className={`flex items-center gap-2 px-1 ${isUser ? 'justify-end' : 'justify-start'} ${
-          isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100 h-0 group-hover/msg:h-auto overflow-hidden transition-all'
+        <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'} ${
+          isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100 h-0 group-hover/msg:h-auto overflow-hidden transition-all duration-200'
         }`}>
           <span
-            className="text-[10px] text-text-light-muted/70 dark:text-text-dark-muted/70 cursor-pointer select-none"
+            className="text-[10px] text-text-light-muted/55 dark:text-text-dark-muted/55 cursor-pointer select-none hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
             onClick={() => setShowFullTime((v) => !v)}
             title={fullDateTime(message.timestamp)}
           >
@@ -234,7 +234,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           {!message.streaming && message.content && (
             <button
               onClick={handleCopy}
-              className="inline-btn opacity-60 sm:opacity-0 sm:group-hover/msg:opacity-100 text-[10px] text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-opacity"
+              className={`inline-btn text-[10px] transition-all duration-200 ${
+                copied
+                  ? 'text-accent opacity-100'
+                  : 'text-text-light-muted/45 dark:text-text-dark-muted/45 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-text-light-muted dark:hover:text-text-dark-muted'
+              }`}
               aria-label="Copy message"
             >
               {copied ? 'Copied!' : 'Copy'}
@@ -244,12 +248,12 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           {isAssistant && !message.streaming && message.content && onSpeak && (
             <button
               onClick={handleSpeak}
-              className={`inline-btn p-0.5 rounded-md transition-all ${
+              className={`inline-btn p-0.5 rounded-md transition-all duration-200 ${
                 isSpeaking
                   ? 'opacity-100 text-accent'
                   : ttsLoading
                     ? 'opacity-100 text-text-dark-muted'
-                    : 'opacity-60 sm:opacity-0 sm:group-hover/msg:opacity-100 text-text-light-muted dark:text-text-dark-muted hover:text-accent'
+                    : 'text-text-light-muted/45 dark:text-text-dark-muted/45 sm:opacity-0 sm:group-hover/msg:opacity-100 hover:text-accent'
               }`}
               aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
               title={isSpeaking ? 'Stop' : 'Read aloud'}

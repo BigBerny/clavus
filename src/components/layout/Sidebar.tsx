@@ -74,8 +74,8 @@ function ThreadItem({ thread, isActive, onSelect, onDelete }: {
         onTouchEnd={handleTouchEnd}
         className={`relative px-3 py-3 cursor-pointer transition-all duration-150 ${
           isActive
-            ? 'bg-accent/8 border-l-2 border-accent'
-            : 'hover:bg-surface-light-2/50 dark:hover:bg-surface-dark-2/50 border-l-2 border-transparent'
+            ? 'bg-accent/8 border-l-[2.5px] border-accent'
+            : 'hover:bg-surface-light-2/50 dark:hover:bg-surface-dark-2/50 border-l-[2.5px] border-transparent'
         }`}
       >
         <div className="flex items-start gap-3">
@@ -206,9 +206,9 @@ export function Sidebar() {
         <div className="px-3 py-2 space-y-2">
           <button
             onClick={handleNewThread}
-            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover active:scale-[0.98] transition-all"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-accent text-white text-[13px] font-medium hover:bg-accent-hover active:scale-[0.98] transition-all shadow-sm shadow-accent/20"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             New conversation
           </button>
           {threads.length > 5 && (
