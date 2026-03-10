@@ -54,9 +54,9 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
         </div>
       )}
 
-      <header className={`flex items-center justify-between px-2 py-2.5 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl select-none ${!isRecording ? 'safe-area-top' : ''}`}>
+      <header className={`flex items-center justify-between px-2 h-14 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl select-none ${!isRecording ? 'safe-area-top' : ''}`}>
         {/* Left: hamburger + title */}
-        <div className="flex items-center gap-1 min-w-0 flex-1">
+        <div className="flex items-center min-w-0 flex-1">
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 rounded-xl text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 active:scale-95 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
@@ -65,9 +65,9 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
           </button>
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0 ml-3">
             <div className="relative flex-shrink-0">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-sm">
                 J
               </div>
               <div className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-surface-light dark:border-surface-dark ${statusColor[connectionStatus]}`} role="status" aria-label={`Connection: ${connectionStatus}`} />
@@ -92,7 +92,7 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
         </div>
 
         {/* Right: new chat + settings */}
-        <div className="flex items-center gap-0.5 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={handleNewConversation}
             className="p-2 rounded-xl text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 active:scale-95 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center"

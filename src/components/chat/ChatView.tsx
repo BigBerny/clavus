@@ -67,12 +67,13 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="h-full overflow-y-auto overscroll-none px-4 py-3 scroll-smooth"
+        className="h-full overflow-y-auto overscroll-none py-3 scroll-smooth"
         style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
       >
+        <div className={`max-w-[760px] mx-auto px-4 ${isEmptyChat ? 'h-full' : ''}`}>
         {isEmptyChat ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-6 animate-[fadeSlideIn_0.5s_ease-out]">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold mb-5 shadow-lg shadow-violet-500/20">
@@ -91,7 +92,7 @@ export function ChatView({ messages }: Props) {
             <p className="text-sm text-text-light-muted dark:text-text-dark-muted max-w-[280px] leading-relaxed">
               I'm Jane, your AI assistant. Ask me anything, send images, or use voice.
             </p>
-            <div className="grid grid-cols-2 gap-2.5 mt-8 w-full max-w-[320px]">
+            <div className="grid grid-cols-2 gap-3 mt-8 w-full max-w-[320px]">
               {[
                 { icon: '💡', text: 'What can you do?' },
                 { icon: '✍️', text: 'Help me write' },
@@ -104,7 +105,7 @@ export function ChatView({ messages }: Props) {
                     const event = new CustomEvent('clavus:send', { detail: text })
                     window.dispatchEvent(event)
                   }}
-                  className="inline-btn flex items-center gap-2.5 px-4 py-3.5 text-sm text-left rounded-xl border border-surface-light-3/60 dark:border-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 hover:text-text-light dark:hover:text-text-dark hover:border-accent/25 transition-all active:scale-[0.97] animate-[fadeSlideIn_0.3s_ease-out_both]"
+                  className="inline-btn flex items-center gap-2.5 p-4 text-sm text-left rounded-xl border border-surface-light-3/60 dark:border-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 hover:text-text-light dark:hover:text-text-dark hover:border-accent/25 transition-all active:scale-[0.97] animate-[fadeSlideIn_0.3s_ease-out_both]"
                   style={{ animationDelay: `${0.35 + i * 0.07}s` }}
                 >
                   <span className="text-base">{icon}</span>
@@ -131,7 +132,7 @@ export function ChatView({ messages }: Props) {
               const isLastInGroup = !nextMsg || nextMsg.role !== msg.role || (nextMsg && new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString()) || nextHasTimeGap
               // Tighter spacing for consecutive same-role messages, wider for role transitions
               const isRoleTransition = prevMsg && prevMsg.role !== msg.role
-              const spacing = !prevMsg ? '' : showDate ? 'mt-5' : showTimeGap ? 'mt-5' : isRoleTransition ? 'mt-4' : 'mt-0.5'
+              const spacing = !prevMsg ? '' : showDate ? 'mt-5' : showTimeGap ? 'mt-5' : isRoleTransition ? 'mt-4' : 'mt-1'
               return (
                 <div key={msg.id} className={spacing}>
                   {showDate && (
@@ -164,6 +165,7 @@ export function ChatView({ messages }: Props) {
             {showTyping && <TypingIndicator />}
           </>
         )}
+        </div>
         <div ref={bottomRef} className="h-2" />
       </div>
 

@@ -46,7 +46,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
   const lang = langMatch?.[1]
   return (
     <div className="relative group/code my-2.5 -mx-1 max-w-[calc(100%+0.5rem)]">
-      <div className="flex items-center justify-between px-3.5 py-1.5 rounded-t-xl bg-surface-light-3/50 dark:bg-[#0d0f14] border-b border-surface-light-3/30 dark:border-white/[0.04]">
+      <div className="flex items-center justify-between px-3 py-1.5 rounded-t-xl bg-surface-light-3/50 dark:bg-[#0d0f14] border-b border-surface-light-3/30 dark:border-white/[0.04]">
         <span className="text-[11px] font-medium text-text-light-muted/60 dark:text-text-dark-muted/50 uppercase tracking-wider">
           {lang || 'code'}
         </span>
@@ -63,7 +63,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
           {copied ? 'Copied!' : 'Copy'}
         </button>
       </div>
-      <code className={`${className} block overflow-x-auto p-3.5 rounded-b-xl bg-surface-light-2/80 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-[1.65] max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
+      <code className={`${className} block overflow-x-auto p-3 rounded-b-xl bg-surface-light-2/80 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-[1.65] max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
         {children}
       </code>
     </div>
@@ -214,7 +214,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           <div className="flex-shrink-0 w-7 mr-2" />
         )
       )}
-      <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[70%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col gap-1 max-w-[78%] md:max-w-[65%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className={`px-4 py-2.5 min-w-0 max-w-full ${
             isUser
