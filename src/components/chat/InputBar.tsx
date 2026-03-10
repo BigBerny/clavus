@@ -182,20 +182,35 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
             aria-hidden="true"
           />
 
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isRecording ? 'Recording... tap mic to stop' : 'Message...'}
-            rows={1}
-            disabled={isTranscribing}
-            aria-label="Chat message input"
-            maxLength={10000}
-            className={`flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/60 dark:placeholder:text-text-dark-muted/60 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 transition-all ${
-              isRecording ? 'ring-2 ring-red-500/40' : ''
-            }`}
-          />
+          {isRecording ? (
+            <div className="flex-1 flex items-center gap-1 rounded-2xl px-4 py-2.5 bg-surface-light-2 dark:bg-surface-dark-2 ring-2 ring-red-500/40 h-[42px]">
+              <div className="flex items-center gap-[3px] h-5">
+                {voice.levels.map((level, i) => (
+                  <div
+                    key={i}
+                    className="w-[3px] rounded-full bg-red-500 transition-all duration-75"
+                    style={{ height: `${Math.max(4, level * 20)}px` }}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-text-light-muted dark:text-text-dark-muted ml-2">
+                Recording... tap mic to stop
+              </span>
+            </div>
+          ) : (
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Message..."
+              rows={1}
+              disabled={isTranscribing}
+              aria-label="Chat message input"
+              maxLength={10000}
+              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/60 dark:placeholder:text-text-dark-muted/60 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:opacity-50 transition-all"
+            />
+          )}
 
           <div className="relative flex-none w-10 h-10">
             {isStreaming ? (

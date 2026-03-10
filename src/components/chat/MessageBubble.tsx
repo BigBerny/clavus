@@ -186,7 +186,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             </div>
           )}
           {message.streaming && (
-            <span className="inline-block w-1.5 h-4 ml-0.5 bg-current animate-pulse rounded-sm" aria-label="Typing" />
+            <span className="streaming-cursor" aria-label="Typing" />
           )}
         </div>
         <div className={`flex items-center gap-2 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -200,7 +200,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           {!message.streaming && message.content && (
             <button
               onClick={handleCopy}
-              className="inline-btn opacity-0 group-hover/msg:opacity-100 text-[10px] text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-opacity"
+              className="inline-btn opacity-60 sm:opacity-0 sm:group-hover/msg:opacity-100 text-[10px] text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-opacity"
               aria-label="Copy message"
             >
               {copied ? 'Copied!' : 'Copy'}
@@ -210,12 +210,12 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           {isAssistant && !message.streaming && message.content && onSpeak && (
             <button
               onClick={handleSpeak}
-              className={`inline-btn opacity-0 group-hover/msg:opacity-100 p-0.5 rounded-md transition-all ${
+              className={`inline-btn p-0.5 rounded-md transition-all ${
                 isSpeaking
-                  ? '!opacity-100 text-accent'
+                  ? 'opacity-100 text-accent'
                   : ttsLoading
-                    ? '!opacity-100 text-text-dark-muted'
-                    : 'text-text-light-muted dark:text-text-dark-muted hover:text-accent'
+                    ? 'opacity-100 text-text-dark-muted'
+                    : 'opacity-60 sm:opacity-0 sm:group-hover/msg:opacity-100 text-text-light-muted dark:text-text-dark-muted hover:text-accent'
               }`}
               aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
               title={isSpeaking ? 'Stop' : 'Read aloud'}

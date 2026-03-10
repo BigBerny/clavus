@@ -14,16 +14,20 @@ export function ChatView({ messages }: Props) {
   const [autoScroll, setAutoScroll] = useState(true)
   const tts = useTTS()
 
-  const scrollToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToBottom = useCallback((instant = false) => {
+    bottomRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' })
     setAutoScroll(true)
   }, [])
 
   const prevMessagesLenRef = useRef(messages.length)
   useEffect(() => {
-    if (autoScroll) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (!autoScroll) {
+      prevMessagesLenRef.current = messages.length
+      return
     }
+    // New message added → instant scroll; streaming update → smooth scroll
+    const isNewMessage = messages.length > prevMessagesLenRef.current
+    bottomRef.current?.scrollIntoView({ behavior: isNewMessage ? 'instant' : 'smooth' })
     prevMessagesLenRef.current = messages.length
   }, [messages, autoScroll])
 
@@ -49,6 +53,13 @@ export function ChatView({ messages }: Props) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onClick={() => {
+          // Tap to dismiss keyboard on mobile
+          const active = document.activeElement as HTMLElement | null
+          if (active?.tagName === 'TEXTAREA' || active?.tagName === 'INPUT') {
+            active.blur()
+          }
+        }}
         className="h-full overflow-y-auto overscroll-none px-4 py-4 space-y-3"
         style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
@@ -66,16 +77,15 @@ export function ChatView({ messages }: Props) {
             <p className="text-sm text-text-light-muted dark:text-text-dark-muted max-w-[260px]">
               Your OpenClaw assistant. Ask me anything, or tap the mic to talk.
             </p>
-            <div className="flex gap-2 mt-6">
+            <div className="flex flex-wrap justify-center gap-2 mt-6 max-w-[320px]">
               {['What can you do?', 'Tell me a joke', 'Help me code'].map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => {
-                    // This is handled via the onSend prop we'll need to pass down
                     const event = new CustomEvent('clavus:send', { detail: suggestion })
                     window.dispatchEvent(event)
                   }}
-                  className="inline-btn px-3 py-1.5 text-xs rounded-full border border-surface-light-3 dark:border-surface-dark-3 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 hover:text-text-light dark:hover:text-text-dark transition-all active:scale-95"
+                  className="inline-btn px-3.5 py-2 text-xs rounded-full border border-surface-light-3 dark:border-surface-dark-3 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 hover:text-text-light dark:hover:text-text-dark transition-all active:scale-95"
                 >
                   {suggestion}
                 </button>

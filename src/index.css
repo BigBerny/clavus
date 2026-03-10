@@ -160,6 +160,22 @@ button.inline-btn {
   display: none;
 }
 
+/* Streaming cursor blink */
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: currentColor;
+  border-radius: 1px;
+  animation: cursorBlink 1s step-end infinite;
+}
+
 /* Send button animation */
 @keyframes sendPulse {
   0% { transform: scale(1); }
