@@ -178,9 +178,11 @@ export function useVoiceRecorder({ onTranscription }: UseVoiceRecorderOptions) {
       cleanup()
       setState('idle')
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        setError('Microphone access denied')
+        setError('Microphone access denied. Check Settings > Safari > Microphone.')
+      } else if (err instanceof DOMException && err.name === 'NotFoundError') {
+        setError('No microphone found on this device.')
       } else {
-        setError('Could not start recording')
+        setError('Could not start recording. Please try again.')
       }
     }
   }, [cleanup, transcribe, startAnalyser])

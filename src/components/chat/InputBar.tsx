@@ -80,8 +80,36 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
     [handleSubmit],
   )
 
-  // Tap-to-toggle: simple tap to start/stop recording
+  // Hold-to-record + tap-to-toggle hybrid
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const isHoldRecording = useRef(false)
+
+  const handleMicPointerDown = useCallback(() => {
+    if (voice.state === 'recording') return // already recording (tap-toggle mode)
+    if (voice.state !== 'idle') return
+    isHoldRecording.current = false
+    holdTimerRef.current = setTimeout(() => {
+      // Long press: start hold-to-record
+      isHoldRecording.current = true
+      navigator.vibrate?.(20)
+      voice.start()
+    }, 300)
+  }, [voice])
+
+  const handleMicPointerUp = useCallback(() => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+    if (isHoldRecording.current && voice.state === 'recording') {
+      // Release after hold → stop and transcribe
+      isHoldRecording.current = false
+      voice.stop()
+    }
+  }, [voice])
+
   const handleMicClick = useCallback(() => {
+    if (isHoldRecording.current) return // was a hold gesture, not a tap
     navigator.vibrate?.(10)
     if (voice.state === 'recording') {
       voice.stop()
@@ -228,7 +256,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
             ) : isRecording ? (
               <button
                 onClick={voice.stop}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse animate-[btnFadeIn_0.15s_ease-out]"
+                onPointerUp={handleMicPointerUp}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse animate-[btnFadeIn_0.15s_ease-out] touch-none"
                 aria-label="Stop recording and transcribe"
                 title="Stop recording"
               >
@@ -255,9 +284,12 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
             ) : (
               <button
                 onClick={handleMicClick}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
-                aria-label="Start voice input (tap to toggle)"
-                title="Voice input"
+                onPointerDown={handleMicPointerDown}
+                onPointerUp={handleMicPointerUp}
+                onPointerLeave={handleMicPointerUp}
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] touch-none"
+                aria-label="Hold to record, tap to toggle"
+                title="Voice input (tap or hold)"
               >
                 <MicIcon />
               </button>
