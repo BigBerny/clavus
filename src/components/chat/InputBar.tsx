@@ -2,16 +2,21 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 
 interface Props {
-  onSend: (message: string) => void
+  onSend: (message: string, images?: string[]) => void
   onAbort: () => void
   isStreaming: boolean
   onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
 }
 
+const MAX_IMAGES = 4
+const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
+
 export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Props) {
   const [value, setValue] = useState('')
   const [sendAnim, setSendAnim] = useState(false)
+  const [pendingImages, setPendingImages] = useState<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
@@ -50,16 +55,18 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
 
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim()
-    if (!trimmed || isStreaming) return
+    if (!trimmed && pendingImages.length === 0) return
+    if (isStreaming) return
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
-    onSend(trimmed.slice(0, 10000))
+    onSend(trimmed.slice(0, 10000), pendingImages.length > 0 ? pendingImages : undefined)
     setValue('')
+    setPendingImages([])
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
     setTimeout(() => textareaRef.current?.focus(), 50)
-  }, [value, isStreaming, onSend])
+  }, [value, isStreaming, onSend, pendingImages])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -80,9 +87,44 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
     }
   }, [voice])
 
+  const handleAttachClick = useCallback(() => {
+    fileInputRef.current?.click()
+  }, [])
+
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files) return
+
+    const remaining = MAX_IMAGES - pendingImages.length
+    const toProcess = Array.from(files).slice(0, remaining)
+
+    for (const file of toProcess) {
+      if (!file.type.startsWith('image/')) continue
+      if (file.size > MAX_IMAGE_SIZE) continue
+
+      const reader = new FileReader()
+      reader.onload = () => {
+        const dataUrl = reader.result as string
+        setPendingImages((prev) => {
+          if (prev.length >= MAX_IMAGES) return prev
+          return [...prev, dataUrl]
+        })
+      }
+      reader.readAsDataURL(file)
+    }
+
+    // Reset input so same file can be re-selected
+    e.target.value = ''
+  }, [pendingImages.length])
+
+  const removeImage = useCallback((index: number) => {
+    setPendingImages((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
   const isRecording = voice.state === 'recording'
   const isTranscribing = voice.state === 'transcribing'
   const hasText = value.trim().length > 0
+  const hasContent = hasText || pendingImages.length > 0
 
   return (
     <div className="border-t border-surface-light-3/50 dark:border-surface-dark-3/50 shadow-[0_-1px_3px_rgba(0,0,0,0.05)] dark:shadow-[0_-1px_3px_rgba(0,0,0,0.2)] bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl safe-area-bottom">
@@ -100,7 +142,46 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
           </div>
         )}
 
+        {/* Image preview strip */}
+        {pendingImages.length > 0 && (
+          <div className="image-preview-strip mb-2 animate-[fadeSlideIn_0.2s_ease-out]">
+            {pendingImages.map((img, i) => (
+              <div key={i} className="relative flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-surface-light-3 dark:border-surface-dark-3">
+                <img src={img} alt={`Attachment ${i + 1}`} className="w-full h-full object-cover" />
+                <button
+                  onClick={() => removeImage(i)}
+                  className="inline-btn absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-surface-dark/80 dark:bg-surface-dark-3/90 text-white flex items-center justify-center text-xs backdrop-blur-sm"
+                  aria-label={`Remove image ${i + 1}`}
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
+          {/* Attachment button */}
+          <button
+            onClick={handleAttachClick}
+            disabled={pendingImages.length >= MAX_IMAGES || isTranscribing}
+            className="inline-btn flex-none w-10 h-10 flex items-center justify-center rounded-full text-text-light-muted dark:text-text-dark-muted hover:text-accent active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Attach image"
+            title="Attach image"
+          >
+            <PaperclipIcon />
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={handleFileChange}
+            className="hidden"
+            aria-hidden="true"
+          />
+
           <textarea
             ref={textareaRef}
             value={value}
@@ -144,20 +225,19 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
               >
                 <MicIcon />
               </button>
-            ) : hasText ? (
+            ) : hasContent ? (
               <button
                 onClick={handleSubmit}
-                disabled={!value.trim()}
-                className={`absolute inset-0 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
+                className={`absolute inset-0 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
                 aria-label="Send message"
                 title="Send"
               >
-                <SendIcon />
+                <ArrowUpIcon />
               </button>
             ) : (
               <button
                 onClick={handleMicClick}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
+                className="absolute inset-0 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
                 aria-label="Start voice input (tap to toggle)"
                 title="Voice input"
               >
@@ -171,6 +251,14 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
   )
 }
 
+function PaperclipIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+    </svg>
+  )
+}
+
 function MicIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -181,11 +269,11 @@ function MicIcon() {
   )
 }
 
-function SendIcon() {
+function ArrowUpIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M5 12h14"/>
-      <path d="m12 5 7 7-7 7"/>
+      <path d="M12 19V5"/>
+      <path d="m5 12 7-7 7 7"/>
     </svg>
   )
 }

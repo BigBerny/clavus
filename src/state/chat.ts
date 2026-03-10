@@ -7,6 +7,7 @@ export interface Message {
   content: string
   timestamp: number
   streaming?: boolean
+  images?: string[] // base64 data URLs
 }
 
 interface ChatState {
@@ -67,7 +68,7 @@ export const useChatStore = create<ChatState>((set) => ({
         const threadId = useThreadsStore.getState().activeThreadId
         const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
         if (thread && thread.title === 'New conversation') {
-          useThreadsStore.getState().updateThreadTitle(threadId, msg.content.slice(0, 50))
+          useThreadsStore.getState().updateThreadTitle(threadId, msg.content.slice(0, 30))
         }
       }
 

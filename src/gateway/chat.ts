@@ -1,8 +1,12 @@
 import type { GatewayConfig } from './config.ts'
 
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
 export interface ChatCompletionMessage {
   role: 'user' | 'assistant' | 'system'
-  content: string
+  content: string | ContentPart[]
 }
 
 export interface StreamCallbacks {

@@ -57,27 +57,38 @@ export function useChat() {
     }
   }, [setConnectionStatus])
 
-  const send = useCallback(async (content: string, retryCount = 0) => {
-    if (!content.trim()) return
+  const send = useCallback(async (content: string, images?: string[], retryCount = 0) => {
+    if (!content.trim() && (!images || images.length === 0)) return
     const store = useChatStore.getState()
     if (store.isStreaming) return
 
     // If offline, queue
     if (!navigator.onLine) {
-      addMessage({ role: 'user', content: content.trim() })
+      addMessage({ role: 'user', content: content.trim(), images })
       addMessage({ role: 'system', content: 'You are offline. Message will be sent when connection is restored.' })
       offlineQueueRef.current.push(content.trim())
       return
     }
 
     if (retryCount === 0) {
-      addMessage({ role: 'user', content: content.trim() })
+      addMessage({ role: 'user', content: content.trim(), images })
     }
 
     const apiMessages: ChatCompletionMessage[] = useChatStore
       .getState()
       .messages.filter((m) => m.role !== 'system')
-      .map((m) => ({ role: m.role, content: m.content }))
+      .map((m) => {
+        // Build vision-format content if message has images
+        if (m.images && m.images.length > 0) {
+          const parts: ChatCompletionMessage['content'] = []
+          if (m.content) parts.push({ type: 'text' as const, text: m.content })
+          for (const img of m.images) {
+            parts.push({ type: 'image_url' as const, image_url: { url: img } })
+          }
+          return { role: m.role, content: parts }
+        }
+        return { role: m.role, content: m.content }
+      })
 
     const assistantId = useChatStore.getState().addMessage({
       role: 'assistant',
@@ -141,7 +152,7 @@ export function useChat() {
         setConnectionStatus('reconnecting')
         addMessage({ role: 'system', content: `Connection failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})` })
         await delay(RETRY_DELAY)
-        return sendRef.current?.(content, retryCount + 1)
+        return sendRef.current?.(content, images, retryCount + 1)
       }
 
       setConnectionStatus('disconnected')

@@ -160,8 +160,20 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               : 'bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark rounded-2xl rounded-bl-lg shadow-sm shadow-black/5 dark:shadow-black/20'
           }`}
         >
+          {/* Image attachments */}
+          {message.images && message.images.length > 0 && (
+            <div className={`flex flex-wrap gap-1.5 ${message.content ? 'mb-2' : ''}`}>
+              {message.images.map((img, i) => (
+                <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden max-w-[200px]">
+                  <img src={img} alt={`Image ${i + 1}`} className="max-w-full h-auto rounded-lg" loading="lazy" />
+                </a>
+              ))}
+            </div>
+          )}
           {isUser ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed select-text" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
+            message.content ? (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed select-text" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
+            ) : null
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               <Markdown
