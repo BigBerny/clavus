@@ -24,7 +24,7 @@ export function getConfig(): GatewayConfig {
       return threadId ? `${baseUser}-${threadId}` : baseUser
     })(),
     openaiApiKey: params.get('openai_key') || import.meta.env.VITE_OPENAI_API_KEY || '',
-    elevenLabsApiKey: import.meta.env.VITE_ELEVENLABS_API_KEY || '66f23565429c8bf240bc50ba55e49635d6f411e0f1c851f462cf79708a84164c',
+    elevenLabsApiKey: localStorage.getItem('clavus-elevenlabs-key') || import.meta.env.VITE_ELEVENLABS_API_KEY || '',
   }
 }
 

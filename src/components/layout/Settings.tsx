@@ -5,14 +5,16 @@ import { useThreadsStore, getMessagesKey } from '../../state/threads.ts'
 import type { ThemeChoice } from '../../state/ui.ts'
 
 export function Settings() {
-  const { settingsOpen, setSettingsOpen, themeChoice, setThemeChoice, connectionStatus, gatewayUrl, setGatewayUrl, gatewayToken, setGatewayToken } = useUIStore()
+  const { settingsOpen, setSettingsOpen, themeChoice, setThemeChoice, connectionStatus, gatewayUrl, setGatewayUrl, gatewayToken, setGatewayToken, elevenLabsApiKey, setElevenLabsApiKey } = useUIStore()
   const clearMessages = useChatStore((s) => s.clearMessages)
   const threads = useThreadsStore((s) => s.threads)
   const [urlDraft, setUrlDraft] = useState(gatewayUrl)
   const [tokenDraft, setTokenDraft] = useState(gatewayToken)
+  const [elevenLabsDraft, setElevenLabsDraft] = useState(elevenLabsApiKey)
   const panelRef = useRef<HTMLDivElement>(null)
   const [showUrlSaved, setShowUrlSaved] = useState(false)
   const [showTokenSaved, setShowTokenSaved] = useState(false)
+  const [showElevenLabsSaved, setShowElevenLabsSaved] = useState(false)
 
   useEffect(() => {
     setUrlDraft(gatewayUrl)
@@ -21,6 +23,10 @@ export function Settings() {
   useEffect(() => {
     setTokenDraft(gatewayToken)
   }, [gatewayToken])
+
+  useEffect(() => {
+    setElevenLabsDraft(elevenLabsApiKey)
+  }, [elevenLabsApiKey])
 
   useEffect(() => {
     if (!settingsOpen) return
@@ -42,6 +48,12 @@ export function Settings() {
     setShowTokenSaved(true)
     setTimeout(() => setShowTokenSaved(false), 1500)
   }, [tokenDraft, setGatewayToken])
+
+  const handleSaveElevenLabs = useCallback(() => {
+    setElevenLabsApiKey(elevenLabsDraft.trim())
+    setShowElevenLabsSaved(true)
+    setTimeout(() => setShowElevenLabsSaved(false), 1500)
+  }, [elevenLabsDraft, setElevenLabsApiKey])
 
   const handleClear = useCallback(() => {
     clearMessages()
@@ -170,6 +182,34 @@ export function Settings() {
                   </button>
                 </div>
               </div>
+            </div>
+          </section>
+
+          {/* Voice */}
+          <section>
+            <h3 className="text-xs font-semibold text-text-light-muted dark:text-text-dark-muted uppercase tracking-wider mb-2">Voice</h3>
+            <div>
+              <label htmlFor="settings-elevenlabs-key" className="block text-xs text-text-light-muted dark:text-text-dark-muted mb-1">ElevenLabs API Key</label>
+              <div className="flex gap-2">
+                <input
+                  id="settings-elevenlabs-key"
+                  type="password"
+                  value={elevenLabsDraft}
+                  onChange={(e) => setElevenLabsDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSaveElevenLabs()}
+                  placeholder="Enter API key for voice..."
+                  className="flex-1 min-w-0 px-3 py-2 text-sm rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/50 dark:placeholder:text-text-dark-muted/50 border border-surface-light-3/50 dark:border-surface-dark-3/50 focus:outline-none focus:ring-2 focus:ring-accent/50"
+                />
+                <button
+                  onClick={handleSaveElevenLabs}
+                  className="inline-btn px-3 py-2 text-xs rounded-lg bg-accent/10 text-accent hover:bg-accent/20 transition-colors font-medium"
+                >
+                  {showElevenLabsSaved ? 'Saved!' : 'Save'}
+                </button>
+              </div>
+              <p className="text-[10px] text-text-light-muted/50 dark:text-text-dark-muted/50 mt-1">
+                Required for voice input (STT) and text-to-speech (TTS).
+              </p>
             </div>
           </section>
 

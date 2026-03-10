@@ -11,6 +11,7 @@ interface UIState {
   sidebarOpen: boolean
   gatewayUrl: string
   gatewayToken: string
+  elevenLabsApiKey: string
 
   setThemeChoice: (choice: ThemeChoice) => void
   setConnectionStatus: (status: UIState['connectionStatus']) => void
@@ -18,6 +19,7 @@ interface UIState {
   setSidebarOpen: (open: boolean) => void
   setGatewayUrl: (url: string) => void
   setGatewayToken: (token: string) => void
+  setElevenLabsApiKey: (key: string) => void
 }
 
 function resolveTheme(choice: ThemeChoice): ResolvedTheme {
@@ -53,6 +55,7 @@ export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: false,
   gatewayUrl: localStorage.getItem('clavus-gateway-url') || '',
   gatewayToken: localStorage.getItem('clavus-gateway-token') || '',
+  elevenLabsApiKey: localStorage.getItem('clavus-elevenlabs-key') || '',
 
   setThemeChoice: (choice) => {
     const resolved = resolveTheme(choice)
@@ -73,6 +76,11 @@ export const useUIStore = create<UIState>((set) => ({
   setGatewayToken: (token) => {
     localStorage.setItem('clavus-gateway-token', token)
     set({ gatewayToken: token })
+  },
+
+  setElevenLabsApiKey: (key) => {
+    localStorage.setItem('clavus-elevenlabs-key', key)
+    set({ elevenLabsApiKey: key })
   },
 }))
 
