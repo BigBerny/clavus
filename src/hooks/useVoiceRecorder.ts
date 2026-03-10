@@ -186,9 +186,21 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
     setError(null)
     cancelledRef.current = false
 
+    // Check secure context (microphone requires HTTPS or localhost)
+    if (!window.isSecureContext) {
+      setErrorWithAutoDismiss('Voice requires HTTPS. Use a secure connection or localhost.')
+      return
+    }
+
     // Check for MediaRecorder support
     if (typeof MediaRecorder === 'undefined') {
       setErrorWithAutoDismiss('Voice recording is not supported in this browser. Try updating to the latest version.')
+      return
+    }
+
+    // Check for mediaDevices API
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setErrorWithAutoDismiss('Microphone API not available. Ensure you are using HTTPS.')
       return
     }
 

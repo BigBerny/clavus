@@ -25,9 +25,10 @@ export function ChatView({ messages }: Props) {
       prevMessagesLenRef.current = messages.length
       return
     }
-    // New message added → instant scroll; streaming update → smooth scroll
+    // New message added → instant scroll; streaming → instant to keep up; otherwise smooth
     const isNewMessage = messages.length > prevMessagesLenRef.current
-    bottomRef.current?.scrollIntoView({ behavior: isNewMessage ? 'instant' : 'smooth' })
+    const isActivelyStreaming = messages.some(m => m.streaming)
+    bottomRef.current?.scrollIntoView({ behavior: (isNewMessage || isActivelyStreaming) ? 'instant' : 'smooth' })
     prevMessagesLenRef.current = messages.length
   }, [messages, autoScroll])
 

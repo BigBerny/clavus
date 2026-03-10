@@ -190,10 +190,10 @@ button.inline-btn {
   display: none;
 }
 
-/* Streaming cursor blink */
+/* Streaming cursor blink with subtle glow */
 @keyframes cursorBlink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.15; }
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px rgba(99, 102, 241, 0.3); }
+  50% { opacity: 0.15; box-shadow: 0 0 2px 0px rgba(99, 102, 241, 0); }
 }
 .streaming-cursor {
   display: inline-block;
@@ -205,6 +205,17 @@ button.inline-btn {
   border-radius: 1.5px;
   animation: cursorBlink 1.1s ease-in-out infinite;
 }
+
+/* Streaming message: smooth rendering + leading edge fade */
+.streaming-bubble {
+  contain: layout style;
+  will-change: contents;
+}
+.streaming-bubble .prose {
+  mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.2em), rgba(0,0,0,0.5) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.2em), rgba(0,0,0,0.5) 100%);
+}
+/* Remove the mask when streaming finishes - handled by removing .streaming-bubble class */
 
 /* Thread switch fade-in */
 @keyframes chatFadeIn {

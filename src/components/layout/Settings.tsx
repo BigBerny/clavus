@@ -132,9 +132,14 @@ export function Settings() {
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-bottom">
-          <p className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 text-center">
-            Clavus v2.0 by OpenClaw
-          </p>
+          <div className="flex items-center justify-center gap-1.5">
+            <div className="w-4 h-4 rounded-[4px] bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center">
+              <span className="text-[8px] font-bold text-white leading-none">C</span>
+            </div>
+            <p className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40">
+              Clavus v2.1
+            </p>
+          </div>
         </div>
       </div>
     </>
