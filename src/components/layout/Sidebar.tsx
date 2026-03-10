@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import { useUIStore } from '../../state/ui'
 import { useThreadsStore } from '../../state/threads'
 import { useChatStore } from '../../state/chat'
@@ -120,6 +120,7 @@ export function Sidebar() {
   const switchThread = useThreadsStore((s) => s.switchThread)
   const deleteThread = useThreadsStore((s) => s.deleteThread)
   const loadThread = useChatStore((s) => s.loadThread)
+  const [search, setSearch] = useState('')
 
   const handleNewThread = useCallback(() => {
     const id = createThread()
@@ -146,8 +147,31 @@ export function Sidebar() {
     }
   }, [deleteThread, activeThreadId, loadThread])
 
+  // Escape key to close
+  useEffect(() => {
+    if (!sidebarOpen) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSidebarOpen(false)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [sidebarOpen, setSidebarOpen])
+
   // Sort threads by updatedAt descending
   const sortedThreads = [...threads].sort((a, b) => b.updatedAt - a.updatedAt)
+
+  // Filter threads by search query
+  const filteredThreads = search.trim()
+    ? sortedThreads.filter((t) =>
+        t.title.toLowerCase().includes(search.toLowerCase()) ||
+        t.lastMessagePreview.toLowerCase().includes(search.toLowerCase())
+      )
+    : sortedThreads
+
+  // Reset search when sidebar closes
+  useEffect(() => {
+    if (!sidebarOpen) setSearch('')
+  }, [sidebarOpen])
 
   if (!sidebarOpen) return null
 
@@ -178,8 +202,8 @@ export function Sidebar() {
           </button>
         </div>
 
-        {/* New conversation button */}
-        <div className="px-3 py-2">
+        {/* New conversation button + search */}
+        <div className="px-3 py-2 space-y-2">
           <button
             onClick={handleNewThread}
             className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover active:scale-[0.98] transition-all"
@@ -187,19 +211,39 @@ export function Sidebar() {
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             New conversation
           </button>
+          {threads.length > 5 && (
+            <div className="relative">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute left-3 top-1/2 -translate-y-1/2 text-text-light-muted/50 dark:text-text-dark-muted/50"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search conversations..."
+                className="w-full pl-9 pr-3 py-2 text-xs rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/50 dark:placeholder:text-text-dark-muted/50 focus:outline-none focus:ring-1 focus:ring-accent/30"
+              />
+            </div>
+          )}
         </div>
 
         {/* Thread list */}
         <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {sortedThreads.map((thread) => (
-            <ThreadItem
-              key={thread.id}
-              thread={thread}
-              isActive={thread.id === activeThreadId}
-              onSelect={() => handleSelectThread(thread.id)}
-              onDelete={() => handleDeleteThread(thread.id)}
-            />
-          ))}
+          {filteredThreads.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center px-6">
+              <p className="text-xs text-text-light-muted/60 dark:text-text-dark-muted/60">
+                {search ? 'No matching conversations' : 'No conversations yet'}
+              </p>
+            </div>
+          ) : (
+            filteredThreads.map((thread) => (
+              <ThreadItem
+                key={thread.id}
+                thread={thread}
+                isActive={thread.id === activeThreadId}
+                onSelect={() => handleSelectThread(thread.id)}
+                onDelete={() => handleDeleteThread(thread.id)}
+              />
+            ))
+          )}
         </div>
 
         {/* Footer */}
