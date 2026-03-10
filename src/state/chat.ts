@@ -25,18 +25,9 @@ interface ChatState {
   loadThread: (threadId: string) => void
 }
 
-const WELCOME_MESSAGE: Message = {
-  id: 'msg-welcome',
-  role: 'assistant',
-  content: 'Hi! I\'m Jane, your OpenClaw assistant. How can I help you today?',
-  timestamp: Date.now(),
-}
-
 function loadMessages(): Message[] {
   const threadId = useThreadsStore.getState().activeThreadId
-  const msgs = loadThreadMessages(threadId)
-  if (msgs.length === 0) return [{ ...WELCOME_MESSAGE, timestamp: Date.now() }]
-  return msgs
+  return loadThreadMessages(threadId)
 }
 
 function saveMessages(messages: Message[]) {
@@ -112,14 +103,13 @@ export const useChatStore = create<ChatState>((set) => ({
   setAbortController: (controller) => set({ abortController: controller }),
 
   clearMessages: () => {
-    const messages = [{ ...WELCOME_MESSAGE, timestamp: Date.now() }]
+    const messages: Message[] = []
     saveMessages(messages)
     set({ messages })
   },
 
   loadThread: (threadId: string) => {
-    const msgs = loadThreadMessages(threadId)
-    const messages = msgs.length === 0 ? [{ ...WELCOME_MESSAGE, timestamp: Date.now() }] : msgs
+    const messages = loadThreadMessages(threadId)
     set({ messages, isStreaming: false, abortController: null })
   },
 }))

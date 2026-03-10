@@ -27,7 +27,7 @@ export function useChat() {
 
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const offlineQueueRef = useRef<string[]>([])
-  const sendRef = useRef<((content: string, retryCount?: number) => Promise<void>) | undefined>(undefined)
+  const sendRef = useRef<((content: string, images?: string[], retryCount?: number) => Promise<void>) | undefined>(undefined)
 
   // Online/offline detection + reconnect
   useEffect(() => {

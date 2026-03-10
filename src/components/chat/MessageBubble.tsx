@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect, useRef } from 'react'
+import { memo, useState, useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -118,6 +118,8 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const [copied, setCopied] = useState(false)
   const [showFullTime, setShowFullTime] = useState(false)
   const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Update relative time periodically
@@ -126,10 +128,23 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     return () => clearInterval(interval)
   }, [message.timestamp])
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('pointerdown', handleClickOutside)
+    return () => document.removeEventListener('pointerdown', handleClickOutside)
+  }, [menuOpen])
+
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
     navigator.vibrate?.(10)
     setCopied(true)
+    setMenuOpen(false)
     setTimeout(() => setCopied(false), 1500)
   }, [message.content])
 
@@ -150,7 +165,13 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   const handleSpeak = useCallback(() => {
     onSpeak?.(message.id, message.content)
+    setMenuOpen(false)
   }, [onSpeak, message.id, message.content])
+
+  const toggleMenu = useCallback((e: ReactMouseEvent) => {
+    e.stopPropagation()
+    setMenuOpen((v) => !v)
+  }, [])
 
   // System/error messages
   if (isSystem) {
@@ -195,7 +216,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       )}
       <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[70%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`px-4 py-2.5 overflow-hidden min-w-0 max-w-full ${
+          className={`px-4 py-2.5 min-w-0 max-w-full ${
             isUser
               ? `bg-accent text-white shadow-sm shadow-accent/20 ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
@@ -226,7 +247,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55] select-text" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
           ) : (
-            <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-x-auto overflow-y-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               <Markdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}
@@ -240,7 +261,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             <span className="streaming-cursor" aria-label="Typing" />
           )}
         </div>
-        {/* Metadata row: always visible for last in group, faded for others */}
+        {/* Metadata row: timestamp + action menu */}
         <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'} transition-opacity duration-200 ${
           isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'
         }`}>
@@ -251,41 +272,57 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           >
             {showFullTime ? fullDateTime(message.timestamp) : relTime}
           </span>
-          {!message.streaming && message.content && (
-            <button
-              onClick={handleCopy}
-              className={`inline-btn text-[11px] transition-all duration-200 ${
-                copied
-                  ? 'text-accent'
-                  : 'text-text-light-muted/45 dark:text-text-dark-muted/45 hover:text-text-light-muted dark:hover:text-text-dark-muted'
-              }`}
-              aria-label="Copy message"
-            >
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
+          {/* Copied feedback (shown briefly after copy) */}
+          {copied && (
+            <span className="text-[11px] text-accent animate-[fadeSlideIn_0.15s_ease-out]">Copied!</span>
           )}
-          {/* TTS button for assistant messages */}
-          {isAssistant && !message.streaming && message.content && onSpeak && (
-            <button
-              onClick={handleSpeak}
-              className={`inline-btn p-0.5 rounded-md transition-all duration-200 ${
-                isSpeaking
-                  ? 'opacity-100 text-accent'
-                  : ttsLoading
-                    ? 'text-text-dark-muted'
-                    : 'text-text-light-muted/45 dark:text-text-dark-muted/45 hover:text-accent'
-              }`}
-              aria-label={isSpeaking ? 'Stop speaking' : 'Read aloud'}
-              title={isSpeaking ? 'Stop' : 'Read aloud'}
-            >
-              {ttsLoading ? (
-                <div className="voice-spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
-              ) : isSpeaking ? (
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-              ) : (
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          {/* Action menu trigger */}
+          {!message.streaming && message.content && !copied && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={toggleMenu}
+                className={`inline-btn px-1 py-0.5 rounded-md text-[11px] transition-all duration-200 ${
+                  menuOpen
+                    ? 'text-text-light-muted dark:text-text-dark-muted'
+                    : 'opacity-0 group-hover/msg:opacity-100 text-text-light-muted/45 dark:text-text-dark-muted/45 hover:text-text-light-muted dark:hover:text-text-dark-muted'
+                }`}
+                aria-label="Message actions"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+              </button>
+              {menuOpen && (
+                <div className={`absolute bottom-full mb-1 ${isUser ? 'right-0' : 'left-0'} flex items-center gap-0.5 px-1.5 py-1 rounded-lg bg-surface-light/95 dark:bg-surface-dark-2/95 shadow-lg shadow-black/10 dark:shadow-black/30 border border-surface-light-3/40 dark:border-surface-dark-3/40 backdrop-blur-sm animate-[fadeSlideIn_0.15s_ease-out] z-10`}>
+                  <button
+                    onClick={handleCopy}
+                    className="inline-btn flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 transition-colors whitespace-nowrap"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                    Copy
+                  </button>
+                  {isAssistant && onSpeak && (
+                    <button
+                      onClick={handleSpeak}
+                      className={`inline-btn flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] rounded-md transition-colors whitespace-nowrap ${
+                        isSpeaking
+                          ? 'text-accent'
+                          : ttsLoading
+                            ? 'text-text-dark-muted'
+                            : 'text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-2 dark:hover:bg-surface-dark-3'
+                      }`}
+                    >
+                      {ttsLoading ? (
+                        <div className="voice-spinner" style={{ width: 13, height: 13, borderWidth: 1.5 }} />
+                      ) : isSpeaking ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                      )}
+                      {isSpeaking ? 'Stop' : 'Listen'}
+                    </button>
+                  )}
+                </div>
               )}
-            </button>
+            </div>
           )}
         </div>
       </div>

@@ -52,8 +52,8 @@ export function ChatView({ messages }: Props) {
   const lastMsg = messages[messages.length - 1]
   const showTyping = lastMsg?.streaming && lastMsg.content === ''
 
-  // Check if this is an empty/new conversation (only welcome message)
-  const isEmptyChat = messages.length <= 1 && messages[0]?.id === 'msg-welcome'
+  // Check if this is an empty/new conversation
+  const isEmptyChat = messages.length === 0
 
   return (
     <div className="flex-1 relative overflow-hidden chat-bg chat-fade-top animate-[chatFadeIn_0.25s_ease-out]">

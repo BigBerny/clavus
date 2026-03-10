@@ -20,8 +20,18 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
-      setValue((prev) => (prev ? prev + ' ' + text : text))
-      setTimeout(() => textareaRef.current?.focus(), 50)
+      // If input already has text, append transcription to it
+      const current = value.trim()
+      if (current) {
+        const combined = current + ' ' + text
+        onSend(combined.slice(0, 10000))
+        setValue('')
+        if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      } else {
+        // Auto-send voice transcription directly
+        onSend(text.slice(0, 10000))
+      }
+      navigator.vibrate?.(10)
     },
   })
 
