@@ -79,10 +79,17 @@ export function ChatView({ messages }: Props) {
               J
             </div>
             <h2 className="text-xl font-semibold text-text-light dark:text-text-dark mb-1.5 tracking-tight">
-              Hi, I'm Jane
+              {(() => {
+                const hour = new Date().getHours()
+                if (hour < 5) return 'Late night, huh?'
+                if (hour < 12) return 'Good morning!'
+                if (hour < 17) return 'Good afternoon!'
+                if (hour < 21) return 'Good evening!'
+                return 'Late night, huh?'
+              })()}
             </h2>
             <p className="text-[13px] text-text-light-muted dark:text-text-dark-muted max-w-[260px] leading-relaxed">
-              Your AI assistant. Ask me anything, send images, or use voice.
+              I'm Jane, your AI assistant. Ask me anything, send images, or use voice.
             </p>
             <div className="grid grid-cols-2 gap-2.5 mt-8 w-full max-w-[320px]">
               {[
@@ -163,13 +170,15 @@ export function ChatView({ messages }: Props) {
       {!autoScroll && (
         <button
           onClick={() => scrollToBottom()}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 pl-3 pr-3.5 py-2 rounded-full bg-surface-light/95 dark:bg-surface-dark-2/95 text-text-light dark:text-text-dark text-xs font-medium shadow-xl shadow-black/10 dark:shadow-black/30 border border-surface-light-3/50 dark:border-surface-dark-3/50 backdrop-blur-sm hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-95 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
-          aria-label="Scroll to bottom"
+          className="absolute bottom-3 right-4 flex items-center justify-center w-9 h-9 rounded-full bg-surface-light/95 dark:bg-surface-dark-2/95 text-text-light-muted dark:text-text-dark-muted shadow-xl shadow-black/10 dark:shadow-black/30 border border-surface-light-3/50 dark:border-surface-dark-3/50 backdrop-blur-sm hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+          aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to bottom'}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
-          {unseenCount > 0 ? (
-            <span className="text-accent font-semibold">{unseenCount} new</span>
-          ) : 'Scroll down'}
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
+          {unseenCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-accent text-white text-[10px] font-bold shadow-sm shadow-accent/30">
+              {unseenCount > 99 ? '99+' : unseenCount}
+            </span>
+          )}
         </button>
       )}
     </div>

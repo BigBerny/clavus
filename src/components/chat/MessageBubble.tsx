@@ -178,16 +178,16 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           className={`px-4 py-2.5 overflow-hidden min-w-0 max-w-full ${
             isUser
               ? `bg-accent text-white shadow-sm shadow-accent/20 ${
-                  showAvatar && isLastInGroup ? 'rounded-2xl' :
-                  showAvatar ? 'rounded-2xl rounded-br-md' :
-                  isLastInGroup ? 'rounded-2xl rounded-tr-md' :
-                  'rounded-2xl rounded-r-md'
+                  showAvatar && isLastInGroup ? 'rounded-[20px]' :
+                  showAvatar ? 'rounded-[20px] rounded-br-[6px]' :
+                  isLastInGroup ? 'rounded-[20px] rounded-tr-[6px]' :
+                  'rounded-[20px] rounded-r-[6px]'
                 }`
               : `bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark shadow-sm shadow-black/5 dark:shadow-black/20 ${
-                  showAvatar && isLastInGroup ? 'rounded-2xl' :
-                  showAvatar ? 'rounded-2xl rounded-bl-md' :
-                  isLastInGroup ? 'rounded-2xl rounded-tl-md' :
-                  'rounded-2xl rounded-l-md'
+                  showAvatar && isLastInGroup ? 'rounded-[20px]' :
+                  showAvatar ? 'rounded-[20px] rounded-bl-[6px]' :
+                  isLastInGroup ? 'rounded-[20px] rounded-tl-[6px]' :
+                  'rounded-[20px] rounded-l-[6px]'
                 }`
           }`}
         >
