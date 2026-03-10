@@ -90,14 +90,15 @@ export function ChatView({ messages }: Props) {
                 { icon: '✍️', text: 'Help me write something' },
                 { icon: '🔍', text: 'Explain a concept' },
                 { icon: '💻', text: 'Help me code' },
-              ].map(({ icon, text }) => (
+              ].map(({ icon, text }, i) => (
                 <button
                   key={text}
                   onClick={() => {
                     const event = new CustomEvent('clavus:send', { detail: text })
                     window.dispatchEvent(event)
                   }}
-                  className="inline-btn flex items-center gap-2 px-3 py-2.5 text-xs text-left rounded-xl border border-surface-light-3/80 dark:border-surface-dark-3/80 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 hover:text-text-light dark:hover:text-text-dark hover:border-accent/30 transition-all active:scale-[0.97]"
+                  className="inline-btn flex items-center gap-2 px-3 py-2.5 text-xs text-left rounded-xl border border-surface-light-3/80 dark:border-surface-dark-3/80 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 hover:text-text-light dark:hover:text-text-dark hover:border-accent/30 transition-all active:scale-[0.97] animate-[fadeSlideIn_0.3s_ease-out_both]"
+                  style={{ animationDelay: `${0.3 + i * 0.08}s` }}
                 >
                   <span className="text-sm">{icon}</span>
                   <span>{text}</span>
