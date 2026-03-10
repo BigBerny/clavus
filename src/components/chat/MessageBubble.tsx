@@ -10,6 +10,7 @@ interface Props {
   ttsLoading?: boolean
   onSpeak?: (id: string, text: string) => void
   showAvatar?: boolean
+  isLastInGroup?: boolean
 }
 
 function relativeTime(timestamp: number): string {
@@ -40,21 +41,29 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
       </code>
     )
   }
+  // Extract language from className (e.g. "hljs language-python" → "python")
+  const langMatch = className?.match(/language-(\w+)/)
+  const lang = langMatch?.[1]
   return (
     <div className="relative group/code my-2 -mx-1 max-w-[calc(100%+0.5rem)]">
-      <button
-        onClick={() => {
-          const text = String(children).replace(/\n$/, '')
-          navigator.clipboard.writeText(text)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        }}
-        className="inline-btn absolute top-2 right-2 opacity-100 px-2 py-1 text-xs rounded-md bg-black/30 dark:bg-white/10 text-white/80 dark:text-text-dark-muted hover:text-white dark:hover:text-text-dark transition-colors backdrop-blur-sm z-10"
-        aria-label="Copy code"
-      >
-        {copied ? 'Copied!' : 'Copy'}
-      </button>
-      <code className={`${className} block overflow-x-auto p-3.5 rounded-xl bg-surface-light-2 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
+      <div className="flex items-center justify-between px-3.5 py-1.5 rounded-t-xl bg-surface-light-3/60 dark:bg-[#0d0f14] border-b border-surface-light-3/40 dark:border-white/5">
+        <span className="text-[10px] font-medium text-text-light-muted/70 dark:text-text-dark-muted/60 uppercase tracking-wider">
+          {lang || 'code'}
+        </span>
+        <button
+          onClick={() => {
+            const text = String(children).replace(/\n$/, '')
+            navigator.clipboard.writeText(text)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          }}
+          className="inline-btn px-2 py-0.5 text-[10px] rounded-md text-text-light-muted/70 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark transition-colors"
+          aria-label="Copy code"
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+      <code className={`${className} block overflow-x-auto p-3.5 rounded-b-xl bg-surface-light-2 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
         {children}
       </code>
     </div>
@@ -101,7 +110,7 @@ function ExternalLink({ href, children, ...props }: React.ComponentPropsWithoutR
   )
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, showAvatar = true }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, showAvatar = true, isLastInGroup = true }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
@@ -194,7 +203,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             <span className="streaming-cursor" aria-label="Typing" />
           )}
         </div>
-        <div className={`flex items-center gap-2 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
+        {/* Metadata row: show for last in group, or on hover for others */}
+        <div className={`flex items-center gap-2 px-1 ${isUser ? 'justify-end' : 'justify-start'} ${
+          isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100 h-0 group-hover/msg:h-auto overflow-hidden transition-all'
+        }`}>
           <span
             className="text-[10px] text-text-light-muted/70 dark:text-text-dark-muted/70 cursor-pointer select-none"
             onClick={() => setShowFullTime((v) => !v)}

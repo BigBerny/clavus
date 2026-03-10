@@ -60,7 +60,7 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="h-full overflow-y-auto overscroll-none px-4 py-4 space-y-3"
+        className="h-full overflow-y-auto overscroll-none px-4 py-4"
         style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"
@@ -68,26 +68,32 @@ export function ChatView({ messages }: Props) {
       >
         {isEmptyChat ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-6 animate-[fadeSlideIn_0.4s_ease-out]">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold mb-4 shadow-lg shadow-violet-500/25">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold mb-4 shadow-lg shadow-violet-500/25">
               J
             </div>
             <h2 className="text-lg font-semibold text-text-light dark:text-text-dark mb-1">
               Hi, I'm Jane
             </h2>
-            <p className="text-sm text-text-light-muted dark:text-text-dark-muted max-w-[260px]">
-              Your OpenClaw assistant. Ask me anything, or tap the mic to talk.
+            <p className="text-[13px] text-text-light-muted dark:text-text-dark-muted max-w-[280px] leading-relaxed">
+              Your OpenClaw assistant. Ask me anything, send images, or tap the mic to talk.
             </p>
-            <div className="flex flex-wrap justify-center gap-2 mt-6 max-w-[320px]">
-              {['What can you do?', 'Tell me a joke', 'Help me code'].map((suggestion) => (
+            <div className="grid grid-cols-2 gap-2 mt-6 w-full max-w-[320px]">
+              {[
+                { icon: '💡', text: 'What can you do?' },
+                { icon: '✍️', text: 'Help me write something' },
+                { icon: '🔍', text: 'Explain a concept' },
+                { icon: '💻', text: 'Help me code' },
+              ].map(({ icon, text }) => (
                 <button
-                  key={suggestion}
+                  key={text}
                   onClick={() => {
-                    const event = new CustomEvent('clavus:send', { detail: suggestion })
+                    const event = new CustomEvent('clavus:send', { detail: text })
                     window.dispatchEvent(event)
                   }}
-                  className="inline-btn px-3.5 py-2 text-xs rounded-full border border-surface-light-3 dark:border-surface-dark-3 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 hover:text-text-light dark:hover:text-text-dark transition-all active:scale-95"
+                  className="inline-btn flex items-center gap-2 px-3 py-2.5 text-xs text-left rounded-xl border border-surface-light-3/80 dark:border-surface-dark-3/80 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 hover:text-text-light dark:hover:text-text-dark hover:border-accent/30 transition-all active:scale-[0.97]"
                 >
-                  {suggestion}
+                  <span className="text-sm">{icon}</span>
+                  <span>{text}</span>
                 </button>
               ))}
             </div>
@@ -96,14 +102,20 @@ export function ChatView({ messages }: Props) {
           <>
             {messages.map((msg, idx) => {
               const prevMsg = idx > 0 ? messages[idx - 1] : null
+              const nextMsg = idx < messages.length - 1 ? messages[idx + 1] : null
               // Show date separator when day changes between messages
               const showDate = prevMsg && new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
               // Show avatar only for first message in a group of same-role messages
               const showAvatar = !prevMsg || prevMsg.role !== msg.role || !!showDate
+              // Is last message in a group of same-role messages (for timestamp display)
+              const isLastInGroup = !nextMsg || nextMsg.role !== msg.role || (nextMsg && new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString())
+              // Tighter spacing for consecutive same-role messages, wider for role transitions
+              const isRoleTransition = prevMsg && prevMsg.role !== msg.role
+              const spacing = !prevMsg ? '' : showDate ? 'mt-4' : isRoleTransition ? 'mt-3' : 'mt-1'
               return (
-                <div key={msg.id}>
+                <div key={msg.id} className={spacing}>
                   {showDate && (
-                    <div className="flex items-center gap-3 py-2">
+                    <div className="flex items-center gap-3 py-2 mb-1">
                       <div className="flex-1 h-px bg-surface-light-3/60 dark:bg-surface-dark-3/60" />
                       <span className="text-[10px] text-text-light-muted/60 dark:text-text-dark-muted/60 font-medium">
                         {new Date(msg.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -117,6 +129,7 @@ export function ChatView({ messages }: Props) {
                     ttsLoading={tts.loading && tts.speakingId === msg.id}
                     onSpeak={tts.speak}
                     showAvatar={showAvatar}
+                    isLastInGroup={isLastInGroup}
                   />
                 </div>
               )
@@ -124,7 +137,7 @@ export function ChatView({ messages }: Props) {
             {showTyping && <TypingIndicator />}
           </>
         )}
-        <div ref={bottomRef} />
+        <div ref={bottomRef} className="h-2" />
       </div>
 
       {!autoScroll && (

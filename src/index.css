@@ -215,10 +215,13 @@ pre code.hljs {
   margin: 0.5em 0;
   opacity: 0.85;
 }
-.prose hr { border-color: #2a2d35; margin: 0.75em 0; }
+.prose hr { border-color: var(--color-border-light); margin: 0.75em 0; }
+.dark .prose hr { border-color: var(--color-border-dark); }
 .prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.85em; }
-.prose th, .prose td { border: 1px solid #2a2d35; padding: 0.375em 0.625em; text-align: left; }
-.prose th { font-weight: 600; background: rgba(255,255,255,0.03); }
+.prose th, .prose td { border: 1px solid var(--color-border-light); padding: 0.375em 0.625em; text-align: left; }
+.dark .prose th, .dark .prose td { border-color: var(--color-border-dark); }
+.prose th { font-weight: 600; background: rgba(0,0,0,0.03); }
+.dark .prose th { background: rgba(255,255,255,0.03); }
 
 /* Theme transition (no flash on load, smooth after) */
 html.theme-ready,
