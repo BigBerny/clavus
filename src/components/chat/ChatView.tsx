@@ -117,6 +117,8 @@ export function ChatView({ messages }: Props) {
         ) : (
           <>
             {messages.map((msg, idx) => {
+              // Skip empty streaming messages — TypingIndicator handles this
+              if (msg.streaming && msg.content === '') return null
               const prevMsg = idx > 0 ? messages[idx - 1] : null
               const nextMsg = idx < messages.length - 1 ? messages[idx + 1] : null
               // Show date separator when day changes between messages

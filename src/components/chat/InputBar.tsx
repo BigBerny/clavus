@@ -56,7 +56,10 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+    const h = Math.min(el.scrollHeight, 160)
+    el.style.height = `${h}px`
+    // Only show scrollbar when content exceeds max height
+    el.style.overflowY = el.scrollHeight > 160 ? 'auto' : 'hidden'
   }, [])
 
   useEffect(() => {
@@ -260,7 +263,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
               disabled={isTranscribing}
               aria-label="Chat message input"
               maxLength={10000}
-              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2/80 dark:bg-surface-dark-2/80 border border-surface-light-3/30 dark:border-surface-dark-3/30 text-text-light dark:text-text-dark placeholder:text-text-light-muted/55 dark:placeholder:text-text-dark-muted/55 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/15 focus:bg-surface-light-2 dark:focus:bg-surface-dark-2 disabled:opacity-50 transition-all"
+              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2/80 dark:bg-surface-dark-2/80 border border-surface-light-3/30 dark:border-surface-dark-3/30 text-text-light dark:text-text-dark placeholder:text-text-light-muted/55 dark:placeholder:text-text-dark-muted/55 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/15 focus:bg-surface-light-2 dark:focus:bg-surface-dark-2 disabled:opacity-50 transition-all overflow-hidden"
             />
           )}
 
