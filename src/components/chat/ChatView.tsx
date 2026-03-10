@@ -94,28 +94,44 @@ export function ChatView({ messages }: Props) {
           </div>
         ) : (
           <>
-            {messages.map((msg) => (
-              <MessageBubble
-                key={msg.id}
-                message={msg}
-                isSpeaking={tts.speakingId === msg.id}
-                ttsLoading={tts.loading && tts.speakingId === msg.id}
-                onSpeak={tts.speak}
-              />
-            ))}
+            {messages.map((msg, idx) => {
+              // Show date separator when day changes between messages
+              const prevMsg = idx > 0 ? messages[idx - 1] : null
+              const showDate = prevMsg && new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
+              return (
+                <div key={msg.id}>
+                  {showDate && (
+                    <div className="flex items-center gap-3 py-2">
+                      <div className="flex-1 h-px bg-surface-light-3/60 dark:bg-surface-dark-3/60" />
+                      <span className="text-[10px] text-text-light-muted/60 dark:text-text-dark-muted/60 font-medium">
+                        {new Date(msg.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                      </span>
+                      <div className="flex-1 h-px bg-surface-light-3/60 dark:bg-surface-dark-3/60" />
+                    </div>
+                  )}
+                  <MessageBubble
+                    message={msg}
+                    isSpeaking={tts.speakingId === msg.id}
+                    ttsLoading={tts.loading && tts.speakingId === msg.id}
+                    onSpeak={tts.speak}
+                  />
+                </div>
+              )
+            })}
             {showTyping && <TypingIndicator />}
           </>
         )}
         <div ref={bottomRef} />
       </div>
 
-      {hasNewMessages && (
+      {!autoScroll && (
         <button
-          onClick={scrollToBottom}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-accent text-white text-xs font-medium shadow-lg shadow-accent/25 hover:bg-accent-hover active:scale-95 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
-          aria-label="Scroll to new messages"
+          onClick={() => scrollToBottom()}
+          className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-surface-light dark:bg-surface-dark-2 text-text-light dark:text-text-dark text-xs font-medium shadow-lg border border-surface-light-3/60 dark:border-surface-dark-3/60 hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-95 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+          aria-label="Scroll to bottom"
         >
-          New messages
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
+          {hasNewMessages ? 'New messages' : 'Scroll down'}
         </button>
       )}
     </div>

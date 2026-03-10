@@ -40,7 +40,7 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
     )
   }
   return (
-    <div className="relative group/code my-2 max-w-full">
+    <div className="relative group/code my-2 -mx-1 max-w-[calc(100%+0.5rem)]">
       <button
         onClick={() => {
           const text = String(children).replace(/\n$/, '')
@@ -48,12 +48,12 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
           setCopied(true)
           setTimeout(() => setCopied(false), 1500)
         }}
-        className="inline-btn absolute top-2 right-2 opacity-100 px-2 py-1 text-xs rounded-md bg-black/20 dark:bg-white/10 text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors backdrop-blur-sm z-10"
+        className="inline-btn absolute top-2 right-2 opacity-100 px-2 py-1 text-xs rounded-md bg-black/30 dark:bg-white/10 text-white/80 dark:text-text-dark-muted hover:text-white dark:hover:text-text-dark transition-colors backdrop-blur-sm z-10"
         aria-label="Copy code"
       >
         {copied ? 'Copied!' : 'Copy'}
       </button>
-      <code className={`${className} block overflow-x-auto p-4 rounded-xl bg-surface-light-2 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} {...props}>
+      <code className={`${className} block overflow-x-auto p-3.5 rounded-xl bg-surface-light-2 dark:bg-[#141720] text-[13px] font-mono whitespace-pre leading-relaxed max-w-full`} style={{ WebkitOverflowScrolling: 'touch' }} {...props}>
         {children}
       </code>
     </div>
