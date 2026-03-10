@@ -123,6 +123,7 @@ export function Sidebar() {
   const [search, setSearch] = useState('')
 
   const handleNewThread = useCallback(() => {
+    navigator.vibrate?.(10)
     const id = createThread()
     loadThread(id)
     setSidebarOpen(false)
@@ -133,12 +134,14 @@ export function Sidebar() {
       setSidebarOpen(false)
       return
     }
+    navigator.vibrate?.(5)
     switchThread(id)
     loadThread(id)
     setSidebarOpen(false)
   }, [activeThreadId, switchThread, loadThread, setSidebarOpen])
 
   const handleDeleteThread = useCallback((id: string) => {
+    navigator.vibrate?.(15)
     deleteThread(id)
     // If we deleted the active thread, load the new active
     if (id === activeThreadId) {

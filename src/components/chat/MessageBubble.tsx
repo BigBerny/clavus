@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useEffect } from 'react'
+import { memo, useState, useCallback, useEffect, useRef } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -118,6 +118,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const [copied, setCopied] = useState(false)
   const [showFullTime, setShowFullTime] = useState(false)
   const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Update relative time periodically
   useEffect(() => {
@@ -127,9 +128,25 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
+    navigator.vibrate?.(10)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }, [message.content])
+
+  // Long-press to copy on mobile
+  const handleTouchStart = useCallback(() => {
+    if (!message.content || message.streaming) return
+    longPressTimer.current = setTimeout(() => {
+      handleCopy()
+    }, 500)
+  }, [message.content, message.streaming, handleCopy])
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }, [])
 
   const handleSpeak = useCallback(() => {
     onSpeak?.(message.id, message.content)
@@ -160,6 +177,9 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   return (
     <div
       className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
       role="article"
       aria-label={`${isUser ? 'You' : 'Jane'}: ${message.content.slice(0, 80)}`}
     >
