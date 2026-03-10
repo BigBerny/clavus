@@ -36,14 +36,23 @@ body {
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #475569;
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Safe areas */
@@ -69,6 +78,25 @@ button {
 button.inline-btn {
   min-height: auto;
   min-width: auto;
+}
+
+/* Chat fade edges */
+.chat-fade-top::before,
+.chat-fade-bottom::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 24px;
+  pointer-events: none;
+  z-index: 1;
+}
+.chat-fade-top::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--color-surface-light), transparent);
+}
+.dark .chat-fade-top::before {
+  background: linear-gradient(to bottom, var(--color-surface-dark), transparent);
 }
 
 /* Subtle chat background */

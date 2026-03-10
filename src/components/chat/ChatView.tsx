@@ -56,7 +56,7 @@ export function ChatView({ messages }: Props) {
   const isEmptyChat = messages.length <= 1 && messages[0]?.id === 'msg-welcome'
 
   return (
-    <div className="flex-1 relative overflow-hidden chat-bg animate-[chatFadeIn_0.25s_ease-out]">
+    <div className="flex-1 relative overflow-hidden chat-bg chat-fade-top animate-[chatFadeIn_0.25s_ease-out]">
       <div
         ref={containerRef}
         onScroll={handleScroll}
