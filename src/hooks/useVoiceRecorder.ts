@@ -36,6 +36,14 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
   const [warning, setWarning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [levels, setLevels] = useState<number[]>([])
+  const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Auto-dismiss errors after 5 seconds
+  const setErrorWithAutoDismiss = useCallback((msg: string) => {
+    if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
+    setError(msg)
+    errorTimerRef.current = setTimeout(() => setError(null), 5000)
+  }, [])
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
@@ -85,7 +93,7 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
         const config = getConfig()
         const apiKey = config.elevenLabsApiKey
         if (!apiKey) {
-          setError('ElevenLabs API key not configured')
+          setErrorWithAutoDismiss('ElevenLabs API key not configured')
           setState('idle')
           return
         }
@@ -109,7 +117,7 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
         const text = data.text?.trim()
         if (text) onTranscription(text)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Transcription failed')
+        setErrorWithAutoDismiss(err instanceof Error ? err.message : 'Transcription failed')
       } finally {
         setState('idle')
       }
@@ -180,7 +188,7 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
 
     // Check for MediaRecorder support
     if (typeof MediaRecorder === 'undefined') {
-      setError('Voice recording is not supported in this browser. Try updating to the latest version.')
+      setErrorWithAutoDismiss('Voice recording is not supported in this browser. Try updating to the latest version.')
       return
     }
 
@@ -240,13 +248,13 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
       cleanup()
       setState('idle')
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        setError('Microphone access denied. Check Settings > Safari > Microphone.')
+        setErrorWithAutoDismiss('Microphone access denied. Check Settings > Safari > Microphone.')
       } else if (err instanceof DOMException && err.name === 'NotFoundError') {
-        setError('No microphone found on this device.')
+        setErrorWithAutoDismiss('No microphone found on this device.')
       } else if (err instanceof DOMException && err.name === 'NotReadableError') {
-        setError('Microphone is in use by another app. Close other apps and try again.')
+        setErrorWithAutoDismiss('Microphone is in use by another app. Close other apps and try again.')
       } else {
-        setError('Could not start recording. Please try again.')
+        setErrorWithAutoDismiss('Could not start recording. Please try again.')
       }
     }
   }, [cleanup, transcribe, startAnalyser])

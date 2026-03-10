@@ -216,14 +216,22 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
           {isRecording ? (
             <div className="flex-1 flex items-center gap-1.5 rounded-2xl px-4 py-2.5 bg-surface-light-2 dark:bg-surface-dark-2 border border-red-500/30 h-[42px]">
               <div className="w-2 h-2 rounded-full bg-red-500 recording-pulse flex-shrink-0" />
-              <div className="flex items-center gap-[2px] h-5 flex-1">
-                {voice.levels.map((level, i) => (
-                  <div
-                    key={i}
-                    className="w-[3px] rounded-full bg-red-400/80 transition-all duration-100 ease-out"
-                    style={{ height: `${Math.max(3, level * 20)}px` }}
-                  />
-                ))}
+              <div className="flex items-center justify-center gap-[2px] h-5 flex-1">
+                {/* Interpolate 8 levels to ~24 bars for richer waveform */}
+                {Array.from({ length: 24 }, (_, i) => {
+                  const idx = (i / 24) * (voice.levels.length - 1)
+                  const lo = Math.floor(idx)
+                  const hi = Math.min(lo + 1, voice.levels.length - 1)
+                  const frac = idx - lo
+                  const val = (voice.levels[lo] || 0) * (1 - frac) + (voice.levels[hi] || 0) * frac
+                  return (
+                    <div
+                      key={i}
+                      className="w-[2.5px] rounded-full bg-red-400/70 transition-all duration-75 ease-out"
+                      style={{ height: `${Math.max(2, val * 20)}px` }}
+                    />
+                  )
+                })}
               </div>
               <span className="text-[11px] text-text-light-muted dark:text-text-dark-muted font-mono tabular-nums flex-shrink-0">
                 {voice.formattedDuration}
