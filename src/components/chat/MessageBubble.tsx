@@ -9,6 +9,7 @@ interface Props {
   isSpeaking?: boolean
   ttsLoading?: boolean
   onSpeak?: (id: string, text: string) => void
+  showAvatar?: boolean
 }
 
 function relativeTime(timestamp: number): string {
@@ -100,7 +101,7 @@ function ExternalLink({ href, children, ...props }: React.ComponentPropsWithoutR
   )
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, showAvatar = true }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
@@ -146,11 +147,15 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       role="article"
       aria-label={`${isUser ? 'You' : 'Jane'}: ${message.content.slice(0, 80)}`}
     >
-      {/* Assistant avatar */}
+      {/* Assistant avatar (or spacer for grouped messages) */}
       {isAssistant && (
-        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shadow-sm">
-          J
-        </div>
+        showAvatar ? (
+          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shadow-sm">
+            J
+          </div>
+        ) : (
+          <div className="flex-shrink-0 w-7 mr-2" />
+        )
       )}
       <div className={`flex flex-col gap-1 max-w-[85%] md:max-w-[70%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div

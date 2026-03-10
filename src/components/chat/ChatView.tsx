@@ -95,9 +95,11 @@ export function ChatView({ messages }: Props) {
         ) : (
           <>
             {messages.map((msg, idx) => {
-              // Show date separator when day changes between messages
               const prevMsg = idx > 0 ? messages[idx - 1] : null
+              // Show date separator when day changes between messages
               const showDate = prevMsg && new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
+              // Show avatar only for first message in a group of same-role messages
+              const showAvatar = !prevMsg || prevMsg.role !== msg.role || !!showDate
               return (
                 <div key={msg.id}>
                   {showDate && (
@@ -114,6 +116,7 @@ export function ChatView({ messages }: Props) {
                     isSpeaking={tts.speakingId === msg.id}
                     ttsLoading={tts.loading && tts.speakingId === msg.id}
                     onSpeak={tts.speak}
+                    showAvatar={showAvatar}
                   />
                 </div>
               )
