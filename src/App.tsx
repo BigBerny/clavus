@@ -63,7 +63,7 @@ export function App() {
     setNeedsToken(false)
   }, [setGatewayToken])
 
-  // Check gateway connectivity
+  // Check gateway connectivity + periodic retry when disconnected
   useEffect(() => {
     if (needsToken) return
     const config = getConfig()
@@ -71,6 +71,16 @@ export function App() {
     checkGateway(config).then((ok) => {
       setConnectionStatus(ok ? 'connected' : 'disconnected')
     })
+
+    // Periodic reconnect check every 30s
+    const interval = setInterval(async () => {
+      const status = useUIStore.getState().connectionStatus
+      if (status === 'disconnected') {
+        const ok = await checkGateway(getConfig())
+        if (ok) setConnectionStatus('connected')
+      }
+    }, 30000)
+    return () => clearInterval(interval)
   }, [setConnectionStatus, needsToken])
 
   // Prevent pull-to-refresh in standalone PWA

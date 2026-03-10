@@ -68,7 +68,12 @@ export const useChatStore = create<ChatState>((set) => ({
         const threadId = useThreadsStore.getState().activeThreadId
         const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
         if (thread && thread.title === 'New conversation') {
-          useThreadsStore.getState().updateThreadTitle(threadId, msg.content.slice(0, 30))
+          // Trim to word boundary for cleaner titles
+          let title = msg.content.replace(/\n/g, ' ').trim()
+          if (title.length > 40) {
+            title = title.slice(0, 40).replace(/\s+\S*$/, '') + '...'
+          }
+          useThreadsStore.getState().updateThreadTitle(threadId, title || msg.content.slice(0, 30))
         }
       }
 

@@ -113,13 +113,18 @@ export function ChatView({ messages }: Props) {
               const nextMsg = idx < messages.length - 1 ? messages[idx + 1] : null
               // Show date separator when day changes between messages
               const showDate = prevMsg && new Date(msg.timestamp).toDateString() !== new Date(prevMsg.timestamp).toDateString()
+              // Show time gap separator for messages >30 min apart (same day)
+              const timeGap = prevMsg && !showDate ? msg.timestamp - prevMsg.timestamp : 0
+              const showTimeGap = timeGap > 30 * 60 * 1000 // 30 minutes
               // Show avatar only for first message in a group of same-role messages
-              const showAvatar = !prevMsg || prevMsg.role !== msg.role || !!showDate
+              const showAvatar = !prevMsg || prevMsg.role !== msg.role || !!showDate || showTimeGap
               // Is last message in a group of same-role messages (for timestamp display)
-              const isLastInGroup = !nextMsg || nextMsg.role !== msg.role || (nextMsg && new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString())
+              const nextTimeGap = nextMsg ? nextMsg.timestamp - msg.timestamp : 0
+              const nextHasTimeGap = nextTimeGap > 30 * 60 * 1000
+              const isLastInGroup = !nextMsg || nextMsg.role !== msg.role || (nextMsg && new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString()) || nextHasTimeGap
               // Tighter spacing for consecutive same-role messages, wider for role transitions
               const isRoleTransition = prevMsg && prevMsg.role !== msg.role
-              const spacing = !prevMsg ? '' : showDate ? 'mt-4' : isRoleTransition ? 'mt-3' : 'mt-1'
+              const spacing = !prevMsg ? '' : showDate ? 'mt-4' : showTimeGap ? 'mt-4' : isRoleTransition ? 'mt-3' : 'mt-1'
               return (
                 <div key={msg.id} className={spacing}>
                   {showDate && (
@@ -129,6 +134,13 @@ export function ChatView({ messages }: Props) {
                         {new Date(msg.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
                       </span>
                       <div className="flex-1 h-px bg-surface-light-3/60 dark:bg-surface-dark-3/60" />
+                    </div>
+                  )}
+                  {showTimeGap && !showDate && (
+                    <div className="flex justify-center py-1 mb-1">
+                      <span className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40">
+                        {new Date(msg.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
                   )}
                   <MessageBubble
