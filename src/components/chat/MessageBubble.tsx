@@ -315,35 +315,35 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           )}
         </div>
         {/* Metadata row: timestamp + direct action buttons */}
-        <div className={`flex items-center gap-1 px-1 ${isUser ? 'justify-end' : 'justify-start'} transition-opacity duration-200 ${
-          isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'
-        }`}>
+        <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}>
           <span
-            className="text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55 cursor-pointer select-none hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
+            className={`text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55 cursor-pointer select-none hover:text-text-light-muted dark:hover:text-text-dark-muted transition-all ${
+              isLastInGroup || message.streaming ? 'opacity-100' : 'opacity-0 group-hover/msg:opacity-100'
+            }`}
             onClick={() => setShowFullTime((v) => !v)}
             title={fullDateTime(message.timestamp)}
           >
             {showFullTime ? fullDateTime(message.timestamp) : relTime}
           </span>
-          {/* Direct action buttons */}
+          {/* Direct action buttons — always visible for assistant messages */}
           {!message.streaming && message.content && (
             <>
               <button
                 onClick={handleCopy}
-                className="inline-btn p-1.5 rounded-lg text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light-muted dark:hover:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 active:scale-90 transition-all"
+                className="inline-btn p-2 rounded-lg text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light-muted dark:hover:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 active:scale-90 transition-all"
                 aria-label={copied ? 'Copied' : 'Copy message'}
                 title={copied ? 'Copied!' : 'Copy'}
               >
                 {copied ? (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><polyline points="20 6 9 17 4 12"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><polyline points="20 6 9 17 4 12"/></svg>
                 ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
                 )}
               </button>
               {isAssistant && onSpeak && (
                 <button
                   onClick={handleSpeak}
-                  className={`inline-btn p-1.5 rounded-lg active:scale-90 transition-all ${
+                  className={`inline-btn p-2 rounded-lg active:scale-90 transition-all ${
                     isSpeaking
                       ? 'text-accent hover:text-accent/80'
                       : ttsLoading
@@ -354,11 +354,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                   title={isSpeaking ? 'Stop' : 'Listen'}
                 >
                   {ttsLoading ? (
-                    <div className="voice-spinner" style={{ width: 15, height: 15, borderWidth: 1.5 }} />
+                    <div className="voice-spinner" style={{ width: 18, height: 18, borderWidth: 1.5 }} />
                   ) : isSpeaking ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
                   )}
                 </button>
               )}
