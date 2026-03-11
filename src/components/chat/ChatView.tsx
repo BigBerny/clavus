@@ -1,6 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
-import { TypingIndicator } from './TypingIndicator'
 import { useTTS } from '../../hooks/useTTS'
 import type { Message } from '../../state/chat'
 
@@ -48,10 +47,6 @@ export function ChatView({ messages }: Props) {
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
     setAutoScroll(atBottom)
   }, [])
-
-  // Detect if last message is assistant with empty content (waiting for first token)
-  const lastMsg = messages[messages.length - 1]
-  const showTyping = lastMsg?.streaming && lastMsg.content === ''
 
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
@@ -118,8 +113,6 @@ export function ChatView({ messages }: Props) {
         ) : (
           <>
             {messages.map((msg, idx) => {
-              // Skip empty streaming messages — TypingIndicator handles this
-              if (msg.streaming && msg.content === '') return null
               const prevMsg = idx > 0 ? messages[idx - 1] : null
               const nextMsg = idx < messages.length - 1 ? messages[idx + 1] : null
               // Show date separator when day changes between messages
@@ -165,7 +158,7 @@ export function ChatView({ messages }: Props) {
                 </div>
               )
             })}
-            {showTyping && <TypingIndicator />}
+            {/* Typing indicator removed — dots now render inside MessageBubble */}
           </>
         )}
         </div>
