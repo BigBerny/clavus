@@ -1,11 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useEffect, useCallback, useRef } from 'react'
 import { useUIStore } from '../../state/ui.ts'
 import { useChatStore } from '../../state/chat.ts'
 import { useThreadsStore, getMessagesKey } from '../../state/threads.ts'
 import type { ThemeChoice } from '../../state/ui.ts'
 
 export function Settings() {
-  const { settingsOpen, setSettingsOpen, themeChoice, setThemeChoice, connectionStatus } = useUIStore()
+  const { settingsOpen, setSettingsOpen, themeChoice, setThemeChoice } = useUIStore()
   const clearMessages = useChatStore((s) => s.clearMessages)
   const threads = useThreadsStore((s) => s.threads)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -20,24 +20,12 @@ export function Settings() {
   }, [settingsOpen, setSettingsOpen])
 
   const handleClear = useCallback(() => {
+    if (!confirm('Clear this conversation? Messages will be removed.')) return
     clearMessages()
     setSettingsOpen(false)
   }, [clearMessages, setSettingsOpen])
 
   if (!settingsOpen) return null
-
-  const statusLabel: Record<string, string> = {
-    connected: 'Connected',
-    disconnected: 'Disconnected',
-    checking: 'Checking...',
-    reconnecting: 'Reconnecting...',
-  }
-  const statusDot: Record<string, string> = {
-    connected: 'bg-emerald-500',
-    disconnected: 'bg-amber-500',
-    checking: 'bg-amber-500 animate-pulse',
-    reconnecting: 'bg-amber-500 animate-pulse',
-  }
 
   return (
     <>
@@ -65,21 +53,6 @@ export function Settings() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {/* Status */}
-          <section className="rounded-xl bg-surface-light-2/50 dark:bg-surface-dark-2/50 p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Gateway</span>
-              <div className="flex items-center gap-1.5">
-                <div className={`w-1.5 h-1.5 rounded-full ${statusDot[connectionStatus]}`} />
-                <span className="text-xs text-text-light dark:text-text-dark">{statusLabel[connectionStatus]}</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Conversations</span>
-              <span className="text-xs text-text-light dark:text-text-dark">{threads.length}</span>
-            </div>
-          </section>
-
           {/* Appearance */}
           <section>
             <h3 className="text-xs font-semibold text-text-light-muted dark:text-text-dark-muted uppercase tracking-wider mb-2">Appearance</h3>
@@ -137,7 +110,7 @@ export function Settings() {
               <span className="text-[8px] font-bold text-white leading-none">C</span>
             </div>
             <p className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40">
-              Clavus v2.1
+              Clavus v2.5
             </p>
           </div>
         </div>
