@@ -120,8 +120,8 @@ button.inline-btn {
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Settings slide-in (from right) */
@@ -190,12 +190,33 @@ button.inline-btn {
   display: none;
 }
 
+/* Hide scrollbar on textarea (still scrollable via touch/trackpad) */
+textarea {
+  scrollbar-width: none;
+}
+textarea::-webkit-scrollbar {
+  display: none;
+}
+
 /* Streaming cursor blink with subtle glow */
 @keyframes cursorBlink {
   0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px rgba(99, 102, 241, 0.3); }
   50% { opacity: 0.15; box-shadow: 0 0 2px 0px rgba(99, 102, 241, 0); }
 }
-.streaming-cursor {
+
+/* Streaming message: smooth rendering + inline cursor + leading edge fade */
+.streaming-bubble {
+  contain: layout style;
+  will-change: contents;
+}
+.streaming-bubble .prose {
+  mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.5em), rgba(0,0,0,0.35) 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.5em), rgba(0,0,0,0.35) 100%);
+  animation: streamReveal 0.12s ease-out;
+}
+/* Inline cursor at the end of streaming text via ::after */
+.streaming-bubble .prose > *:last-child::after {
+  content: '';
   display: inline-block;
   width: 2.5px;
   height: 1.1em;
@@ -205,17 +226,10 @@ button.inline-btn {
   border-radius: 1.5px;
   animation: cursorBlink 1.1s ease-in-out infinite;
 }
-
-/* Streaming message: smooth rendering + leading edge fade */
-.streaming-bubble {
-  contain: layout style;
-  will-change: contents;
+@keyframes streamReveal {
+  from { opacity: 0.7; }
+  to { opacity: 1; }
 }
-.streaming-bubble .prose {
-  mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.2em), rgba(0,0,0,0.5) 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 1.2em), rgba(0,0,0,0.5) 100%);
-}
-/* Remove the mask when streaming finishes - handled by removing .streaming-bubble class */
 
 /* Thread switch fade-in */
 @keyframes chatFadeIn {
@@ -267,7 +281,7 @@ pre code.hljs {
 }
 .prose hr { border-color: var(--color-border-light); margin: 0.75em 0; opacity: 0.5; }
 .dark .prose hr { border-color: var(--color-border-dark); }
-.prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.85em; overflow-x: auto; display: block; }
+.prose table { border-collapse: collapse; width: 100%; margin: 0.5em 0; font-size: 0.85em; overflow-x: auto; display: block; -webkit-overflow-scrolling: touch; }
 .prose th, .prose td { border: 1px solid var(--color-border-light); padding: 0.375em 0.625em; text-align: left; }
 .dark .prose th, .dark .prose td { border-color: var(--color-border-dark); }
 .prose th { font-weight: 600; background: rgba(0,0,0,0.03); }

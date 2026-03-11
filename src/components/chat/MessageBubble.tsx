@@ -310,9 +310,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               </Markdown>
             </div>
           )}
-          {message.streaming && (
-            <span className="streaming-cursor" aria-label="Typing" />
-          )}
+          {/* Streaming cursor rendered via CSS ::after on .streaming-bubble .prose */}
         </div>
         {/* Metadata row: timestamp + direct action buttons */}
         <div className={`flex items-center gap-1.5 px-1 ${isUser ? 'justify-end' : 'justify-start'}`}>

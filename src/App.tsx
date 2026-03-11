@@ -54,6 +54,10 @@ export function App() {
   const { messages, isStreaming, send, abort } = useChat()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
+  const connectionStatus = useUIStore((s) => s.connectionStatus)
+  const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
+  const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
+  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
   const [needsToken, setNeedsToken] = useState(!hasToken())
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState('0:00')
@@ -133,11 +137,6 @@ export function App() {
   if (needsToken) {
     return <TokenPrompt onSave={handleTokenSave} />
   }
-
-  const connectionStatus = useUIStore((s) => s.connectionStatus)
-  const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
-  const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
-  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
