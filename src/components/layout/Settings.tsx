@@ -110,7 +110,7 @@ export function Settings() {
               <span className="text-[8px] font-bold text-white leading-none">C</span>
             </div>
             <p className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40">
-              Clavus v2.5
+              Clavus v2.6
             </p>
           </div>
         </div>

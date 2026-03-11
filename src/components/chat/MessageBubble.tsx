@@ -263,7 +263,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       )}
       <div className={`flex flex-col gap-1 max-w-[78%] md:max-w-[65%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`px-4 py-2.5 min-w-0 max-w-full ${message.streaming ? 'streaming-bubble' : ''} ${
+          className={`px-4 py-2.5 min-w-0 max-w-full transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
               ? `bg-accent text-white shadow-sm shadow-accent/20 ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :

@@ -16,11 +16,12 @@ function relativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-function ThreadItem({ thread, isActive, onSelect, onDelete }: {
+function ThreadItem({ thread, isActive, onSelect, onDelete, canDelete = true }: {
   thread: Thread
   isActive: boolean
   onSelect: () => void
   onDelete: () => void
+  canDelete?: boolean
 }) {
   const touchStartX = useRef(0)
   const touchDeltaX = useRef(0)
@@ -34,15 +35,17 @@ function ThreadItem({ thread, isActive, onSelect, onDelete }: {
   }, [])
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!canDelete) return
     const delta = e.touches[0].clientX - touchStartX.current
     touchDeltaX.current = delta
     if (itemRef.current && delta < 0) {
       const clamped = Math.max(delta, -80)
       itemRef.current.style.transform = `translateX(${clamped}px)`
     }
-  }, [])
+  }, [canDelete])
 
   const handleTouchEnd = useCallback(() => {
+    if (!canDelete) return
     if (touchDeltaX.current < -50) {
       setSwiped(true)
       if (itemRef.current) {
@@ -53,7 +56,7 @@ function ThreadItem({ thread, isActive, onSelect, onDelete }: {
         itemRef.current.style.transform = ''
       }
     }
-  }, [])
+  }, [canDelete])
 
   return (
     <div className="relative overflow-hidden group/thread border-b border-surface-light-3/30 dark:border-surface-dark-3/30 last:border-b-0">
@@ -84,7 +87,11 @@ function ThreadItem({ thread, isActive, onSelect, onDelete }: {
               ? 'bg-accent/15 text-accent'
               : 'bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted'
           }`}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            {thread.id === 'timeline-main' ? (
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            )}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline justify-between gap-2">
@@ -246,6 +253,7 @@ export function Sidebar() {
                 isActive={thread.id === activeThreadId}
                 onSelect={() => handleSelectThread(thread.id)}
                 onDelete={() => handleDeleteThread(thread.id)}
+                canDelete={thread.id !== 'timeline-main'}
               />
             ))
           )}

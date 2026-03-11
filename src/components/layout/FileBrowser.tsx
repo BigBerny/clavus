@@ -177,12 +177,25 @@ export function FileBrowser({ open, onClose }: Props) {
         {!fileContent && currentPath !== '/' && (
           <div className="px-4 py-1.5 border-b border-surface-light-3/30 dark:border-surface-dark-3/30">
             <div className="flex items-center gap-1 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 overflow-x-auto">
-              {breadcrumbs.map((crumb, i) => (
-                <span key={i} className="flex items-center gap-1 whitespace-nowrap">
-                  {i > 0 && <span>/</span>}
-                  <span className={i === breadcrumbs.length - 1 ? 'text-text-light-muted dark:text-text-dark-muted' : ''}>{crumb}</span>
-                </span>
-              ))}
+              {breadcrumbs.map((crumb, i) => {
+                const isLast = i === breadcrumbs.length - 1
+                const targetPath = i === 0 ? '/' : '/' + breadcrumbs.slice(1, i + 1).join('/')
+                return (
+                  <span key={i} className="flex items-center gap-1 whitespace-nowrap">
+                    {i > 0 && <span>/</span>}
+                    {isLast ? (
+                      <span className="text-text-light-muted dark:text-text-dark-muted">{crumb}</span>
+                    ) : (
+                      <button
+                        onClick={() => fetchDir(targetPath)}
+                        className="inline-btn hover:text-accent transition-colors"
+                      >
+                        {crumb}
+                      </button>
+                    )}
+                  </span>
+                )
+              })}
             </div>
           </div>
         )}
