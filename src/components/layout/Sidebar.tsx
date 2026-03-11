@@ -56,7 +56,7 @@ function ThreadItem({ thread, isActive, onSelect, onDelete }: {
   }, [])
 
   return (
-    <div className="relative overflow-hidden group/thread">
+    <div className="relative overflow-hidden group/thread border-b border-surface-light-3/30 dark:border-surface-dark-3/30 last:border-b-0">
       {/* Delete button behind */}
       {swiped && (
         <button
@@ -194,15 +194,17 @@ export function Sidebar() {
         className="fixed left-0 top-0 bottom-0 w-72 max-w-[80vw] bg-surface-light dark:bg-surface-dark z-50 shadow-xl flex flex-col animate-[slideInLeft_0.2s_ease-out]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-top">
-          <h2 className="text-base font-semibold text-text-light dark:text-text-dark">Conversations</h2>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="p-2 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors"
-            aria-label="Close sidebar"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
+        <div className="safe-area-top">
+          <div className="flex items-center justify-between px-4 h-12 border-b border-surface-light-3/50 dark:border-surface-dark-3/50">
+            <h2 className="text-base font-semibold text-text-light dark:text-text-dark">Conversations</h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center justify-center w-8 h-8 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors"
+              aria-label="Close sidebar"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
         </div>
 
         {/* New conversation button + search */}
