@@ -205,20 +205,32 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          // Prefer higher sample rate for better transcription quality
-          sampleRate: { ideal: 44100 },
-        },
-      })
+      // Try getUserMedia with constraints, fall back to basic audio if constraints fail
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        })
+      } catch (constraintErr) {
+        // Fallback: request basic audio without constraints
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      }
       streamRef.current = stream
 
+      // Create MediaRecorder with fallback if MIME type fails
+      let recorder: MediaRecorder
       const mimeType = getSupportedMimeType()
-      const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {}
-      const recorder = new MediaRecorder(stream, recorderOptions)
+      try {
+        const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {}
+        recorder = new MediaRecorder(stream, recorderOptions)
+      } catch {
+        // Fallback: let browser pick default format
+        recorder = new MediaRecorder(stream)
+      }
       mediaRecorderRef.current = recorder
       chunksRef.current = []
 
@@ -240,6 +252,12 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
         } else {
           setState('idle')
         }
+      }
+
+      recorder.onerror = () => {
+        setErrorWithAutoDismiss('Recording failed. Please try again.')
+        cleanup()
+        setState('idle')
       }
 
       // Use smaller timeslice for more responsive data collection
@@ -265,8 +283,11 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
         setErrorWithAutoDismiss('No microphone found on this device.')
       } else if (err instanceof DOMException && err.name === 'NotReadableError') {
         setErrorWithAutoDismiss('Microphone is in use by another app. Close other apps and try again.')
+      } else if (err instanceof DOMException && err.name === 'AbortError') {
+        setErrorWithAutoDismiss('Recording was interrupted. Please try again.')
       } else {
-        setErrorWithAutoDismiss('Could not start recording. Please try again.')
+        const detail = err instanceof Error ? err.message : 'Unknown error'
+        setErrorWithAutoDismiss(`Could not start recording: ${detail}`)
       }
     }
   }, [cleanup, transcribe, startAnalyser])
