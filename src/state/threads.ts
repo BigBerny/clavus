@@ -84,25 +84,28 @@ export function saveThreadMessages(threadId: string, messages: Message[]) {
   }
 }
 
-// Initialize: ensure at least one thread exists
+// Default timeline thread ID — single continuous conversation
+const DEFAULT_TIMELINE_ID = 'timeline-main'
+
+// Initialize: ensure at least the default timeline exists
 const initialThreads = loadThreads()
 let initialActiveId = getActiveThreadId()
 
-if (initialThreads.length === 0) {
-  const id = generateThreadId()
+if (!initialThreads.find((t) => t.id === DEFAULT_TIMELINE_ID)) {
   const thread: Thread = {
-    id,
-    title: 'New conversation',
+    id: DEFAULT_TIMELINE_ID,
+    title: 'Timeline',
     createdAt: Date.now(),
     updatedAt: Date.now(),
     lastMessagePreview: '',
   }
-  initialThreads.push(thread)
-  initialActiveId = id
+  initialThreads.unshift(thread)
   saveThreads(initialThreads)
-  saveActiveThreadId(id)
-} else if (!initialActiveId || !initialThreads.find((t) => t.id === initialActiveId)) {
-  initialActiveId = initialThreads[0].id
+}
+
+// Default to timeline if no active thread or active thread doesn't exist
+if (!initialActiveId || !initialThreads.find((t) => t.id === initialActiveId)) {
+  initialActiveId = DEFAULT_TIMELINE_ID
   saveActiveThreadId(initialActiveId)
 }
 
@@ -154,28 +157,17 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
   },
 
   deleteThread: (id) => {
+    // Never delete the default timeline
+    if (id === DEFAULT_TIMELINE_ID) return
+
     set((state) => {
       const threads = state.threads.filter((t) => t.id !== id)
-      // Remove messages from localStorage
       localStorage.removeItem(getMessagesKey(id))
 
       let activeThreadId = state.activeThreadId
       if (activeThreadId === id) {
-        if (threads.length === 0) {
-          // Create a new thread if we deleted the last one
-          const newId = generateThreadId()
-          const newThread: Thread = {
-            id: newId,
-            title: 'New conversation',
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            lastMessagePreview: '',
-          }
-          threads.push(newThread)
-          activeThreadId = newId
-        } else {
-          activeThreadId = threads[0].id
-        }
+        // Fall back to default timeline
+        activeThreadId = DEFAULT_TIMELINE_ID
       }
 
       saveThreads(threads)
