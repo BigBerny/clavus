@@ -29,13 +29,21 @@ html, body {
 }
 
 #root {
-  height: 100dvh;
-  height: 100vh; /* fallback for older browsers */
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   position: fixed;
   inset: 0;
   width: 100%;
+}
+
+@media (display-mode: standalone) {
+  #root {
+    /* In standalone PWA on iOS, use full viewport including safe areas */
+    height: 100vh;
+    position: fixed;
+    inset: 0;
+  }
 }
 
 html {
@@ -86,8 +94,19 @@ body {
 .safe-area-top {
   padding-top: env(safe-area-inset-top);
 }
+/* In browser: use safe area inset. In standalone PWA: no extra padding needed */
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (display-mode: standalone) {
+  .safe-area-bottom {
+    padding-bottom: 0px;
+  }
+  
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
 }
 
 /* Prevent text selection on UI (but allow in messages via select-text class) */
