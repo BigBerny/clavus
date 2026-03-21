@@ -18,38 +18,62 @@ function relativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-function QuickActions() {
+interface QuickActionsProps {
+  onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
+}
+
+function QuickActions({ onCompose }: QuickActionsProps) {
   const setCurrentView = useUIStore((s) => s.setCurrentView)
   return (
-    <div className="px-5 pt-1 pb-1">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="px-5 pt-1 pb-1 space-y-3">
+      {/* App shortcuts — icon only, compact */}
+      <div className="flex items-center gap-2">
         <a
           href="https://mac-mini-von-janis.taild2ad59.ts.net:3700/"
           target="_blank"
           rel="noopener noreferrer"
-          className="group relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-violet-500/12 to-indigo-600/8 dark:from-violet-500/18 dark:to-indigo-600/12 border border-violet-400/15 dark:border-violet-400/20 hover:border-violet-400/35 hover:from-violet-500/18 hover:to-indigo-600/12 dark:hover:from-violet-500/25 dark:hover:to-indigo-600/18 transition-all duration-200 active:scale-[0.97]"
+          className="group w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-105 active:scale-95 transition-all duration-200"
+          title="Marksense"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-violet-500/8 to-transparent rounded-bl-full" />
-          <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 group-hover:scale-105 transition-all duration-200">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
-          </div>
-          <div className="min-w-0 relative">
-            <p className="text-[14px] font-semibold text-text-light dark:text-text-dark">Marksense</p>
-            <p className="text-[11px] text-violet-600/70 dark:text-violet-400/60 font-medium">Markdown Editor</p>
-          </div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
         </a>
         <button
           onClick={() => setCurrentView('recipes')}
-          className="group relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/8 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/6 border border-amber-400/10 dark:border-amber-400/12 hover:border-amber-400/35 hover:from-amber-500/18 hover:to-orange-500/12 dark:hover:from-amber-500/20 dark:hover:to-orange-500/15 transition-all duration-200 active:scale-[0.97]"
+          className="group w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-105 active:scale-95 transition-all duration-200"
+          title="Rezepte"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/8 to-transparent rounded-bl-full" />
-          <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/25 group-hover:shadow-amber-500/40 group-hover:scale-105 transition-all duration-200">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
+        </button>
+      </div>
+
+      {/* Compose buttons */}
+      <div className="grid grid-cols-3 gap-2">
+        <button
+          onClick={() => onCompose?.('messaging')}
+          className="group flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl bg-gradient-to-br from-emerald-500/10 to-green-500/5 dark:from-emerald-500/15 dark:to-green-500/8 border border-emerald-400/15 dark:border-emerald-400/20 hover:border-emerald-400/35 active:scale-[0.97] transition-all duration-200"
+        >
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </div>
-          <div className="min-w-0 relative">
-            <p className="text-[14px] font-semibold text-text-light dark:text-text-dark text-left">Rezepte</p>
-            <p className="text-[11px] text-amber-600/70 dark:text-amber-400/60 font-medium text-left">Rezeptsammlung</p>
+          <span className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">Messaging</span>
+        </button>
+        <button
+          onClick={() => onCompose?.('slack')}
+          className="group flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl bg-gradient-to-br from-purple-500/10 to-fuchsia-500/5 dark:from-purple-500/15 dark:to-fuchsia-500/8 border border-purple-400/15 dark:border-purple-400/20 hover:border-purple-400/35 active:scale-[0.97] transition-all duration-200"
+        >
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-fuchsia-600 flex items-center justify-center text-white shadow-md shadow-purple-500/20 group-hover:scale-105 transition-transform">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="3" height="8" x="13" y="2" rx="1.5"/><path d="M19 8.5V10h1.5A1.5 1.5 0 1 0 19 8.5"/><rect width="3" height="8" x="8" y="14" rx="1.5"/><path d="M5 15.5V14H3.5A1.5 1.5 0 1 0 5 15.5"/><rect width="8" height="3" x="14" y="13" rx="1.5"/><path d="M15.5 19H14v1.5a1.5 1.5 0 1 0 1.5-1.5"/><rect width="8" height="3" x="2" y="8" rx="1.5"/><path d="M8.5 5H10V3.5A1.5 1.5 0 1 0 8.5 5"/></svg>
           </div>
+          <span className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">Slack</span>
+        </button>
+        <button
+          onClick={() => onCompose?.('email')}
+          className="group flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl bg-gradient-to-br from-blue-500/10 to-cyan-500/5 dark:from-blue-500/15 dark:to-cyan-500/8 border border-blue-400/15 dark:border-blue-400/20 hover:border-blue-400/35 active:scale-[0.97] transition-all duration-200"
+        >
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20 group-hover:scale-105 transition-transform">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          </div>
+          <span className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">E-Mail</span>
         </button>
       </div>
     </div>
@@ -133,7 +157,7 @@ function RecipeItem({ recipe, onSelect }: { recipe: Recipe; onSelect: () => void
   )
 }
 
-export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
+export function HomeScreen({ onSend, onCompose }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void }) {
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const loadThread = useChatStore((s) => s.loadThread)
@@ -191,7 +215,7 @@ export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
     <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="max-w-[760px] mx-auto pb-4">
         <div className="pt-6">
-          <QuickActions />
+          <QuickActions onCompose={onCompose} />
         </div>
 
         {recentRecipes.length > 0 && (
