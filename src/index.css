@@ -128,21 +128,16 @@ button.inline-btn {
   opacity: 0.8;
 }
 .dark .chat-fade-top::before {
-  background: linear-gradient(to bottom, var(--color-surface-dark) 0%, transparent 100%);
+  background: linear-gradient(to bottom, #0a0b0e 0%, transparent 100%);
   opacity: 0.9;
 }
 
-/* Subtle chat background */
+/* Clean chat background — no pattern */
 .chat-bg {
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.03) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%);
+  background: var(--color-surface-light);
 }
 .dark .chat-bg {
-  background:
-    radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.04) 0%, transparent 50%),
-    radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.03) 0%, transparent 50%),
-    linear-gradient(to bottom, #111318, #0e1015);
+  background: #0a0b0e;
 }
 
 /* Message fade + slide animation */

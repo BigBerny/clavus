@@ -208,7 +208,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
 
   return (
     <div className="border-t border-surface-light-3/40 dark:border-surface-dark-3/40 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-2px_8px_rgba(0,0,0,0.15)] bg-surface-light/98 dark:bg-surface-dark/98 backdrop-blur-xl safe-area-bottom">
-      <div className="max-w-[760px] mx-auto p-3">
+      <div className="max-w-[900px] mx-auto p-3">
         {/* Voice error */}
         {voice.error && (
           <div className="flex items-center justify-center gap-2 text-red-400 text-xs mb-2 animate-[fadeSlideIn_0.2s_ease-out] px-3 py-1.5 rounded-lg bg-red-500/8" role="alert">

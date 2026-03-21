@@ -85,7 +85,7 @@ export function ChatView({ messages }: Props) {
         aria-label="Chat messages"
         aria-live="polite"
       >
-        <div className={`max-w-[760px] mx-auto px-4 ${isEmptyChat ? 'h-full' : ''}`}>
+        <div className={`max-w-[900px] mx-auto px-4 ${isEmptyChat ? 'h-full' : ''}`}>
         {isEmptyChat ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-6 animate-[fadeSlideIn_0.5s_ease-out]">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold mb-5 shadow-lg shadow-violet-500/20">

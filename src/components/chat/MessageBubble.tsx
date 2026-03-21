@@ -403,7 +403,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       {/* Assistant avatar (or spacer for grouped messages) */}
       {isAssistant && (
         showAvatar ? (
-          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shadow-sm">
+          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-[#9333EA] to-[#B855F5] flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shadow-sm shadow-purple-500/20">
             J
           </div>
         ) : (
@@ -414,13 +414,13 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         <div
           className={`px-4 py-2.5 min-w-0 max-w-full transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
-              ? `bg-accent text-white shadow-sm shadow-accent/20 ${
+              ? `bg-gradient-to-br from-[#9333EA] to-[#B855F5] text-white shadow-sm shadow-purple-500/15 ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
                   showAvatar ? 'rounded-[20px] rounded-br-[6px]' :
                   isLastInGroup ? 'rounded-[20px] rounded-tr-[6px]' :
                   'rounded-[20px] rounded-r-[6px]'
                 }`
-              : `bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark shadow-sm shadow-black/5 dark:shadow-black/20 ${
+              : `bg-white/[0.06] dark:bg-white/[0.08] backdrop-blur-md text-text-light dark:text-text-dark shadow-sm shadow-black/5 dark:shadow-black/10 border border-white/[0.06] dark:border-white/[0.06] ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
                   showAvatar ? 'rounded-[20px] rounded-bl-[6px]' :
                   isLastInGroup ? 'rounded-[20px] rounded-tl-[6px]' :

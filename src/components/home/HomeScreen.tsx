@@ -213,7 +213,7 @@ export function HomeScreen({ onSend, onCompose }: { onSend: (message: string) =>
 
   return (
     <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-      <div className="max-w-[760px] mx-auto pb-4">
+      <div className="max-w-[900px] mx-auto pb-4">
         <div className="pt-6">
           <QuickActions onCompose={onCompose} />
         </div>
