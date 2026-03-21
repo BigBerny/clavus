@@ -21,6 +21,7 @@ export function getDb(): Database.Database {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
       source_url TEXT DEFAULT '',
+      source_urls TEXT DEFAULT '[]',
       image_path TEXT DEFAULT '',
       prep_time_min INTEGER DEFAULT 0,
       cook_time_min INTEGER DEFAULT 0,
@@ -58,6 +59,21 @@ export function getDb(): Database.Database {
     );
   `)
 
+  // Migration: add source_urls column if missing
+  try {
+    db.exec(`ALTER TABLE recipes ADD COLUMN source_urls TEXT DEFAULT '[]'`)
+  } catch { /* column already exists */ }
+
+  // Migration: populate source_urls from source_url for existing recipes
+  try {
+    const rows = db.prepare(`SELECT id, source_url, source_urls FROM recipes WHERE source_url != '' AND source_url IS NOT NULL AND (source_urls = '[]' OR source_urls IS NULL OR source_urls = '')`).all() as any[]
+    const stmt = db.prepare(`UPDATE recipes SET source_urls = ? WHERE id = ?`)
+    for (const row of rows) {
+      const urls = JSON.stringify([{ url: row.source_url, type: 'article' }])
+      stmt.run(urls, row.id)
+    }
+  } catch { /* ok */ }
+
   try {
     db.exec(`
       CREATE VIRTUAL TABLE IF NOT EXISTS recipes_fts USING fts5(
@@ -84,9 +100,15 @@ export interface StepInput {
   duration_min?: number
 }
 
+export interface SourceUrl {
+  url: string
+  type: 'article' | 'video' | 'other'
+}
+
 export interface RecipeInput {
   title: string
   source_url?: string
+  source_urls?: SourceUrl[]
   image_path?: string
   image_url?: string
   prep_time_min?: number
@@ -135,11 +157,18 @@ export function checkDuplicate(title: string, sourceUrl?: string): { id: number;
 
 export function createRecipe(input: RecipeInput): number {
   const d = getDb()
+  // Build source_urls: prefer explicit source_urls, fall back to source_url
+  let sourceUrls: SourceUrl[] = input.source_urls || []
+  if (!sourceUrls.length && input.source_url) {
+    sourceUrls = [{ url: input.source_url, type: 'article' }]
+  }
+  const sourceUrl = input.source_url || (sourceUrls.length ? sourceUrls[0].url : '')
+
   const result = d.prepare(`
-    INSERT INTO recipes (title, source_url, image_path, prep_time_min, cook_time_min, total_time_min, servings, rating, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO recipes (title, source_url, source_urls, image_path, prep_time_min, cook_time_min, total_time_min, servings, rating, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    input.title, input.source_url || '', input.image_path || '',
+    input.title, sourceUrl, JSON.stringify(sourceUrls), input.image_path || '',
     input.prep_time_min || 0, input.cook_time_min || 0, input.total_time_min || 0,
     input.servings || 3, input.rating || 0, input.notes || ''
   )
@@ -172,6 +201,21 @@ export function updateRecipe(id: number, input: Partial<RecipeInput>) {
   const d = getDb()
   const fields: string[] = []
   const values: any[] = []
+
+  // Handle source_urls
+  if (input.source_urls !== undefined) {
+    fields.push('source_urls = ?')
+    values.push(JSON.stringify(input.source_urls))
+    // Keep source_url in sync (first URL)
+    if (input.source_urls.length > 0 && input.source_url === undefined) {
+      fields.push('source_url = ?')
+      values.push(input.source_urls[0].url)
+    }
+  } else if (input.source_url !== undefined && input.source_urls === undefined) {
+    // Backward compat: source_url string → convert to source_urls array
+    fields.push('source_urls = ?')
+    values.push(JSON.stringify(input.source_url ? [{ url: input.source_url, type: 'article' }] : []))
+  }
 
   const simple = ['title', 'source_url', 'image_path', 'prep_time_min', 'cook_time_min', 'total_time_min', 'servings', 'rating', 'notes'] as const
   for (const f of simple) {
@@ -216,6 +260,16 @@ export function getRecipeWithDetails(id: number) {
   recipe.ingredients = d.prepare('SELECT * FROM ingredients WHERE recipe_id = ? ORDER BY sort_order').all(id)
   recipe.steps = d.prepare('SELECT * FROM steps WHERE recipe_id = ? ORDER BY sort_order').all(id)
   recipe.tags = d.prepare('SELECT name FROM tags WHERE recipe_id = ?').all(id).map((t: any) => t.name)
+  // Parse source_urls JSON
+  try {
+    recipe.source_urls = recipe.source_urls ? JSON.parse(recipe.source_urls) : []
+  } catch {
+    recipe.source_urls = []
+  }
+  // Backward compat: ensure source_urls has at least source_url if empty
+  if ((!recipe.source_urls || recipe.source_urls.length === 0) && recipe.source_url) {
+    recipe.source_urls = [{ url: recipe.source_url, type: 'article' }]
+  }
   return recipe
 }
 

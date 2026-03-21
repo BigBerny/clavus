@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useUIStore } from '../../state/ui'
 import { fetchRecipe, updateRecipe as updateRecipeApi, markCooked, addToBring } from '../../api/recipes'
-import type { Recipe, Ingredient } from '../../api/recipes'
+import type { Recipe, Ingredient, SourceUrl } from '../../api/recipes'
 
 function formatDuration(mins: number): string {
   if (!mins) return ''
@@ -61,6 +61,37 @@ function scaleAmount(amount: number | null, defaultServings: number, currentServ
   if (Math.abs(scaled - 0.67) < 0.01) return '⅔'
   if (Math.abs(scaled - 0.75) < 0.01) return '¾'
   return scaled.toFixed(1).replace(/\.0$/, '')
+}
+
+function getDomain(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    return url
+  }
+}
+
+function SourceLinkIcon({ type }: { type: SourceUrl['type'] }) {
+  if (type === 'video') {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+    )
+  }
+  if (type === 'article') {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+      </svg>
+    )
+  }
+  // "other"
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </svg>
+  )
 }
 
 // Bring! Modal
@@ -300,17 +331,25 @@ export function RecipeDetail() {
               </div>
             )}
 
-            {/* Source link */}
-            {recipe.source_url && (
-              <a
-                href={recipe.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 mb-3 text-[13px] text-accent/70 hover:text-accent transition-colors"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                Originalrezept
-              </a>
+            {/* Source links */}
+            {((recipe.source_urls && recipe.source_urls.length > 0) || recipe.source_url) && (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-3">
+                {(recipe.source_urls && recipe.source_urls.length > 0
+                  ? recipe.source_urls
+                  : recipe.source_url ? [{ url: recipe.source_url, type: 'article' as const }] : []
+                ).map((src, i) => (
+                  <a
+                    key={i}
+                    href={src.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-[13px] text-accent/70 hover:text-accent transition-colors"
+                  >
+                    <SourceLinkIcon type={src.type} />
+                    {getDomain(src.url)}
+                  </a>
+                ))}
+              </div>
             )}
 
             {/* Notes - editable */}

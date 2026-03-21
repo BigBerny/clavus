@@ -16,10 +16,16 @@ export interface Step {
   duration_min: number
 }
 
+export interface SourceUrl {
+  url: string
+  type: 'article' | 'video' | 'other'
+}
+
 export interface Recipe {
   id: number
   title: string
   source_url: string
+  source_urls?: SourceUrl[]
   image_path: string
   prep_time_min: number
   cook_time_min: number
