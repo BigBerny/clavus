@@ -32,7 +32,7 @@ function QuickActions() {
           </div>
           <div className="min-w-0 relative">
             <p className="text-[14px] font-semibold text-text-light dark:text-text-dark">Marksense</p>
-            <p className="text-[11px] text-violet-600/70 dark:text-violet-400/60 font-medium">Bookmarks</p>
+            <p className="text-[11px] text-violet-600/70 dark:text-violet-400/60 font-medium">Markdown Editor</p>
           </div>
         </a>
         <button
