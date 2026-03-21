@@ -35,6 +35,14 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
       }
       navigator.vibrate?.(10)
     },
+    onInsertTranscription: (text) => {
+      // Insert text into textarea without sending
+      const current = value.trim()
+      const newValue = current ? current + ' ' + text : text
+      setValue(newValue.slice(0, 10000))
+      navigator.vibrate?.(10)
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    },
   })
 
   // Report recording state changes to parent (for header recording bar)
@@ -277,6 +285,28 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
             </span>
           )}
 
+          {isRecording ? (
+            /* Two-button flow when recording: Insert + Send */
+            <div className="flex items-center gap-1.5 flex-none">
+              <button
+                onClick={voice.stopAndInsert}
+                className="w-11 h-11 flex items-center justify-center rounded-full bg-surface-light-3 dark:bg-surface-dark-3 text-text-light dark:text-text-dark hover:bg-surface-light-3/80 dark:hover:bg-surface-dark-3/80 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
+                aria-label="Stop and insert text"
+                title="Insert text"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+              </button>
+              <button
+                onClick={voice.stop}
+                onPointerUp={handleMicPointerUp}
+                className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse animate-[btnFadeIn_0.15s_ease-out] touch-none"
+                aria-label="Stop and send"
+                title="Send"
+              >
+                <ArrowUpIcon />
+              </button>
+            </div>
+          ) : (
           <div className="relative flex-none w-11 h-11">
             {isStreaming ? (
               <button
@@ -286,16 +316,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
                 title="Stop"
               >
                 <StopIcon />
-              </button>
-            ) : isRecording ? (
-              <button
-                onClick={voice.stop}
-                onPointerUp={handleMicPointerUp}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse animate-[btnFadeIn_0.15s_ease-out] touch-none"
-                aria-label="Stop recording and transcribe"
-                title="Stop recording"
-              >
-                <MicIcon />
               </button>
             ) : isTranscribing ? (
               <button
@@ -329,6 +349,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
               </button>
             )}
           </div>
+          )}
         </div>
       </div>
     </div>
