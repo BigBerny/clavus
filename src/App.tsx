@@ -118,7 +118,12 @@ export function App() {
     if (!root) return
 
     const onResize = () => {
-      root.style.height = `${vv.height}px`
+      // Only constrain height when keyboard is actually open (viewport smaller than window)
+      if (vv.height < window.innerHeight * 0.9) {
+        root.style.height = `${vv.height}px`
+      } else {
+        root.style.height = '100%'
+      }
     }
 
     vv.addEventListener('resize', onResize)
