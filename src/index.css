@@ -20,12 +20,22 @@
   --color-border-light: #e5e7eb;
 }
 
-html, body, #root {
-  height: 100dvh;
+html, body {
+  height: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
+}
+
+#root {
+  height: 100dvh;
+  height: 100vh; /* fallback for older browsers */
+  height: 100dvh;
+  overflow: hidden;
+  position: fixed;
+  inset: 0;
+  width: 100%;
 }
 
 html {
