@@ -24,10 +24,10 @@ function QuickActions() {
           href="https://mac-mini-von-janis.taild2ad59.ts.net:3700/"
           target="_blank"
           rel="noopener noreferrer"
-          className="group relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-violet-500/12 to-indigo-600/8 dark:from-violet-500/18 dark:to-indigo-600/12 border border-violet-400/15 dark:border-violet-400/20 hover:border-violet-400/35 hover:from-violet-500/18 hover:to-indigo-600/12 dark:hover:from-violet-500/25 dark:hover:to-indigo-600/18 transition-all duration-200 active:scale-[0.97]"
+          className="group relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-violet-500/12 to-indigo-600/8 dark:from-violet-500/18 dark:to-indigo-600/12 border border-violet-400/15 dark:border-violet-400/20 hover:border-violet-400/35 hover:from-violet-500/18 hover:to-indigo-600/12 dark:hover:from-violet-500/25 dark:hover:to-indigo-600/18 transition-all duration-200 active:scale-[0.97]"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-violet-500/8 to-transparent rounded-bl-full" />
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 group-hover:scale-105 transition-all duration-200">
+          <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 group-hover:scale-105 transition-all duration-200">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
           </div>
           <div className="min-w-0 relative">
@@ -37,15 +37,15 @@ function QuickActions() {
         </a>
         <button
           disabled
-          className="relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/8 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/6 border border-amber-400/10 dark:border-amber-400/12 opacity-45 cursor-not-allowed"
+          className="relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/8 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/6 border border-amber-400/10 dark:border-amber-400/12 opacity-45 cursor-not-allowed"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/5 to-transparent rounded-bl-full" />
-          <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/15">
+          <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/15">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 11h.01"/><path d="M11 15h.01"/><path d="M16 16c.5-1.5.9-3 .9-5.5A6.9 6.9 0 0 0 10 4a6.9 6.9 0 0 0-6.9 6.5c0 2.5.4 4 .9 5.5"/><path d="M3 21c0 0 2.5-1 7-1s7 1 7 1"/></svg>
           </div>
           <div className="min-w-0 relative">
-            <p className="text-[14px] font-semibold text-text-light dark:text-text-dark">Rezepte</p>
-            <p className="text-[11px] text-amber-600/70 dark:text-amber-400/50 font-medium">Coming soon</p>
+            <p className="text-[14px] font-semibold text-text-light dark:text-text-dark text-left">Rezepte</p>
+            <p className="text-[11px] text-amber-600/70 dark:text-amber-400/50 font-medium text-left">Coming soon</p>
           </div>
         </button>
       </div>
