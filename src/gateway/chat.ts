@@ -78,6 +78,48 @@ export async function sendChatStream(
   callbacks.onDone()
 }
 
+export async function generateTitle(
+  config: GatewayConfig,
+  messages: ChatCompletionMessage[],
+): Promise<string | null> {
+  try {
+    // Take last few messages for context
+    const recentMsgs = messages.slice(-6)
+    const titleMessages: ChatCompletionMessage[] = [
+      {
+        role: 'system',
+        content: 'Generate a concise 3-6 word title for this conversation. Return ONLY the title, nothing else. No quotes, no punctuation at the end.',
+      },
+      ...recentMsgs,
+      { role: 'user', content: 'Generate a short title for the conversation above.' },
+    ]
+
+    const res = await fetch(`${config.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.token}`,
+        'x-openclaw-agent-id': config.agentId,
+      },
+      body: JSON.stringify({
+        model: `openclaw:${config.agentId}`,
+        stream: false,
+        user: config.user,
+        messages: titleMessages,
+        max_tokens: 20,
+      }),
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!res.ok) return null
+    const data = await res.json()
+    const title = data.choices?.[0]?.message?.content?.trim()
+    return title && title.length > 0 && title.length < 80 ? title : null
+  } catch {
+    return null
+  }
+}
+
 export async function checkGateway(config: GatewayConfig): Promise<boolean> {
   try {
     const res = await fetch(`${config.url}/v1/models`, {

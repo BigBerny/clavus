@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, checkGateway } from '../gateway/chat.ts'
+import { sendChatStream, checkGateway, generateTitle } from '../gateway/chat.ts'
+import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
+const TITLE_GEN_AT = [2, 10] // Generate title after 2 messages (first exchange) and 10 messages
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -111,6 +113,26 @@ export function useChat() {
             finalizeMessage(assistantId)
             setStreaming(false)
             setAbortController(null)
+
+            // Auto-generate title at specific message counts
+            const currentMessages = useChatStore.getState().messages.filter(m => m.role !== 'system')
+            const msgCount = currentMessages.length
+            if (TITLE_GEN_AT.includes(msgCount) || (msgCount > 2 && msgCount % 10 === 0)) {
+              const activeThreadId = useThreadsStore.getState().activeThreadId
+              const activeThread = useThreadsStore.getState().threads.find(t => t.id === activeThreadId)
+              // Only generate if title is still default or on the 10-message interval
+              if (activeThread && (activeThread.title === 'New conversation' || msgCount >= 10)) {
+                const apiMsgs = currentMessages.map(m => ({
+                  role: m.role as 'user' | 'assistant',
+                  content: m.content,
+                }))
+                generateTitle(getConfig(), apiMsgs).then(title => {
+                  if (title) {
+                    useThreadsStore.getState().updateThreadTitle(activeThreadId, title)
+                  }
+                })
+              }
+            }
           },
           onError: (error) => {
             finalizeMessage(assistantId)
