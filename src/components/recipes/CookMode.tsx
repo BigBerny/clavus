@@ -196,11 +196,19 @@ export function CookMode() {
   const toggleStepDone = useCallback((idx: number) => {
     setCompletedSteps(prev => {
       const next = new Set(prev)
-      if (next.has(idx)) next.delete(idx)
-      else next.add(idx)
+      if (next.has(idx)) {
+        next.delete(idx)
+      } else {
+        next.add(idx)
+        // Auto-advance to next step after marking done
+        const stepsCount = recipe?.steps?.length ?? 0
+        if (idx < stepsCount - 1) {
+          setTimeout(() => setCurrentStep(idx + 1), 300)
+        }
+      }
       return next
     })
-  }, [])
+  }, [recipe])
 
   const startTimer = useCallback((stepIndex: number, minutes: number, label: string) => {
     const id = `timer-${stepIndex}-${Date.now()}`
