@@ -188,7 +188,7 @@ export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
   }, [setSelectedRecipeId, setCurrentView])
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-none" style={{ WebkitOverflowScrolling: 'touch' }}>
+    <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="max-w-[760px] mx-auto pb-4">
         <div className="pt-6">
           <QuickActions />

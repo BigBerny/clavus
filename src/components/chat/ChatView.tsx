@@ -52,7 +52,7 @@ export function ChatView({ messages }: Props) {
   const isEmptyChat = messages.length === 0
 
   return (
-    <div className="flex-1 relative overflow-hidden chat-bg chat-fade-top animate-[chatFadeIn_0.25s_ease-out]">
+    <div className="flex-1 relative overflow-hidden min-h-0 chat-bg chat-fade-top animate-[chatFadeIn_0.25s_ease-out]">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -63,7 +63,7 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="h-full overflow-y-auto overscroll-none py-3 scroll-smooth"
+        className="h-full overflow-y-auto overscroll-y-contain py-3 scroll-smooth"
         style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"
