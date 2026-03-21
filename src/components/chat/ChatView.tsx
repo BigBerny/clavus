@@ -16,11 +16,8 @@ export function ChatView({ messages }: Props) {
   const scrollToBottom = useCallback((instant = false) => {
     const container = containerRef.current
     if (container) {
-      if (instant) {
-        container.scrollTop = container.scrollHeight
-      } else {
-        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-      }
+      // Always use instant scroll to avoid animation glitches from viewport resizes
+      container.scrollTop = container.scrollHeight
     }
     setAutoScroll(true)
   }, [])
