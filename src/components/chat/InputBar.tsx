@@ -172,7 +172,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
 
   return (
     <div className="border-t border-surface-light-3/40 dark:border-surface-dark-3/40 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-2px_8px_rgba(0,0,0,0.15)] bg-surface-light/98 dark:bg-surface-dark/98 backdrop-blur-xl safe-area-bottom">
-      <div className="max-w-[760px] mx-auto px-3 py-2">
+      <div className="max-w-[760px] mx-auto px-3 pt-2 pb-2">
         {/* Voice error */}
         {voice.error && (
           <div className="flex items-center justify-center gap-2 text-red-400 text-xs mb-2 animate-[fadeSlideIn_0.2s_ease-out] px-3 py-1.5 rounded-lg bg-red-500/8" role="alert">
@@ -211,7 +211,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
           <button
             onClick={handleAttachClick}
             disabled={pendingImages.length >= MAX_IMAGES || isTranscribing}
-            className="inline-btn flex-none w-10 h-10 flex items-center justify-center rounded-full text-text-light-muted dark:text-text-dark-muted hover:text-accent active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full text-text-light-muted dark:text-text-dark-muted hover:text-accent active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             aria-label="Attach image"
             title="Attach image"
           >
@@ -275,7 +275,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
             </span>
           )}
 
-          <div className="relative flex-none w-10 h-10">
+          <div className="relative flex-none w-11 h-11">
             {isStreaming ? (
               <button
                 onClick={onAbort}
