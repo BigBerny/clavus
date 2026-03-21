@@ -8,7 +8,7 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
-import { useThreadsStore } from './state/threads.ts'
+import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 
@@ -145,20 +145,26 @@ export function App() {
     }
   }, [])
 
-  // Auto-routing: show home if last activity > 30 min ago, else go to chat
+  // Sync from server on startup, then auto-route
   useEffect(() => {
     if (needsToken) return
-    const activeThread = useThreadsStore.getState().getActiveThread()
-    if (activeThread) {
-      const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
-      if (activeThread.updatedAt > thirtyMinutesAgo) {
-        setCurrentView('chat')
+    
+    const doAutoRoute = () => {
+      const activeThread = useThreadsStore.getState().getActiveThread()
+      if (activeThread) {
+        const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+        if (activeThread.updatedAt > thirtyMinutesAgo) {
+          setCurrentView('chat')
+        } else {
+          setCurrentView('home')
+        }
       } else {
         setCurrentView('home')
       }
-    } else {
-      setCurrentView('home')
     }
+    
+    // Try server sync first, then auto-route
+    syncFromServer().finally(doAutoRoute)
   }, [needsToken, setCurrentView])
 
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {

@@ -46,6 +46,8 @@ function saveThreads(threads: Thread[]) {
   } catch {
     // localStorage full or unavailable
   }
+  // Async server sync
+  syncThreadsToServer(threads)
 }
 
 function getActiveThreadId(): string {
@@ -81,6 +83,111 @@ export function saveThreadMessages(threadId: string, messages: Message[]) {
     localStorage.setItem(getMessagesKey(threadId), JSON.stringify(toSave))
   } catch {
     // localStorage full or unavailable
+  }
+  // Async server sync
+  syncMessagesToServer(threadId, messages.slice(-100))
+}
+
+// === Server Sync ===
+
+let syncThreadsTimer: ReturnType<typeof setTimeout> | null = null
+let syncMessagesTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+
+function syncThreadsToServer(threads: Thread[]) {
+  // Debounce to avoid flooding
+  if (syncThreadsTimer) clearTimeout(syncThreadsTimer)
+  syncThreadsTimer = setTimeout(async () => {
+    try {
+      await fetch('/api/threads', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(threads),
+      })
+    } catch {
+      // Server unavailable — localStorage is the fallback
+    }
+  }, 500)
+}
+
+function syncMessagesToServer(threadId: string, messages: Message[]) {
+  const existing = syncMessagesTimers.get(threadId)
+  if (existing) clearTimeout(existing)
+  syncMessagesTimers.set(threadId, setTimeout(async () => {
+    syncMessagesTimers.delete(threadId)
+    try {
+      await fetch(`/api/threads/messages/${encodeURIComponent(threadId)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messages),
+      })
+    } catch {
+      // Server unavailable — localStorage is the fallback
+    }
+  }, 500))
+}
+
+// Pull from server on startup (merge with localStorage)
+export async function syncFromServer(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/threads/sync')
+    if (!res.ok) return false
+    const data = await res.json() as { threads: Thread[], messages: Record<string, Message[]> }
+    
+    const localThreads = loadThreads()
+    const serverThreads: Thread[] = data.threads || []
+    
+    // Merge: for each thread, keep the one with newer updatedAt
+    const merged = new Map<string, Thread>()
+    for (const t of localThreads) merged.set(t.id, t)
+    for (const t of serverThreads) {
+      const existing = merged.get(t.id)
+      if (!existing || t.updatedAt > existing.updatedAt) {
+        merged.set(t.id, t)
+      }
+    }
+    
+    const mergedThreads = Array.from(merged.values())
+    
+    // Save merged threads to localStorage
+    try {
+      localStorage.setItem(THREADS_KEY, JSON.stringify(mergedThreads))
+    } catch { /* ignore */ }
+    
+    // Merge messages: for each thread, use server if it has more messages or is newer
+    for (const [threadId, serverMsgs] of Object.entries(data.messages || {})) {
+      const localMsgs = loadThreadMessages(threadId)
+      // Use whichever has more messages (simple heuristic)
+      if (serverMsgs.length >= localMsgs.length) {
+        try {
+          localStorage.setItem(getMessagesKey(threadId), JSON.stringify(serverMsgs))
+        } catch { /* ignore */ }
+      }
+    }
+    
+    // Also push any local-only messages to server
+    for (const t of localThreads) {
+      if (!data.messages[t.id]) {
+        const localMsgs = loadThreadMessages(t.id)
+        if (localMsgs.length > 0) {
+          syncMessagesToServer(t.id, localMsgs)
+        }
+      }
+    }
+    
+    // Push merged threads to server
+    syncThreadsToServer(mergedThreads)
+    
+    // Update Zustand store
+    const store = useThreadsStore.getState()
+    const currentActiveId = store.activeThreadId
+    useThreadsStore.setState({
+      threads: mergedThreads,
+      activeThreadId: mergedThreads.find(t => t.id === currentActiveId) ? currentActiveId : mergedThreads[0]?.id || '',
+    })
+    
+    return true
+  } catch {
+    return false
   }
 }
 

@@ -8,6 +8,111 @@ import nodePath from 'path'
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
 
+const THREADS_DATA_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus-data')
+
+function threadsApiPlugin() {
+  // Ensure data directory exists
+  if (!fs.existsSync(THREADS_DATA_DIR)) {
+    fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+  }
+
+  const threadsFile = nodePath.join(THREADS_DATA_DIR, 'threads.json')
+  const messagesDir = nodePath.join(THREADS_DATA_DIR, 'messages')
+  if (!fs.existsSync(messagesDir)) {
+    fs.mkdirSync(messagesDir, { recursive: true })
+  }
+
+  return {
+    name: 'threads-api',
+    configureServer(server: any) {
+      // Helper to read request body
+      async function readBody(req: any): Promise<string> {
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(Buffer.from(chunk))
+        return Buffer.concat(chunks).toString('utf-8')
+      }
+
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        if (!req.url?.startsWith('/api/threads')) return next()
+
+        res.setHeader('Content-Type', 'application/json')
+
+        try {
+          // GET /api/threads — list all threads
+          if (req.url === '/api/threads' && req.method === 'GET') {
+            const data = fs.existsSync(threadsFile)
+              ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
+              : []
+            res.end(JSON.stringify(data))
+            return
+          }
+
+          // PUT /api/threads — save all threads
+          if (req.url === '/api/threads' && req.method === 'PUT') {
+            const body = await readBody(req)
+            fs.writeFileSync(threadsFile, body, 'utf-8')
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          // GET /api/threads/messages/:threadId — get messages for a thread
+          const msgMatch = req.url.match(/^\/api\/threads\/messages\/([^/?]+)/)
+          if (msgMatch && req.method === 'GET') {
+            const threadId = decodeURIComponent(msgMatch[1])
+            const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
+            const data = fs.existsSync(msgFile)
+              ? JSON.parse(fs.readFileSync(msgFile, 'utf-8'))
+              : []
+            res.end(JSON.stringify(data))
+            return
+          }
+
+          // PUT /api/threads/messages/:threadId — save messages for a thread
+          if (msgMatch && req.method === 'PUT') {
+            const threadId = decodeURIComponent(msgMatch[1])
+            const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
+            const body = await readBody(req)
+            fs.writeFileSync(msgFile, body, 'utf-8')
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          // DELETE /api/threads/messages/:threadId — delete messages for a thread
+          if (msgMatch && req.method === 'DELETE') {
+            const threadId = decodeURIComponent(msgMatch[1])
+            const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
+            if (fs.existsSync(msgFile)) fs.unlinkSync(msgFile)
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          // GET /api/threads/sync — get all threads + all messages in one call
+          if (req.url === '/api/threads/sync' && req.method === 'GET') {
+            const threads = fs.existsSync(threadsFile)
+              ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
+              : []
+            const allMessages: Record<string, any[]> = {}
+            for (const t of threads) {
+              const msgFile = nodePath.join(messagesDir, `${t.id}.json`)
+              allMessages[t.id] = fs.existsSync(msgFile)
+                ? JSON.parse(fs.readFileSync(msgFile, 'utf-8'))
+                : []
+            }
+            res.end(JSON.stringify({ threads, messages: allMessages }))
+            return
+          }
+
+          res.statusCode = 404
+          res.end(JSON.stringify({ error: 'Not found' }))
+        } catch (err: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+    },
+  }
+}
+
 function workspacePlugin() {
   return {
     name: 'workspace-api',
@@ -132,6 +237,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    threadsApiPlugin(),
     elevenLabsProxy(),
     workspacePlugin(),
     react(),
