@@ -40,24 +40,27 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
 
   return (
     <>
-      {/* Recording bar at top */}
+      {/* Safe area background for notch */}
+      <div className="safe-area-top bg-surface-light/95 dark:bg-surface-dark/95" />
+
+      {/* Recording bar */}
       {isRecording && (
-        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 text-white select-none safe-area-top animate-[fadeSlideIn_0.2s_ease-out]" role="alert">
+        <div className="flex items-center justify-between px-4 py-2 bg-red-500/15 dark:bg-red-500/20 border-b border-red-500/20 dark:border-red-500/25 select-none animate-[fadeSlideIn_0.2s_ease-out]" role="alert">
           <button
             onClick={onCancelRecording}
-            className="inline-btn text-white/80 hover:text-white text-xs font-medium transition-colors px-2 py-1 rounded-lg hover:bg-white/10"
+            className="inline-btn text-red-500 dark:text-red-400 text-xs font-medium transition-colors px-2 py-1 rounded-lg hover:bg-red-500/10"
           >
             Cancel
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-white recording-pulse" />
-            <span className="text-sm font-medium tracking-wide">Recording</span>
+            <div className="w-2 h-2 rounded-full bg-red-500 recording-pulse" />
+            <span className="text-sm font-medium tracking-wide text-red-600 dark:text-red-400">Recording</span>
           </div>
-          <span className="text-[13px] font-mono tabular-nums text-white/80">{recordingDuration}</span>
+          <span className="text-[13px] font-mono tabular-nums text-red-500/70 dark:text-red-400/70">{recordingDuration}</span>
         </div>
       )}
 
-      <header className={`flex items-center justify-between px-2 h-14 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl select-none ${!isRecording ? 'safe-area-top' : ''}`}>
+      <header className="flex items-center justify-between px-2 h-14 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl select-none">
         {/* Left: hamburger + title */}
         <div className="flex items-center min-w-0 flex-1">
           <button
