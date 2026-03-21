@@ -118,18 +118,10 @@ export function App() {
     if (!root) return
 
     const onResize = () => {
+      // Set root height to visual viewport (shrinks when keyboard opens)
       root.style.height = `${vv.height}px`
-      root.style.transform = `translateY(${vv.offsetTop}px)`
-      requestAnimationFrame(() => {
-        const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
-        if (scrollContainer) {
-          const { scrollTop } = scrollContainer
-          scrollContainer.style.overflow = 'hidden'
-          scrollContainer.offsetHeight // force reflow
-          scrollContainer.style.overflow = ''
-          scrollContainer.scrollTop = scrollTop
-        }
-      })
+      // Scroll the page so the input stays visible
+      window.scrollTo(0, vv.offsetTop)
     }
 
     vv.addEventListener('resize', onResize)
