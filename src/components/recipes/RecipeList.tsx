@@ -30,16 +30,19 @@ function StarRating({ rating }: { rating: number }) {
 
 function RecipeCard({ recipe, onClick }: { recipe: Recipe; onClick: () => void }) {
   const duration = recipe.total_time_min || (recipe.prep_time_min + recipe.cook_time_min)
+  const imageUrl = recipe.image_path
+    ? (recipe.image_path.startsWith('/') || recipe.image_path.startsWith('http') ? recipe.image_path : `/recipe-images/${recipe.image_path}`)
+    : null
 
   return (
     <button
       onClick={onClick}
       className="group w-full text-left rounded-2xl overflow-hidden bg-surface-light-2/50 dark:bg-surface-dark-2/80 border border-surface-light-3/50 dark:border-surface-dark-3/50 hover:border-accent/20 active:scale-[0.97] transition-all duration-200"
     >
-      {recipe.image_path ? (
+      {imageUrl ? (
         <div className="aspect-[16/10] w-full overflow-hidden bg-surface-light-3 dark:bg-surface-dark-3">
           <img
-            src={recipe.image_path}
+            src={imageUrl}
             alt={recipe.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             loading="lazy"
@@ -93,6 +96,7 @@ export function RecipeList() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortMode>('added')
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set())
   const setCurrentView = useUIStore(s => s.setCurrentView)
   const setSelectedRecipeId = useUIStore(s => s.setSelectedRecipeId)
 
@@ -113,8 +117,35 @@ export function RecipeList() {
     return () => clearTimeout(timeout)
   }, [search])
 
+  // Collect all unique tags
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>()
+    recipes.forEach(r => r.tags.forEach(t => tagSet.add(t)))
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b, 'de'))
+  }, [recipes])
+
+  const toggleTag = useCallback((tag: string) => {
+    setActiveTags(prev => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+  }, [])
+
+  // Filter by tags, then sort
+  const filtered = useMemo(() => {
+    if (activeTags.size === 0) return recipes
+    return recipes.filter(r => {
+      for (const tag of activeTags) {
+        if (!r.tags.includes(tag)) return false
+      }
+      return true
+    })
+  }, [recipes, activeTags])
+
   const sorted = useMemo(() => {
-    const list = [...recipes]
+    const list = [...filtered]
     switch (sort) {
       case 'recent':
         return list.sort((a, b) => {
@@ -130,7 +161,7 @@ export function RecipeList() {
       case 'added':
         return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     }
-  }, [recipes, sort])
+  }, [filtered, sort])
 
   const openRecipe = useCallback((id: number) => {
     setSelectedRecipeId(id)
@@ -173,6 +204,35 @@ export function RecipeList() {
         </div>
       </div>
 
+      {/* Tag filter chips */}
+      {allTags.length > 0 && (
+        <div className="px-4 pb-2">
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
+            {allTags.map(tag => (
+              <button
+                key={tag}
+                onClick={() => toggleTag(tag)}
+                className={`inline-btn whitespace-nowrap text-[11px] font-medium px-2.5 py-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                  activeTags.has(tag)
+                    ? 'bg-accent/15 dark:bg-accent/22 text-accent ring-1 ring-accent/30'
+                    : 'bg-surface-light-2/60 dark:bg-surface-dark-2/60 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-3 dark:hover:bg-surface-dark-3'
+                }`}
+              >
+                {tag}
+              </button>
+            ))}
+            {activeTags.size > 0 && (
+              <button
+                onClick={() => setActiveTags(new Set())}
+                className="inline-btn whitespace-nowrap text-[11px] font-medium px-2.5 py-1.5 rounded-lg text-red-400/70 hover:text-red-400 transition-colors flex-shrink-0"
+              >
+                ✕ Reset
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Sort */}
       <div className="px-4 pb-3">
         <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
@@ -204,9 +264,9 @@ export function RecipeList() {
               <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500/50"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
             </div>
             <p className="text-[14px] text-text-light-muted dark:text-text-dark-muted">
-              {search ? 'Keine Rezepte gefunden' : 'Noch keine Rezepte'}
+              {search || activeTags.size > 0 ? 'Keine Rezepte gefunden' : 'Noch keine Rezepte'}
             </p>
-            {!search && (
+            {!search && activeTags.size === 0 && (
               <p className="text-[12px] text-text-light-muted/60 dark:text-text-dark-muted/60 text-center max-w-[240px]">
                 Sende Jane eine URL oder ein Foto, um Rezepte hinzuzufügen.
               </p>

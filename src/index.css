@@ -143,6 +143,12 @@ button.inline-btn {
   to { transform: translateX(0); }
 }
 
+/* Bottom sheet slide-up */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
 /* Sidebar slide-in (from left) */
 @keyframes slideInLeft {
   from { transform: translateX(-100%); }

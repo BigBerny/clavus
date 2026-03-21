@@ -213,6 +213,28 @@ function recipesApiPlugin() {
         return Buffer.concat(chunks).toString('utf-8')
       }
 
+      async function downloadImage(imageUrl: string): Promise<string> {
+        try {
+          const response = await fetch(imageUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Clavus/1.0)' },
+            redirect: 'follow',
+          })
+          if (!response.ok) return ''
+          const contentType = response.headers.get('content-type') || ''
+          let ext = '.jpg'
+          if (contentType.includes('png')) ext = '.png'
+          else if (contentType.includes('webp')) ext = '.webp'
+          else if (contentType.includes('gif')) ext = '.gif'
+          const fileName = `recipe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
+          const filePath = nodePath.join(IMAGES_DIR, fileName)
+          const buffer = Buffer.from(await response.arrayBuffer())
+          fs.writeFileSync(filePath, buffer)
+          return fileName
+        } catch {
+          return ''
+        }
+      }
+
       // Serve recipe images at /recipe-images/
       server.middlewares.use((req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/recipe-images/')) return next()
@@ -250,6 +272,26 @@ function recipesApiPlugin() {
             return
           }
 
+          // POST /api/recipes/bring - Add items to Bring! shopping list
+          if (req.url === '/api/recipes/bring' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            const items: { name: string; spec: string }[] = body.items || []
+            const pythonPath = nodePath.join(process.env.HOME || '', '.openclaw/workspace/.venvs/bring/bin/python3')
+            const scriptPath = nodePath.join(process.env.HOME || '', '.openclaw/workspace/scripts/bring.py')
+            const { execSync } = await import('child_process')
+            const results: { item: string; ok: boolean; error?: string }[] = []
+            for (const item of items) {
+              try {
+                execSync(`${pythonPath} ${scriptPath} add "${item.name.replace(/"/g, '\\"')}" "${(item.spec || '').replace(/"/g, '\\"')}"`, { timeout: 15000 })
+                results.push({ item: item.name, ok: true })
+              } catch (err: any) {
+                results.push({ item: item.name, ok: false, error: err.message })
+              }
+            }
+            res.end(JSON.stringify({ ok: true, results }))
+            return
+          }
+
           // POST /api/recipes/:id/cook
           const cookMatch = req.url.match(/^\/api\/recipes\/(\d+)\/cook$/)
           if (cookMatch && req.method === 'POST') {
@@ -272,6 +314,11 @@ function recipesApiPlugin() {
           }
           if (idMatch && req.method === 'PUT') {
             const body = JSON.parse(await readBody(req))
+            // Download image if image_url provided
+            if (body.image_url && !body.image_path) {
+              const fileName = await downloadImage(body.image_url)
+              if (fileName) body.image_path = fileName
+            }
             updateRecipe(parseInt(idMatch[1]), body)
             const updated = getRecipeWithDetails(parseInt(idMatch[1]))
             res.end(JSON.stringify(updated))
@@ -300,6 +347,11 @@ function recipesApiPlugin() {
                 res.end(JSON.stringify({ error: 'Duplicate recipe', existing: dup }))
                 return
               }
+            }
+            // Download image if image_url provided
+            if (body.image_url && !body.image_path) {
+              const fileName = await downloadImage(body.image_url)
+              if (fileName) body.image_path = fileName
             }
             const id = createRecipe(body)
             const recipe = getRecipeWithDetails(id)

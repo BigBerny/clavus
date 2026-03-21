@@ -3,7 +3,7 @@ import { create } from 'zustand'
 export type ThemeChoice = 'dark' | 'light' | 'system'
 type ResolvedTheme = 'dark' | 'light'
 
-export type AppView = 'home' | 'chat' | 'recipes' | 'recipe-detail'
+export type AppView = 'home' | 'chat' | 'recipes' | 'recipe-detail' | 'cook-mode'
 
 interface UIState {
   themeChoice: ThemeChoice

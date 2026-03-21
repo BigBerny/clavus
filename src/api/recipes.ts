@@ -63,3 +63,16 @@ export async function updateRecipe(id: number, data: Partial<Recipe>): Promise<R
   if (!res.ok) throw new Error('Update failed')
   return res.json()
 }
+
+export async function markCooked(id: number): Promise<void> {
+  await fetch(`/api/recipes/${id}/cook`, { method: 'POST' })
+}
+
+export async function addToBring(items: { name: string; spec: string }[]): Promise<{ ok: boolean; results: { item: string; ok: boolean; error?: string }[] }> {
+  const res = await fetch('/api/recipes/bring', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+  return res.json()
+}

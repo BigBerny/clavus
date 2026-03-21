@@ -6,6 +6,7 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { RecipeList } from './components/recipes/RecipeList.tsx'
 import { RecipeDetail } from './components/recipes/RecipeDetail.tsx'
+import { CookMode } from './components/recipes/CookMode.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
@@ -205,6 +206,8 @@ export function App() {
         <RecipeList />
       ) : currentView === 'recipe-detail' ? (
         <RecipeDetail />
+      ) : currentView === 'cook-mode' ? (
+        <CookMode />
       ) : (
         <ChatView key={activeThreadId} messages={messages} />
       )}
