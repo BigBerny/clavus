@@ -13,6 +13,7 @@ import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 import { useSwipeNavigation } from './hooks/useSwipeNavigation.ts'
+import { ComposeFlow } from './components/compose/ComposeFlow.tsx'
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   const [token, setToken] = useState('')
@@ -68,6 +69,7 @@ export function App() {
   const [recordingDuration, setRecordingDuration] = useState('0:00')
   const cancelRecordingRef = useRef<(() => void) | null>(null)
   const swipe = useSwipeNavigation()
+  const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
 
   const handleTokenSave = useCallback((token: string) => {
     setGatewayToken(token)
@@ -207,10 +209,13 @@ export function App() {
         </div>
       )}
       {currentView === 'home' ? (
-        <HomeScreen onSend={(text) => {
-          setCurrentView('chat')
-          setTimeout(() => send(text), 50)
-        }} />
+        <HomeScreen
+          onSend={(text) => {
+            setCurrentView('chat')
+            setTimeout(() => send(text), 50)
+          }}
+          onCompose={(channel) => setComposeChannel(channel)}
+        />
       ) : currentView === 'recipes' ? (
         <RecipeList />
       ) : currentView === 'recipe-detail' ? (
@@ -237,6 +242,12 @@ export function App() {
         open={fileBrowserOpen}
         onClose={() => setFileBrowserOpen(false)}
       />
+      {composeChannel && (
+        <ComposeFlow
+          channel={composeChannel}
+          onClose={() => setComposeChannel(null)}
+        />
+      )}
     </div>
   )
 }
