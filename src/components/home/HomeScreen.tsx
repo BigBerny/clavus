@@ -144,47 +144,9 @@ export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
   return (
     <div className="flex-1 overflow-y-auto overscroll-none" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="max-w-[760px] mx-auto pb-4">
-        {/* Hero Greeting */}
-        <div className="px-5 pt-8 pb-5 animate-[fadeSlideIn_0.35s_ease-out]">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-violet-500/25 ring-2 ring-violet-500/10">
-              J
-            </div>
-            <div>
-              <h1 className="text-[26px] font-bold text-text-light dark:text-text-dark tracking-tight leading-tight">
-                {greeting}
-              </h1>
-              <p className="text-[14px] text-text-light-muted/70 dark:text-text-dark-muted/70 mt-0.5">
-                What can I help you with?
-              </p>
-            </div>
-          </div>
-        </div>
-
         {/* Quick Actions */}
-        <div className="animate-[fadeSlideIn_0.35s_ease-out_0.04s_both]">
+        <div className="pt-6 animate-[fadeSlideIn_0.35s_ease-out]">
           <QuickActions />
-        </div>
-
-        {/* Quick prompts — scrollable row */}
-        <div className="px-5 pt-5 pb-1 animate-[fadeSlideIn_0.35s_ease-out_0.08s_both]">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
-            {[
-              { icon: '💡', text: 'What can you do?' },
-              { icon: '✍️', text: 'Help me write' },
-              { icon: '🔍', text: 'Explain something' },
-              { icon: '💻', text: 'Help me code' },
-            ].map(({ icon, text }) => (
-              <button
-                key={text}
-                onClick={() => handleSend(text)}
-                className="inline-btn flex items-center gap-2 px-3.5 py-2 text-[13px] rounded-full bg-surface-light-2/60 dark:bg-surface-dark-2/60 border border-surface-light-3/40 dark:border-surface-dark-3/40 text-text-light-muted dark:text-text-dark-muted hover:bg-accent/10 dark:hover:bg-accent/15 hover:text-accent hover:border-accent/20 transition-all duration-150 active:scale-[0.97] whitespace-nowrap flex-shrink-0 font-medium"
-              >
-                <span className="text-sm">{icon}</span>
-                <span>{text}</span>
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Previous Chats */}
