@@ -84,12 +84,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Extend element's background through the safe area without adding content padding */
-.safe-area-extend-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  margin-bottom: calc(-1 * env(safe-area-inset-bottom, 0px));
-}
-
 /* Prevent text selection on UI (but allow in messages via select-text class) */
 button, header, nav, [role="toolbar"] {
   -webkit-user-select: none;
