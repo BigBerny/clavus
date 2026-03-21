@@ -119,17 +119,6 @@ export function App() {
 
     const onResize = () => {
       root.style.height = `${vv.height}px`
-      root.style.transform = `translateY(${vv.offsetTop}px)`
-      requestAnimationFrame(() => {
-        const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
-        if (scrollContainer) {
-          const { scrollTop } = scrollContainer
-          scrollContainer.style.overflow = 'hidden'
-          scrollContainer.offsetHeight // force reflow
-          scrollContainer.style.overflow = ''
-          scrollContainer.scrollTop = scrollTop
-        }
-      })
     }
 
     vv.addEventListener('resize', onResize)
