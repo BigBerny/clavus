@@ -24,7 +24,7 @@ function QuickActions() {
           href="https://mac-mini-von-janis.taild2ad59.ts.net:3700/"
           target="_blank"
           rel="noopener noreferrer"
-          className="group relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-violet-500/12 to-indigo-600/8 dark:from-violet-500/18 dark:to-indigo-600/12 border border-violet-400/15 dark:border-violet-400/20 hover:border-violet-400/35 hover:from-violet-500/18 hover:to-indigo-600/12 dark:hover:from-violet-500/25 dark:hover:to-indigo-600/18 transition-all duration-200 active:scale-[0.97]"
+          className="group relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-violet-500/12 to-indigo-600/8 dark:from-violet-500/18 dark:to-indigo-600/12 border border-violet-400/15 dark:border-violet-400/20 hover:border-violet-400/35 hover:from-violet-500/18 hover:to-indigo-600/12 dark:hover:from-violet-500/25 dark:hover:to-indigo-600/18 transition-all duration-200 active:scale-[0.97]"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-violet-500/8 to-transparent rounded-bl-full" />
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/25 group-hover:shadow-violet-500/40 group-hover:scale-105 transition-all duration-200">
@@ -37,7 +37,7 @@ function QuickActions() {
         </a>
         <button
           disabled
-          className="relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/8 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/6 border border-amber-400/10 dark:border-amber-400/12 opacity-45 cursor-not-allowed"
+          className="relative overflow-hidden flex items-start gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/8 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/6 border border-amber-400/10 dark:border-amber-400/12 opacity-45 cursor-not-allowed"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/5 to-transparent rounded-bl-full" />
           <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/15">

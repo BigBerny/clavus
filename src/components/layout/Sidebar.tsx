@@ -87,11 +87,7 @@ function ThreadItem({ thread, isActive, onSelect, onDelete, canDelete = true }: 
               ? 'bg-accent/15 text-accent'
               : 'bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted'
           }`}>
-            {thread.id === 'timeline-main' ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            )}
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline justify-between gap-2">
@@ -258,7 +254,7 @@ export function Sidebar() {
                 isActive={thread.id === activeThreadId}
                 onSelect={() => handleSelectThread(thread.id)}
                 onDelete={() => handleDeleteThread(thread.id)}
-                canDelete={thread.id !== 'timeline-main'}
+                canDelete={true}
               />
             ))
           )}

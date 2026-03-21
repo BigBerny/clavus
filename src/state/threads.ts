@@ -191,29 +191,14 @@ export async function syncFromServer(): Promise<boolean> {
   }
 }
 
-// Default timeline thread ID — single continuous conversation
-const DEFAULT_TIMELINE_ID = 'timeline-main'
-
-// Initialize: ensure at least the default timeline exists
+// Initialize threads
 const initialThreads = loadThreads()
 let initialActiveId = getActiveThreadId()
 
-if (!initialThreads.find((t) => t.id === DEFAULT_TIMELINE_ID)) {
-  const thread: Thread = {
-    id: DEFAULT_TIMELINE_ID,
-    title: 'Timeline',
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    lastMessagePreview: '',
-  }
-  initialThreads.unshift(thread)
-  saveThreads(initialThreads)
-}
-
-// Default to timeline if no active thread or active thread doesn't exist
-if (!initialActiveId || !initialThreads.find((t) => t.id === initialActiveId)) {
-  initialActiveId = DEFAULT_TIMELINE_ID
-  saveActiveThreadId(initialActiveId)
+// If active thread doesn't exist anymore, clear it
+if (initialActiveId && !initialThreads.find((t) => t.id === initialActiveId)) {
+  initialActiveId = ''
+  saveActiveThreadId('')
 }
 
 // Migrate old single-thread messages to first thread if needed
@@ -264,17 +249,14 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
   },
 
   deleteThread: (id) => {
-    // Never delete the default timeline
-    if (id === DEFAULT_TIMELINE_ID) return
-
     set((state) => {
       const threads = state.threads.filter((t) => t.id !== id)
       localStorage.removeItem(getMessagesKey(id))
 
       let activeThreadId = state.activeThreadId
       if (activeThreadId === id) {
-        // Fall back to default timeline
-        activeThreadId = DEFAULT_TIMELINE_ID
+        // Fall back to first remaining thread or empty
+        activeThreadId = threads.length > 0 ? threads[0].id : ''
       }
 
       saveThreads(threads)
