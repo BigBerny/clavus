@@ -129,23 +129,28 @@ export function Sidebar() {
   const loadThread = useChatStore((s) => s.loadThread)
   const [search, setSearch] = useState('')
 
+  const setCurrentView = useUIStore((s) => s.setCurrentView)
+
   const handleNewThread = useCallback(() => {
     navigator.vibrate?.(10)
     const id = createThread()
     loadThread(id)
+    setCurrentView('chat')
     setSidebarOpen(false)
-  }, [createThread, loadThread, setSidebarOpen])
+  }, [createThread, loadThread, setCurrentView, setSidebarOpen])
 
   const handleSelectThread = useCallback((id: string) => {
     if (id === activeThreadId) {
+      setCurrentView('chat')
       setSidebarOpen(false)
       return
     }
     navigator.vibrate?.(5)
     switchThread(id)
     loadThread(id)
+    setCurrentView('chat')
     setSidebarOpen(false)
-  }, [activeThreadId, switchThread, loadThread, setSidebarOpen])
+  }, [activeThreadId, switchThread, loadThread, setCurrentView, setSidebarOpen])
 
   const handleDeleteThread = useCallback((id: string) => {
     navigator.vibrate?.(15)

@@ -35,6 +35,7 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
   const handleNewConversation = () => {
     const id = createThread()
     loadThread(id)
+    setCurrentView('chat')
   }
 
   return (
