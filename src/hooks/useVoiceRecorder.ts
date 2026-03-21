@@ -25,6 +25,20 @@ function fileExtForMime(mime: string): string {
   return 'webm'
 }
 
+// Strip filler words and non-speech annotations from transcription
+function cleanTranscription(text: string): string {
+  return text
+    // Remove parenthetical annotations like (laughs), (sighs), (music), etc.
+    .replace(/\([^)]*\)/g, '')
+    // Remove common German filler words (standalone)
+    .replace(/\b(ähm|äh|uhm|uh|hm|hmm|mhm)\b/gi, '')
+    // Remove common English filler words (standalone)  
+    .replace(/\b(um|uh|uhh|umm|hmm|hm)\b/gi, '')
+    // Clean up extra whitespace
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
 interface UseVoiceRecorderOptions {
   onTranscription: (text: string) => void
   onInsertTranscription?: (text: string) => void // Insert text without sending
@@ -95,6 +109,7 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription, silen
         const formData = new FormData()
         formData.append('file', blob, `recording.${fileExtForMime(blob.type)}`)
         formData.append('model_id', 'scribe_v1')
+        formData.append('tag_audio_events', 'false')
 
         const res = await fetch('/elevenlabs/v1/speech-to-text', {
           method: 'POST',
@@ -107,7 +122,8 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription, silen
         }
 
         const data = await res.json()
-        const text = data.text?.trim()
+        const rawText = data.text?.trim()
+        const text = rawText ? cleanTranscription(rawText) : ''
         if (text) {
           if (insertModeRef.current && onInsertTranscription) {
             onInsertTranscription(text)
