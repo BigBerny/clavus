@@ -117,10 +117,16 @@ export function App() {
     const root = document.getElementById('root')
     if (!root) return
 
+    let lastHeight = 0
     const onResize = () => {
-      const keyboardOpen = vv.height < window.innerHeight * 0.9
+      const newHeight = Math.round(vv.height)
+      // Only update if height changed by more than 2px (ignore sub-pixel jitter)
+      if (Math.abs(newHeight - lastHeight) < 3) return
+      lastHeight = newHeight
+
+      const keyboardOpen = newHeight < window.innerHeight * 0.9
       if (keyboardOpen) {
-        root.style.height = `${vv.height}px`
+        root.style.height = `${newHeight}px`
       } else {
         root.style.height = '100%'
         // When keyboard closes, scroll chat to bottom
