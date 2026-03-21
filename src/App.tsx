@@ -118,11 +118,18 @@ export function App() {
     if (!root) return
 
     const onResize = () => {
-      // Only constrain height when keyboard is actually open (viewport smaller than window)
-      if (vv.height < window.innerHeight * 0.9) {
+      const keyboardOpen = vv.height < window.innerHeight * 0.9
+      if (keyboardOpen) {
         root.style.height = `${vv.height}px`
       } else {
         root.style.height = '100%'
+        // When keyboard closes, scroll chat to bottom
+        requestAnimationFrame(() => {
+          const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
+          if (scrollContainer) {
+            scrollContainer.scrollTop = scrollContainer.scrollHeight
+          }
+        })
       }
     }
 
