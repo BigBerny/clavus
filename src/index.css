@@ -26,6 +26,10 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
 }
 
 body {
