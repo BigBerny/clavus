@@ -17,6 +17,7 @@ function relativeTime(timestamp: number): string {
 }
 
 function QuickActions() {
+  const setCurrentView = useUIStore((s) => s.setCurrentView)
   return (
     <div className="px-5 pt-1 pb-1">
       <div className="grid grid-cols-2 gap-3">

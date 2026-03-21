@@ -201,10 +201,14 @@ export function App() {
           setCurrentView('chat')
           setTimeout(() => send(text), 50)
         }} />
+      ) : currentView === 'recipes' ? (
+        <RecipeList />
+      ) : currentView === 'recipe-detail' ? (
+        <RecipeDetail />
       ) : (
         <ChatView key={activeThreadId} messages={messages} />
       )}
-      <InputBar
+      {(currentView === 'home' || currentView === 'chat') && <InputBar
         onSend={(text, images) => {
           if (currentView === 'home') {
             setCurrentView('chat')
@@ -216,7 +220,7 @@ export function App() {
         onAbort={abort}
         isStreaming={isStreaming}
         onRecordingChange={handleRecordingChange}
-      />
+      />}
       <FileBrowser
         open={fileBrowserOpen}
         onClose={() => setFileBrowserOpen(false)}

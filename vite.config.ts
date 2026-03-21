@@ -213,34 +213,26 @@ function recipesApiPlugin() {
         return Buffer.concat(chunks).toString('utf-8')
       }
 
+      // Serve recipe images at /recipe-images/
+      server.middlewares.use((req: any, res: any, next: any) => {
+        if (!req.url?.startsWith('/recipe-images/')) return next()
+        const fileName = decodeURIComponent(req.url.replace('/recipe-images/', ''))
+        const filePath = nodePath.join(IMAGES_DIR, fileName)
+        if (!filePath.startsWith(IMAGES_DIR)) { res.statusCode = 403; res.end(); return }
+        if (!fs.existsSync(filePath)) { res.statusCode = 404; res.end(); return }
+        const ext = nodePath.extname(filePath).toLowerCase()
+        const mimeMap: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }
+        res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream')
+        res.setHeader('Cache-Control', 'public, max-age=86400')
+        fs.createReadStream(filePath).pipe(res)
+      })
+
       server.middlewares.use(async (req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/recipes')) return next()
 
         res.setHeader('Content-Type', 'application/json')
 
         try {
-          // Serve recipe images — must be before :id match
-          if (req.url.startsWith('/api/recipes/images/')) {
-            const filename = decodeURIComponent(req.url.replace('/api/recipes/images/', ''))
-            const imagePath = nodePath.join(IMAGES_DIR, filename)
-            if (!imagePath.startsWith(IMAGES_DIR)) {
-              res.statusCode = 403
-              res.end(JSON.stringify({ error: 'Forbidden' }))
-              return
-            }
-            if (fs.existsSync(imagePath)) {
-              const ext = nodePath.extname(filename).toLowerCase()
-              const mimeMap: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }
-              res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream')
-              res.setHeader('Cache-Control', 'public, max-age=86400')
-              fs.createReadStream(imagePath).pipe(res)
-              return
-            }
-            res.statusCode = 404
-            res.end(JSON.stringify({ error: 'Image not found' }))
-            return
-          }
-
           // GET /api/recipes/search?q=...
           if (req.url.startsWith('/api/recipes/search') && req.method === 'GET') {
             const url = new URL(req.url, 'http://localhost')
