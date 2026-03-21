@@ -153,14 +153,8 @@ export function App() {
       const activeThread = useThreadsStore.getState().getActiveThread()
       const setDrawerOpen = useUIStore.getState().setDrawerOpen
       if (activeThread) {
-        const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
-        if (activeThread.updatedAt > thirtyMinutesAgo) {
-          setCurrentView('chat')
-          setDrawerOpen(false)
-        } else {
-          setCurrentView('chat')
-          setDrawerOpen(true)
-        }
+        setCurrentView('chat')
+        setDrawerOpen(true)
       } else {
         setCurrentView('home')
         setDrawerOpen(true)

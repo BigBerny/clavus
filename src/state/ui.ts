@@ -61,7 +61,7 @@ export const useUIStore = create<UIState>((set) => ({
   resolvedTheme: initialResolved,
   connectionStatus: 'checking',
   currentView: 'home',
-  drawerOpen: false,
+  drawerOpen: true,
   settingsOpen: false,
   sidebarOpen: false,
   fileBrowserOpen: false,

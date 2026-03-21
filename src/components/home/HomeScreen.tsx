@@ -177,11 +177,12 @@ export function HomeDrawer() {
 
   return (
     <div
-      className="overflow-hidden transition-all duration-300 ease-out border-b border-surface-light-3/30 dark:border-surface-dark-3/30"
+      className="overflow-hidden border-b border-surface-light-3/30 dark:border-surface-dark-3/30"
       style={{
         maxHeight: drawerOpen ? `${contentHeight}px` : '0px',
         opacity: drawerOpen ? 1 : 0,
         borderBottomWidth: drawerOpen ? undefined : 0,
+        transition: 'max-height 400ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms ease',
       }}
     >
       <div ref={contentRef}>
