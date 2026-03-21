@@ -14,7 +14,14 @@ export function ChatView({ messages }: Props) {
   const tts = useTTS()
 
   const scrollToBottom = useCallback((instant = false) => {
-    bottomRef.current?.scrollIntoView({ behavior: instant ? 'instant' : 'smooth' })
+    const container = containerRef.current
+    if (container) {
+      if (instant) {
+        container.scrollTop = container.scrollHeight
+      } else {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+      }
+    }
     setAutoScroll(true)
   }, [])
 
@@ -27,7 +34,14 @@ export function ChatView({ messages }: Props) {
     // New message added → instant scroll; streaming → instant to keep up; otherwise smooth
     const isNewMessage = messages.length > prevMessagesLenRef.current
     const isActivelyStreaming = messages.some(m => m.streaming)
-    bottomRef.current?.scrollIntoView({ behavior: (isNewMessage || isActivelyStreaming) ? 'instant' : 'smooth' })
+    const container = containerRef.current
+    if (container) {
+      if (isNewMessage || isActivelyStreaming) {
+        container.scrollTop = container.scrollHeight
+      } else {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
+      }
+    }
     prevMessagesLenRef.current = messages.length
   }, [messages, autoScroll])
 
@@ -63,7 +77,7 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="h-full overflow-y-auto overscroll-y-contain py-3 scroll-smooth"
+        className="h-full overflow-y-auto overscroll-y-contain py-3"
         style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"
