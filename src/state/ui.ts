@@ -3,10 +3,13 @@ import { create } from 'zustand'
 export type ThemeChoice = 'dark' | 'light' | 'system'
 type ResolvedTheme = 'dark' | 'light'
 
+export type AppView = 'home' | 'chat'
+
 interface UIState {
   themeChoice: ThemeChoice
   resolvedTheme: ResolvedTheme
   connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
+  currentView: AppView
   settingsOpen: boolean
   sidebarOpen: boolean
   fileBrowserOpen: boolean
@@ -16,6 +19,7 @@ interface UIState {
 
   setThemeChoice: (choice: ThemeChoice) => void
   setConnectionStatus: (status: UIState['connectionStatus']) => void
+  setCurrentView: (view: AppView) => void
   setSettingsOpen: (open: boolean) => void
   setSidebarOpen: (open: boolean) => void
   setFileBrowserOpen: (open: boolean) => void
@@ -53,6 +57,7 @@ export const useUIStore = create<UIState>((set) => ({
   themeChoice: initialChoice,
   resolvedTheme: initialResolved,
   connectionStatus: 'checking',
+  currentView: 'home',
   settingsOpen: false,
   sidebarOpen: false,
   fileBrowserOpen: false,
@@ -68,6 +73,7 @@ export const useUIStore = create<UIState>((set) => ({
   },
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),
+  setCurrentView: (view) => set({ currentView: view }),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setFileBrowserOpen: (open) => set({ fileBrowserOpen: open }),

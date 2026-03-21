@@ -5,6 +5,7 @@ import { Sidebar } from './components/layout/Sidebar.tsx'
 import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
+import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore } from './state/threads.ts'
@@ -55,6 +56,8 @@ export function App() {
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
+  const currentView = useUIStore((s) => s.currentView)
+  const setCurrentView = useUIStore((s) => s.setCurrentView)
   const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
   const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
   const activeThreadId = useThreadsStore((s) => s.activeThreadId)
@@ -142,6 +145,22 @@ export function App() {
     }
   }, [])
 
+  // Auto-routing: show home if last activity > 30 min ago, else go to chat
+  useEffect(() => {
+    if (needsToken) return
+    const activeThread = useThreadsStore.getState().getActiveThread()
+    if (activeThread) {
+      const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
+      if (activeThread.updatedAt > thirtyMinutesAgo) {
+        setCurrentView('chat')
+      } else {
+        setCurrentView('home')
+      }
+    } else {
+      setCurrentView('home')
+    }
+  }, [needsToken, setCurrentView])
+
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
     setIsRecording(recording)
     setRecordingDuration(duration)
@@ -159,6 +178,7 @@ export function App() {
         recordingDuration={recordingDuration}
         onCancelRecording={() => cancelRecordingRef.current?.()}
         isStreaming={isStreaming}
+        showHomeButton={currentView === 'chat'}
       />
       {connectionStatus === 'disconnected' && (
         <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15 animate-[fadeSlideIn_0.2s_ease-out]">
@@ -182,9 +202,23 @@ export function App() {
           <span className="text-[12px] text-amber-600 dark:text-amber-400/90">Reconnecting...</span>
         </div>
       )}
-      <ChatView key={activeThreadId} messages={messages} />
+      {currentView === 'home' ? (
+        <HomeScreen onSend={(text) => {
+          setCurrentView('chat')
+          setTimeout(() => send(text), 50)
+        }} />
+      ) : (
+        <ChatView key={activeThreadId} messages={messages} />
+      )}
       <InputBar
-        onSend={send}
+        onSend={(text, images) => {
+          if (currentView === 'home') {
+            setCurrentView('chat')
+            setTimeout(() => send(text, images), 50)
+          } else {
+            send(text, images)
+          }
+        }}
         onAbort={abort}
         isStreaming={isStreaming}
         onRecordingChange={handleRecordingChange}
