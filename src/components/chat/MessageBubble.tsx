@@ -1,8 +1,106 @@
-import { memo, useState, useCallback, useEffect, useRef } from 'react'
+import { memo, useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import type { Message } from '../../state/chat'
+
+// ─── Copyable Block ─────────────────────────────────────────────────────────
+// Renders content inside :::copy fences as a styled card with a copy button.
+// Copies as rich text (HTML) so formatting (links, lists, etc.) is preserved
+// when pasting into Slack, email, etc.
+
+function CopyableBlock({ children }: { children: string }) {
+  const [copied, setCopied] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  const handleCopy = useCallback(async () => {
+    if (!contentRef.current) return
+    try {
+      const html = contentRef.current.innerHTML
+      const plain = contentRef.current.innerText
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([plain], { type: 'text/plain' }),
+        }),
+      ])
+    } catch {
+      // Fallback: copy plain text
+      navigator.clipboard.writeText(contentRef.current.innerText)
+    }
+    setCopied(true)
+    navigator.vibrate?.(10)
+    setTimeout(() => setCopied(false), 2000)
+  }, [])
+
+  return (
+    <div className="my-3 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden relative group/copy">
+      <div className="flex items-center justify-between px-3 py-1.5 border-b border-accent/10">
+        <span className="text-[11px] font-medium text-accent/60 uppercase tracking-wider">Output</span>
+        <button
+          onClick={handleCopy}
+          className={`inline-btn flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-medium transition-all ${
+            copied
+              ? 'text-emerald-500 bg-emerald-500/10'
+              : 'text-accent/70 hover:text-accent hover:bg-accent/10'
+          }`}
+          aria-label={copied ? 'Copied to clipboard' : 'Copy to clipboard'}
+        >
+          {copied ? (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              Copy
+            </>
+          )}
+        </button>
+      </div>
+      <div ref={contentRef} className="px-4 py-3 prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text">
+        <Markdown remarkPlugins={[remarkGfm]}>{children}</Markdown>
+      </div>
+    </div>
+  )
+}
+
+// Parse :::copy blocks from markdown content
+function splitCopyBlocks(content: string): Array<{ type: 'text' | 'copy'; content: string }> {
+  const parts: Array<{ type: 'text' | 'copy'; content: string }> = []
+  const lines = content.split('\n')
+  let current = ''
+  let inCopy = false
+  let copyContent = ''
+
+  for (const line of lines) {
+    if (line.trim() === ':::copy' && !inCopy) {
+      if (current.trim()) parts.push({ type: 'text', content: current })
+      current = ''
+      inCopy = true
+      copyContent = ''
+    } else if (line.trim() === ':::' && inCopy) {
+      parts.push({ type: 'copy', content: copyContent.trim() })
+      copyContent = ''
+      inCopy = false
+    } else if (inCopy) {
+      copyContent += line + '\n'
+    } else {
+      current += line + '\n'
+    }
+  }
+
+  // Handle unclosed copy block
+  if (inCopy && copyContent.trim()) {
+    parts.push({ type: 'copy', content: copyContent.trim() })
+  }
+  if (!inCopy && current.trim()) {
+    parts.push({ type: 'text', content: current })
+  }
+
+  return parts
+}
 
 interface Props {
   message: Message
@@ -182,6 +280,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
+  const contentParts = useMemo(() => 
+    isAssistant ? splitCopyBlocks(message.content) : [],
+    [isAssistant, message.content]
+  )
   const isError = isSystem && message.content.startsWith('Error:')
   const [copied, setCopied] = useState(false)
   const [showFullTime, setShowFullTime] = useState(false)
@@ -301,13 +403,30 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             </div>
           ) : (
             <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-x-auto overflow-y-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
-              <Markdown
-                remarkPlugins={[remarkGfm]}
-                rehypePlugins={[rehypeHighlight]}
-                components={{ code: CodeBlock, a: ExternalLink }}
-              >
-                {message.content || ' '}
-              </Markdown>
+              {contentParts.length > 1 || contentParts.some(p => p.type === 'copy') ? (
+                contentParts.map((part, i) =>
+                  part.type === 'copy' ? (
+                    <CopyableBlock key={i}>{part.content}</CopyableBlock>
+                  ) : (
+                    <Markdown
+                      key={i}
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeHighlight]}
+                      components={{ code: CodeBlock, a: ExternalLink }}
+                    >
+                      {part.content}
+                    </Markdown>
+                  )
+                )
+              ) : (
+                <Markdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                  components={{ code: CodeBlock, a: ExternalLink }}
+                >
+                  {message.content || ' '}
+                </Markdown>
+              )}
             </div>
           )}
           {/* Streaming cursor rendered via CSS ::after on .streaming-bubble .prose */}
