@@ -26,6 +26,11 @@ html, body, #root {
   padding: 0;
   overflow: hidden;
   overscroll-behavior: none;
+  background-color: var(--color-surface-dark, #111318);
+}
+
+html:not(.dark), html:not(.dark) body, html:not(.dark) #root {
+  background-color: var(--color-surface-light, #ffffff);
 }
 
 body {
@@ -69,7 +74,7 @@ body {
   padding-top: env(safe-area-inset-top);
 }
 .safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+  padding-bottom: 0px;
 }
 
 /* Prevent text selection on UI (but allow in messages via select-text class) */
