@@ -96,7 +96,7 @@ function BringModal({ ingredients, servings, defaultServings, onClose }: {
     try {
       await addToBring(items)
       setDone(true)
-      setTimeout(onClose, 1200)
+      setTimeout(onClose, 400)
     } catch {
       setSending(false)
     }
