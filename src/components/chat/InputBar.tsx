@@ -76,6 +76,32 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
     adjustHeight()
   }, [value, adjustHeight])
 
+  // Image paste handler
+  const handlePaste = useCallback((e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+
+    for (const item of Array.from(items)) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (!file || file.size > MAX_IMAGE_SIZE) continue
+        if (pendingImages.length >= MAX_IMAGES) continue
+
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = reader.result as string
+          setPendingImages((prev) => {
+            if (prev.length >= MAX_IMAGES) return prev
+            return [...prev, dataUrl]
+          })
+        }
+        reader.readAsDataURL(file)
+        return // Only handle the first image
+      }
+    }
+  }, [pendingImages.length])
+
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed && pendingImages.length === 0) return
@@ -267,6 +293,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Pr
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               placeholder={currentView === 'home' ? "Start a new conversation..." : "Message..."}
               rows={1}
               disabled={isTranscribing}
