@@ -70,8 +70,10 @@ export function ChatView({ messages }: Props) {
       <div
         ref={containerRef}
         onScroll={handleScroll}
-        onClick={() => {
-          // Tap to dismiss keyboard on mobile
+        onClick={(e) => {
+          // Dismiss keyboard on tap, but not when clicking interactive elements
+          const target = e.target as HTMLElement
+          if (target.closest('button, a, [role="button"]')) return
           const active = document.activeElement as HTMLElement | null
           if (active?.tagName === 'TEXTAREA' || active?.tagName === 'INPUT') {
             active.blur()
