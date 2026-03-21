@@ -40,7 +40,7 @@ function HighlightedInstruction({ text }: { text: string }) {
         if (part.startsWith('**') && part.endsWith('**')) {
           const inner = part.slice(2, -2)
           return (
-            <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-amber-500/12 dark:bg-amber-500/18 text-amber-700 dark:text-amber-300 font-semibold text-[13px] mx-0.5">
+            <span key={i} className="inline-flex items-center px-1.5 py-[1px] rounded bg-amber-500/12 dark:bg-amber-500/18 text-amber-700 dark:text-amber-300 font-semibold text-[13px] mx-0.5">
               {inner}
             </span>
           )
@@ -277,7 +277,7 @@ export function RecipeDetail() {
           </button>
         </div>
 
-        <div className="px-5 pb-24">
+        <div className="px-5 pb-8">
           {/* Title + meta */}
           <div className="pt-4 pb-3">
             <h1 className="text-xl font-bold text-text-light dark:text-text-dark leading-tight mb-2">{recipe.title}</h1>
@@ -416,7 +416,7 @@ export function RecipeDetail() {
 
           {/* Start Cooking button */}
           {recipe.steps && recipe.steps.length > 0 && (
-            <div className="pt-4 pb-8">
+            <div className="pt-4 pb-4">
               <button
                 onClick={startCooking}
                 className="w-full py-3.5 rounded-2xl bg-accent text-white font-semibold text-[15px] hover:bg-accent/90 active:scale-[0.98] transition-all"
