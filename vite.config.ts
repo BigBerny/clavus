@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
 import nodePath from 'path'
+import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
@@ -25,7 +26,6 @@ function threadsApiPlugin() {
   return {
     name: 'threads-api',
     configureServer(server: any) {
-      // Helper to read request body
       async function readBody(req: any): Promise<string> {
         const chunks: Buffer[] = []
         for await (const chunk of req) chunks.push(Buffer.from(chunk))
@@ -38,7 +38,6 @@ function threadsApiPlugin() {
         res.setHeader('Content-Type', 'application/json')
 
         try {
-          // GET /api/threads — list all threads
           if (req.url === '/api/threads' && req.method === 'GET') {
             const data = fs.existsSync(threadsFile)
               ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
@@ -47,7 +46,6 @@ function threadsApiPlugin() {
             return
           }
 
-          // PUT /api/threads — save all threads
           if (req.url === '/api/threads' && req.method === 'PUT') {
             const body = await readBody(req)
             fs.writeFileSync(threadsFile, body, 'utf-8')
@@ -55,7 +53,6 @@ function threadsApiPlugin() {
             return
           }
 
-          // GET /api/threads/messages/:threadId — get messages for a thread
           const msgMatch = req.url.match(/^\/api\/threads\/messages\/([^/?]+)/)
           if (msgMatch && req.method === 'GET') {
             const threadId = decodeURIComponent(msgMatch[1])
@@ -67,7 +64,6 @@ function threadsApiPlugin() {
             return
           }
 
-          // PUT /api/threads/messages/:threadId — save messages for a thread
           if (msgMatch && req.method === 'PUT') {
             const threadId = decodeURIComponent(msgMatch[1])
             const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
@@ -77,7 +73,6 @@ function threadsApiPlugin() {
             return
           }
 
-          // DELETE /api/threads/messages/:threadId — delete messages for a thread
           if (msgMatch && req.method === 'DELETE') {
             const threadId = decodeURIComponent(msgMatch[1])
             const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
@@ -86,7 +81,6 @@ function threadsApiPlugin() {
             return
           }
 
-          // GET /api/threads/sync — get all threads + all messages in one call
           if (req.url === '/api/threads/sync' && req.method === 'GET') {
             const threads = fs.existsSync(threadsFile)
               ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
@@ -123,7 +117,6 @@ function workspacePlugin() {
         const relPath = decodeURIComponent(req.url.replace('/api/workspace', '') || '/')
         const absPath = nodePath.join(WORKSPACE_ROOT, relPath)
 
-        // Prevent path traversal
         if (!absPath.startsWith(WORKSPACE_ROOT)) {
           res.statusCode = 403
           res.end(JSON.stringify({ error: 'Forbidden' }))
@@ -171,12 +164,10 @@ function elevenLabsProxy() {
         const targetUrl = `https://api.elevenlabs.io${targetPath}`
 
         try {
-          // Collect request body
           const chunks: Buffer[] = []
           for await (const chunk of req) chunks.push(Buffer.from(chunk))
           const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined
 
-          // Forward headers but inject API key
           const headers: Record<string, string> = { 'xi-api-key': ELEVENLABS_KEY }
           if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
 
@@ -187,11 +178,9 @@ function elevenLabsProxy() {
           })
 
           res.statusCode = resp.status
-          // Forward content-type
           const ct = resp.headers.get('content-type')
           if (ct) res.setHeader('Content-Type', ct)
 
-          // Stream response body
           if (resp.body) {
             const reader = resp.body.getReader()
             const pump = async () => {
@@ -214,6 +203,130 @@ function elevenLabsProxy() {
   }
 }
 
+function recipesApiPlugin() {
+  return {
+    name: 'recipes-api',
+    configureServer(server: any) {
+      async function readBody(req: any): Promise<string> {
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(Buffer.from(chunk))
+        return Buffer.concat(chunks).toString('utf-8')
+      }
+
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        if (!req.url?.startsWith('/api/recipes')) return next()
+
+        res.setHeader('Content-Type', 'application/json')
+
+        try {
+          // Serve recipe images — must be before :id match
+          if (req.url.startsWith('/api/recipes/images/')) {
+            const filename = decodeURIComponent(req.url.replace('/api/recipes/images/', ''))
+            const imagePath = nodePath.join(IMAGES_DIR, filename)
+            if (!imagePath.startsWith(IMAGES_DIR)) {
+              res.statusCode = 403
+              res.end(JSON.stringify({ error: 'Forbidden' }))
+              return
+            }
+            if (fs.existsSync(imagePath)) {
+              const ext = nodePath.extname(filename).toLowerCase()
+              const mimeMap: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }
+              res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream')
+              res.setHeader('Cache-Control', 'public, max-age=86400')
+              fs.createReadStream(imagePath).pipe(res)
+              return
+            }
+            res.statusCode = 404
+            res.end(JSON.stringify({ error: 'Image not found' }))
+            return
+          }
+
+          // GET /api/recipes/search?q=...
+          if (req.url.startsWith('/api/recipes/search') && req.method === 'GET') {
+            const url = new URL(req.url, 'http://localhost')
+            const q = url.searchParams.get('q') || ''
+            if (!q.trim()) {
+              res.end(JSON.stringify([]))
+              return
+            }
+            try {
+              const results = searchRecipes(q.trim())
+              res.end(JSON.stringify(results))
+            } catch {
+              res.end(JSON.stringify([]))
+            }
+            return
+          }
+
+          // POST /api/recipes/:id/cook
+          const cookMatch = req.url.match(/^\/api\/recipes\/(\d+)\/cook$/)
+          if (cookMatch && req.method === 'POST') {
+            markCooked(parseInt(cookMatch[1]))
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          // GET/PUT/DELETE /api/recipes/:id
+          const idMatch = req.url.match(/^\/api\/recipes\/(\d+)$/)
+          if (idMatch && req.method === 'GET') {
+            const recipe = getRecipeWithDetails(parseInt(idMatch[1]))
+            if (!recipe) {
+              res.statusCode = 404
+              res.end(JSON.stringify({ error: 'Not found' }))
+              return
+            }
+            res.end(JSON.stringify(recipe))
+            return
+          }
+          if (idMatch && req.method === 'PUT') {
+            const body = JSON.parse(await readBody(req))
+            updateRecipe(parseInt(idMatch[1]), body)
+            const updated = getRecipeWithDetails(parseInt(idMatch[1]))
+            res.end(JSON.stringify(updated))
+            return
+          }
+          if (idMatch && req.method === 'DELETE') {
+            deleteRecipe(parseInt(idMatch[1]))
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          // GET /api/recipes
+          if (req.url === '/api/recipes' && req.method === 'GET') {
+            const recipes = getAllRecipes()
+            res.end(JSON.stringify(recipes))
+            return
+          }
+
+          // POST /api/recipes
+          if (req.url === '/api/recipes' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            if (!body.force) {
+              const dup = checkDuplicate(body.title, body.source_url)
+              if (dup) {
+                res.statusCode = 409
+                res.end(JSON.stringify({ error: 'Duplicate recipe', existing: dup }))
+                return
+              }
+            }
+            const id = createRecipe(body)
+            const recipe = getRecipeWithDetails(id)
+            res.statusCode = 201
+            res.end(JSON.stringify(recipe))
+            return
+          }
+
+          res.statusCode = 404
+          res.end(JSON.stringify({ error: 'Not found' }))
+        } catch (err: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig({
   server: {
     host: '0.0.0.0',
@@ -228,7 +341,6 @@ export default defineConfig({
         target: 'http://127.0.0.1:18789',
         changeOrigin: true,
       },
-
       '/marksense': {
         target: 'http://127.0.0.1:3700',
         changeOrigin: true,
@@ -238,6 +350,7 @@ export default defineConfig({
   },
   plugins: [
     threadsApiPlugin(),
+    recipesApiPlugin(),
     elevenLabsProxy(),
     workspacePlugin(),
     react(),

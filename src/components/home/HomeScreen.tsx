@@ -36,16 +36,16 @@ function QuickActions() {
           </div>
         </a>
         <button
-          disabled
-          className="relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/8 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/6 border border-amber-400/10 dark:border-amber-400/12 opacity-45 cursor-not-allowed"
+          onClick={() => setCurrentView('recipes')}
+          className="group relative overflow-hidden flex items-center gap-3.5 p-4 rounded-2xl bg-gradient-to-br from-amber-500/8 to-orange-500/5 dark:from-amber-500/10 dark:to-orange-500/6 border border-amber-400/10 dark:border-amber-400/12 hover:border-amber-400/35 hover:from-amber-500/18 hover:to-orange-500/12 dark:hover:from-amber-500/20 dark:hover:to-orange-500/15 transition-all duration-200 active:scale-[0.97]"
         >
-          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/5 to-transparent rounded-bl-full" />
-          <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/15">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-500/8 to-transparent rounded-bl-full" />
+          <div className="w-11 h-11 flex-shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/25 group-hover:shadow-amber-500/40 group-hover:scale-105 transition-all duration-200">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
           </div>
           <div className="min-w-0 relative">
             <p className="text-[14px] font-semibold text-text-light dark:text-text-dark text-left">Rezepte</p>
-            <p className="text-[11px] text-amber-600/70 dark:text-amber-400/50 font-medium text-left">Coming soon</p>
+            <p className="text-[11px] text-amber-600/70 dark:text-amber-400/60 font-medium text-left">Rezeptsammlung</p>
           </div>
         </button>
       </div>

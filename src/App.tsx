@@ -4,6 +4,8 @@ import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
+import { RecipeList } from './components/recipes/RecipeList.tsx'
+import { RecipeDetail } from './components/recipes/RecipeDetail.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
@@ -166,7 +168,7 @@ export function App() {
           isStreaming={isStreaming}
         />
       )}
-      {currentView === 'home' && (
+      {(currentView === 'home') && (
         <>
           {/* Safe area for home screen */}
           <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
