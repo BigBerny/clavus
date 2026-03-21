@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat'
 import { useUIStore } from '../../state/ui'
@@ -59,7 +59,7 @@ function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }
     return msgs.length
   }, [thread.id])
 
-  if (messageCount === 0 && thread.id !== 'timeline-main') return null
+  if (messageCount === 0) return null
 
   return (
     <button
@@ -67,11 +67,7 @@ function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }
       className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:scale-[0.98] transition-all duration-150 text-left group"
     >
       <div className="w-9 h-9 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 flex items-center justify-center flex-shrink-0 group-hover:bg-accent/10 dark:group-hover:bg-accent/15 transition-colors duration-150">
-        {thread.id === 'timeline-main' ? (
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        ) : (
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        )}
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2">
@@ -93,6 +89,109 @@ function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }
   )
 }
 
+function DrawerContent({ onSelectThread }: { onSelectThread: (id: string) => void }) {
+  const threads = useThreadsStore((s) => s.threads)
+  const [showAll, setShowAll] = useState(false)
+
+  const now = Date.now()
+  const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000
+
+  const sortedThreads = useMemo(() =>
+    [...threads]
+      .filter(t => {
+        const msgs = loadThreadMessages(t.id)
+        return msgs.length > 0 || t.lastMessagePreview
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt),
+    [threads]
+  )
+
+  const recentThreads = useMemo(() =>
+    showAll ? sortedThreads : sortedThreads.filter(t => t.updatedAt > twentyFourHoursAgo),
+    [sortedThreads, showAll, twentyFourHoursAgo]
+  )
+
+  const hasOlder = sortedThreads.some(t => t.updatedAt <= twentyFourHoursAgo)
+
+  return (
+    <div className="max-w-[760px] mx-auto pb-3">
+      <div className="pt-4">
+        <QuickActions />
+      </div>
+
+      {recentThreads.length > 0 && (
+        <div className="px-5 pt-5">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] font-semibold text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-widest">
+              Recent Chats
+            </p>
+          </div>
+          <div className="space-y-0.5">
+            {recentThreads.map((thread) => (
+              <ChatItem
+                key={thread.id}
+                thread={thread}
+                onSelect={() => onSelectThread(thread.id)}
+              />
+            ))}
+          </div>
+          {!showAll && hasOlder && (
+            <button
+              onClick={() => setShowAll(true)}
+              className="inline-btn w-full mt-3 py-2.5 text-[13px] text-accent/80 hover:text-accent font-medium transition-colors rounded-xl hover:bg-accent/5"
+            >
+              Show older conversations
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function HomeDrawer() {
+  const drawerOpen = useUIStore((s) => s.drawerOpen)
+  const setDrawerOpen = useUIStore((s) => s.setDrawerOpen)
+  const switchThread = useThreadsStore((s) => s.switchThread)
+  const loadThread = useChatStore((s) => s.loadThread)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const [contentHeight, setContentHeight] = useState(0)
+
+  // Measure content height for smooth animation
+  useEffect(() => {
+    if (!contentRef.current) return
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContentHeight(entry.contentRect.height)
+      }
+    })
+    observer.observe(contentRef.current)
+    return () => observer.disconnect()
+  }, [])
+
+  const handleSelectThread = useCallback((id: string) => {
+    switchThread(id)
+    loadThread(id)
+    setDrawerOpen(false)
+  }, [switchThread, loadThread, setDrawerOpen])
+
+  return (
+    <div
+      className="overflow-hidden transition-all duration-300 ease-out border-b border-surface-light-3/30 dark:border-surface-dark-3/30"
+      style={{
+        maxHeight: drawerOpen ? `${contentHeight}px` : '0px',
+        opacity: drawerOpen ? 1 : 0,
+        borderBottomWidth: drawerOpen ? undefined : 0,
+      }}
+    >
+      <div ref={contentRef}>
+        <DrawerContent onSelectThread={handleSelectThread} />
+      </div>
+    </div>
+  )
+}
+
+// Keep HomeScreen export for backwards compat (used when no threads exist)
 export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
@@ -103,7 +202,6 @@ export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
   const now = Date.now()
   const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000
 
-  // Sort by updatedAt descending, filter out empty threads
   const sortedThreads = useMemo(() =>
     [...threads]
       .filter(t => {
@@ -127,31 +225,15 @@ export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
     setCurrentView('chat')
   }, [switchThread, loadThread, setCurrentView])
 
-  const handleSend = useCallback((text: string) => {
-    setCurrentView('chat')
-    setTimeout(() => onSend(text), 50)
-  }, [onSend, setCurrentView])
-
-  const greeting = (() => {
-    const hour = new Date().getHours()
-    if (hour < 5) return 'Late night, huh?'
-    if (hour < 12) return 'Good morning'
-    if (hour < 17) return 'Good afternoon'
-    if (hour < 21) return 'Good evening'
-    return 'Late night, huh?'
-  })()
-
   return (
     <div className="flex-1 overflow-y-auto overscroll-none" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="max-w-[760px] mx-auto pb-4">
-        {/* Quick Actions */}
-        <div className="pt-6 animate-[fadeSlideIn_0.35s_ease-out]">
+        <div className="pt-6">
           <QuickActions />
         </div>
 
-        {/* Previous Chats */}
         {recentThreads.length > 0 && (
-          <div className="px-5 pt-6 animate-[fadeSlideIn_0.35s_ease-out_0.12s_both]">
+          <div className="px-5 pt-6">
             <div className="flex items-center justify-between mb-1">
               <p className="text-[11px] font-semibold text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-widest">
                 Recent Chats

@@ -5,7 +5,7 @@ import { Sidebar } from './components/layout/Sidebar.tsx'
 import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
-import { HomeScreen } from './components/home/HomeScreen.tsx'
+import { HomeScreen, HomeDrawer } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
@@ -151,15 +151,19 @@ export function App() {
     
     const doAutoRoute = () => {
       const activeThread = useThreadsStore.getState().getActiveThread()
+      const setDrawerOpen = useUIStore.getState().setDrawerOpen
       if (activeThread) {
         const thirtyMinutesAgo = Date.now() - 30 * 60 * 1000
         if (activeThread.updatedAt > thirtyMinutesAgo) {
           setCurrentView('chat')
+          setDrawerOpen(false)
         } else {
-          setCurrentView('home')
+          setCurrentView('chat')
+          setDrawerOpen(true)
         }
       } else {
         setCurrentView('home')
+        setDrawerOpen(true)
       }
     }
     
@@ -211,19 +215,28 @@ export function App() {
       {currentView === 'home' ? (
         <HomeScreen onSend={(text) => {
           setCurrentView('chat')
+          useUIStore.getState().setDrawerOpen(false)
           setTimeout(() => send(text), 50)
         }} />
       ) : (
-        <ChatView key={activeThreadId} messages={messages} />
+        <>
+          <HomeDrawer />
+          <ChatView key={activeThreadId} messages={messages} />
+        </>
       )}
       <InputBar
         onSend={(text, images) => {
           if (currentView === 'home') {
             setCurrentView('chat')
+            useUIStore.getState().setDrawerOpen(false)
             setTimeout(() => send(text, images), 50)
           } else {
+            useUIStore.getState().setDrawerOpen(false)
             send(text, images)
           }
+        }}
+        onInputFocus={() => {
+          useUIStore.getState().setDrawerOpen(false)
         }}
         onAbort={abort}
         isStreaming={isStreaming}

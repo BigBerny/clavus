@@ -10,6 +10,7 @@ interface UIState {
   resolvedTheme: ResolvedTheme
   connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
   currentView: AppView
+  drawerOpen: boolean
   settingsOpen: boolean
   sidebarOpen: boolean
   fileBrowserOpen: boolean
@@ -20,6 +21,8 @@ interface UIState {
   setThemeChoice: (choice: ThemeChoice) => void
   setConnectionStatus: (status: UIState['connectionStatus']) => void
   setCurrentView: (view: AppView) => void
+  setDrawerOpen: (open: boolean) => void
+  toggleDrawer: () => void
   setSettingsOpen: (open: boolean) => void
   setSidebarOpen: (open: boolean) => void
   setFileBrowserOpen: (open: boolean) => void
@@ -58,6 +61,7 @@ export const useUIStore = create<UIState>((set) => ({
   resolvedTheme: initialResolved,
   connectionStatus: 'checking',
   currentView: 'home',
+  drawerOpen: false,
   settingsOpen: false,
   sidebarOpen: false,
   fileBrowserOpen: false,
@@ -74,6 +78,8 @@ export const useUIStore = create<UIState>((set) => ({
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   setCurrentView: (view) => set({ currentView: view }),
+  setDrawerOpen: (open) => set({ drawerOpen: open }),
+  toggleDrawer: () => set((s) => ({ drawerOpen: !s.drawerOpen })),
   setSettingsOpen: (open) => set({ settingsOpen: open }),
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setFileBrowserOpen: (open) => set({ fileBrowserOpen: open }),
