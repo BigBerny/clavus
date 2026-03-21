@@ -20,10 +20,19 @@
   --color-border-light: #e5e7eb;
 }
 
-html, body, #root {
+html, body {
   height: 100%;
   margin: 0;
   padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background-color: var(--color-surface-dark, #111318);
+  -webkit-overflow-scrolling: auto;
+  touch-action: none;
+}
+
+#root {
+  height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
   background-color: var(--color-surface-dark, #111318);
