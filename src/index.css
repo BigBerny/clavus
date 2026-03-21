@@ -33,7 +33,7 @@ html, body, #root {
 }
 
 html {
-  background-color: #0f172a;
+  background-color: #111318;
 }
 
 html:not(.dark) {
@@ -81,7 +81,7 @@ body {
   padding-top: env(safe-area-inset-top);
 }
 .safe-area-bottom {
-  padding-bottom: env(safe-area-inset-bottom, 0.5rem);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Prevent text selection on UI (but allow in messages via select-text class) */
