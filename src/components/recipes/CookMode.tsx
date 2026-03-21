@@ -37,7 +37,7 @@ function HighlightedInstruction({ text }: { text: string }) {
         if (part.startsWith('**') && part.endsWith('**')) {
           const inner = part.slice(2, -2)
           return (
-            <span key={i} className="inline-flex items-center px-2 py-1 rounded-lg bg-amber-500/15 dark:bg-amber-500/25 text-amber-600 dark:text-amber-300 font-bold text-[18px] mx-1">
+            <span key={i} className="inline items-center px-1.5 py-0 rounded bg-amber-500/15 dark:bg-amber-500/25 text-amber-600 dark:text-amber-300 font-bold text-[18px]">
               {inner}
             </span>
           )
