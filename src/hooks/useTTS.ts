@@ -33,11 +33,10 @@ function cleanForSpeech(text: string): string {
     .trim()
 }
 
-async function fetchTTSBlob(text: string, apiKey: string, signal: AbortSignal): Promise<Blob> {
+async function fetchTTSBlob(text: string, signal: AbortSignal): Promise<Blob> {
   const res = await fetch(`/elevenlabs/v1/text-to-speech/${VOICE_ID}/stream?optimize_streaming_latency=3`, {
     method: 'POST',
     headers: {
-      'xi-api-key': apiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -114,8 +113,8 @@ export function useTTS() {
       stop()
 
       const config = getConfig()
-      const apiKey = config.elevenLabsApiKey
-      if (!apiKey) return
+      
+      
 
       const clean = cleanForSpeech(text)
       if (!clean) return
@@ -131,14 +130,14 @@ export function useTTS() {
 
         if (sentences.length <= 1) {
           // Short text: single request, simple playback
-          const blob = await fetchTTSBlob(clean, apiKey, controller.signal)
+          const blob = await fetchTTSBlob(clean, controller.signal)
           if (controller.signal.aborted) return
           setLoading(false)
           await playBlob(blob, controller.signal)
         } else {
           // Longer text: chunked sentence-level streaming
           // Pre-fetch first sentence, start playing, then pipeline the rest
-          let nextBlobPromise = fetchTTSBlob(sentences[0], apiKey, controller.signal)
+          let nextBlobPromise = fetchTTSBlob(sentences[0], controller.signal)
 
           for (let i = 0; i < sentences.length; i++) {
             if (controller.signal.aborted) return
@@ -147,7 +146,7 @@ export function useTTS() {
 
             // Pre-fetch next sentence while current one plays
             if (i + 1 < sentences.length) {
-              nextBlobPromise = fetchTTSBlob(sentences[i + 1], apiKey, controller.signal)
+              nextBlobPromise = fetchTTSBlob(sentences[i + 1], controller.signal)
             }
 
             if (i === 0) setLoading(false) // First chunk ready, no longer "loading"

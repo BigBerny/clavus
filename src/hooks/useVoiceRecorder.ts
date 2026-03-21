@@ -90,21 +90,12 @@ export function useVoiceRecorder({ onTranscription, silenceAutoStop = true }: Us
     async (blob: Blob) => {
       setState('transcribing')
       try {
-        const config = getConfig()
-        const apiKey = config.elevenLabsApiKey
-        if (!apiKey) {
-          setErrorWithAutoDismiss('ElevenLabs API key not configured')
-          setState('idle')
-          return
-        }
-
         const formData = new FormData()
         formData.append('file', blob, `recording.${fileExtForMime(blob.type)}`)
         formData.append('model_id', 'scribe_v1')
 
         const res = await fetch('/elevenlabs/v1/speech-to-text', {
           method: 'POST',
-          headers: { 'xi-api-key': apiKey },
           body: formData,
         })
 

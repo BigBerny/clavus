@@ -79,7 +79,7 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
                 </h1>
               </div>
               {isStreaming ? (
-                <p className="text-[11px] text-accent truncate leading-tight -mt-0.5 animate-pulse">
+                <p className="text-[11px] text-accent truncate leading-tight -mt-0.5 animate-[typingPulse_1.5s_ease-in-out_infinite]">
                   typing...
                 </p>
               ) : threadSubtitle ? (

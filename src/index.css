@@ -209,10 +209,7 @@ textarea::-webkit-scrollbar {
   contain: style;
   will-change: contents;
 }
-.streaming-bubble .prose {
-  mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 2em), rgba(0,0,0,0.2) 100%);
-  -webkit-mask-image: linear-gradient(to bottom, black 0%, black calc(100% - 2em), rgba(0,0,0,0.2) 100%);
-}
+/* Bottom mask removed — keep all streaming text fully readable */
 /* Fade-in for each new paragraph/element appearing during streaming */
 .streaming-bubble .prose > * {
   animation: streamWordFade 0.35s ease-out both;
@@ -238,6 +235,12 @@ textarea::-webkit-scrollbar {
 @keyframes chatFadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+/* Smooth typing indicator pulse */
+@keyframes typingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 /* Send button animation */

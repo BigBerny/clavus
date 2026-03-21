@@ -88,15 +88,17 @@ export function App() {
     return () => clearInterval(interval)
   }, [setConnectionStatus, needsToken])
 
-  // Prevent pull-to-refresh in standalone PWA
+  // Prevent pull-to-refresh in standalone PWA (but allow scrolling in scrollable containers)
   useEffect(() => {
     const handler = (e: TouchEvent) => {
       if (e.touches.length > 1) return
       let el = e.target as HTMLElement | null
       while (el && el !== document.body) {
-        if (el.scrollTop > 0) return
+        // If this element is scrollable, allow the touch move
+        if (el.scrollHeight > el.clientHeight) return
         el = el.parentElement
       }
+      // Only prevent if at the very top (pull-to-refresh gesture)
       if (window.scrollY === 0) {
         e.preventDefault()
       }
@@ -116,6 +118,18 @@ export function App() {
     const onResize = () => {
       root.style.height = `${vv.height}px`
       root.style.transform = `translateY(${vv.offsetTop}px)`
+      // Force scroll container to recalculate after iOS keyboard open/close
+      requestAnimationFrame(() => {
+        const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
+        if (scrollContainer) {
+          // Nudge the scroll position to force iOS to re-evaluate scrollability
+          const { scrollTop } = scrollContainer
+          scrollContainer.style.overflow = 'hidden'
+          scrollContainer.offsetHeight // force reflow
+          scrollContainer.style.overflow = ''
+          scrollContainer.scrollTop = scrollTop
+        }
+      })
     }
 
     vv.addEventListener('resize', onResize)

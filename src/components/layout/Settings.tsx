@@ -45,7 +45,7 @@ export function Settings() {
           <h2 className="text-base font-semibold text-text-light dark:text-text-dark">Settings</h2>
           <button
             onClick={() => setSettingsOpen(false)}
-            className="p-2 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors"
+            className="inline-btn flex items-center justify-center w-9 h-9 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted active:scale-95 transition-all"
             aria-label="Close settings"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -110,7 +110,7 @@ export function Settings() {
               <span className="text-[8px] font-bold text-white leading-none">C</span>
             </div>
             <p className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40">
-              Clavus v2.6
+              Clavus v3.0
             </p>
           </div>
         </div>

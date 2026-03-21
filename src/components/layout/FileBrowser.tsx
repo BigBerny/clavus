@@ -149,28 +149,30 @@ export function FileBrowser({ open, onClose }: Props) {
         className="fixed left-0 top-0 bottom-0 w-80 max-w-[85vw] bg-surface-light dark:bg-surface-dark z-50 shadow-xl flex flex-col animate-[slideInLeft_0.2s_ease-out]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 safe-area-top">
-          <div className="flex items-center gap-2 min-w-0">
-            {(currentPath !== '/' || fileContent !== null) && (
-              <button
-                onClick={navigateUp}
-                className="inline-btn p-1.5 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors flex-shrink-0"
-                aria-label="Go back"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
-              </button>
-            )}
-            <h2 className="text-base font-semibold text-text-light dark:text-text-dark truncate">
-              {fileContent !== null ? fileName : 'Files'}
-            </h2>
+        <div className="safe-area-top">
+          <div className="flex items-center justify-between px-4 h-12 border-b border-surface-light-3/50 dark:border-surface-dark-3/50">
+            <div className="flex items-center gap-2 min-w-0">
+              {(currentPath !== '/' || fileContent !== null) && (
+                <button
+                  onClick={navigateUp}
+                  className="inline-btn p-1.5 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors flex-shrink-0"
+                  aria-label="Go back"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+              )}
+              <h2 className="text-base font-semibold text-text-light dark:text-text-dark truncate">
+                {fileContent !== null ? fileName : 'Files'}
+              </h2>
+            </div>
+            <button
+              onClick={onClose}
+              className="inline-btn flex items-center justify-center w-9 h-9 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted active:scale-95 transition-all flex-shrink-0"
+              aria-label="Close file browser"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors flex-shrink-0"
-            aria-label="Close file browser"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
         </div>
 
         {/* Breadcrumb */}
