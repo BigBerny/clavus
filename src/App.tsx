@@ -12,6 +12,7 @@ import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
+import { useSwipeNavigation } from './hooks/useSwipeNavigation.ts'
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   const [token, setToken] = useState('')
@@ -66,6 +67,7 @@ export function App() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState('0:00')
   const cancelRecordingRef = useRef<(() => void) | null>(null)
+  const swipe = useSwipeNavigation()
 
   const handleTokenSave = useCallback((token: string) => {
     setGatewayToken(token)
@@ -167,7 +169,7 @@ export function App() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
+    <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark" onTouchStart={swipe.onTouchStart} onTouchEnd={swipe.onTouchEnd}>
       {currentView === 'chat' && (
         <Header
           isRecording={isRecording}
