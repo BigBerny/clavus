@@ -20,6 +20,8 @@ export function useChat() {
     isStreaming,
     addMessage,
     appendToMessage,
+    appendThinking,
+    setThinkingDone,
     finalizeMessage,
     setStreaming,
     setAbortController,
@@ -108,6 +110,8 @@ export function useChat() {
         getConfig(),
         apiMessages,
         {
+          onThinking: (token) => appendThinking(assistantId, token),
+          onThinkingDone: () => setThinkingDone(assistantId),
           onToken: (token) => appendToMessage(assistantId, token),
           onDone: () => {
             finalizeMessage(assistantId)
@@ -183,7 +187,7 @@ export function useChat() {
         content: `Error: ${error instanceof Error ? error.message : 'Connection failed'}`,
       })
     }
-  }, [addMessage, appendToMessage, finalizeMessage, setStreaming, setAbortController, setConnectionStatus])
+  }, [addMessage, appendToMessage, appendThinking, setThinkingDone, finalizeMessage, setStreaming, setAbortController, setConnectionStatus])
 
   // Keep ref updated for offline queue flush
   useEffect(() => {

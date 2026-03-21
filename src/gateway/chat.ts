@@ -11,6 +11,8 @@ export interface ChatCompletionMessage {
 
 export interface StreamCallbacks {
   onToken: (token: string) => void
+  onThinking?: (token: string) => void
+  onThinkingDone?: () => void
   onDone: () => void
   onError: (error: Error) => void
 }
@@ -67,8 +69,18 @@ export async function sendChatStream(
       }
       try {
         const parsed = JSON.parse(data)
-        const delta = parsed.choices?.[0]?.delta?.content
-        if (delta) callbacks.onToken(delta)
+        const choice = parsed.choices?.[0]
+        const delta = choice?.delta
+        // Reasoning/thinking tokens (Anthropic: reasoning_content, OpenAI: thinking)
+        const thinking = delta?.reasoning_content || delta?.thinking
+        if (thinking && callbacks.onThinking) {
+          callbacks.onThinking(thinking)
+        }
+        // When thinking finishes and content starts, signal thinking done
+        if (delta?.content && callbacks.onThinkingDone) {
+          callbacks.onThinkingDone()
+        }
+        if (delta?.content) callbacks.onToken(delta.content)
       } catch {
         // skip malformed chunks
       }

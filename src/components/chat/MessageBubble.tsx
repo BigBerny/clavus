@@ -4,6 +4,53 @@ import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import type { Message } from '../../state/chat'
 
+// ─── Thinking Block ─────────────────────────────────────────────────────────
+
+function ThinkingBlock({ thinking, isStreaming, defaultExpanded }: { thinking: string; isStreaming: boolean; defaultExpanded: boolean }) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+
+  // Auto-collapse when thinking is done (streaming stops)
+  useEffect(() => {
+    if (!isStreaming && expanded) {
+      const timer = setTimeout(() => setExpanded(false), 300)
+      return () => clearTimeout(timer)
+    }
+  }, [isStreaming])
+
+  // Auto-expand when streaming starts
+  useEffect(() => {
+    if (isStreaming) setExpanded(true)
+  }, [isStreaming])
+
+  return (
+    <div className="mb-2">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="inline-btn flex items-center gap-1.5 text-[12px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className={`transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+        >
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+        {isStreaming ? (
+          <span className="animate-pulse">Thinking...</span>
+        ) : (
+          <span>Reasoning</span>
+        )}
+      </button>
+      {expanded && (
+        <div className="mt-1.5 pl-4 border-l-2 border-text-light-muted/15 dark:border-text-dark-muted/15">
+          <p className="text-[13px] text-text-light-muted/60 dark:text-text-dark-muted/60 whitespace-pre-wrap leading-relaxed select-text" style={{ overflowWrap: 'break-word' }}>
+            {thinking}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Copyable Block ─────────────────────────────────────────────────────────
 // Renders content inside :::copy fences as a styled card with a copy button.
 // Copies as rich text (HTML) so formatting (links, lists, etc.) is preserved
@@ -395,13 +442,22 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             message.content ? (
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55] select-text" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
-          ) : message.streaming && !message.content ? (
+          ) : message.streaming && !message.content && !message.thinking ? (
             <div className="flex items-center gap-[4px] py-0.5">
               <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_infinite]" />
               <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_0.2s_infinite]" />
               <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_0.4s_infinite]" />
             </div>
           ) : (
+            <>
+            {/* Thinking/Reasoning block */}
+            {message.thinking && (
+              <ThinkingBlock
+                thinking={message.thinking}
+                isStreaming={!!message.streaming && !message.thinkingDone}
+                defaultExpanded={!!message.streaming && !message.thinkingDone}
+              />
+            )}
             <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-x-auto overflow-y-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               {contentParts.length > 1 || contentParts.some(p => p.type === 'copy') ? (
                 contentParts.map((part, i) =>
@@ -428,6 +484,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 </Markdown>
               )}
             </div>
+          </>
           )}
           {/* Streaming cursor rendered via CSS ::after on .streaming-bubble .prose */}
         </div>

@@ -5,6 +5,8 @@ export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  thinking?: string
+  thinkingDone?: boolean
   timestamp: number
   streaming?: boolean
   images?: string[] // base64 data URLs
@@ -18,6 +20,8 @@ interface ChatState {
   addMessage: (msg: Omit<Message, 'id' | 'timestamp'>) => string
   updateMessage: (id: string, content: string) => void
   appendToMessage: (id: string, token: string) => void
+  appendThinking: (id: string, token: string) => void
+  setThinkingDone: (id: string) => void
   finalizeMessage: (id: string) => void
   setStreaming: (streaming: boolean) => void
   setAbortController: (controller: AbortController | null) => void
@@ -86,6 +90,20 @@ export const useChatStore = create<ChatState>((set) => ({
     set((state) => ({
       messages: state.messages.map((m) =>
         m.id === id ? { ...m, content: m.content + token } : m,
+      ),
+    })),
+
+  appendThinking: (id, token) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === id ? { ...m, thinking: (m.thinking || '') + token } : m,
+      ),
+    })),
+
+  setThinkingDone: (id) =>
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.id === id ? { ...m, thinkingDone: true } : m,
       ),
     })),
 
