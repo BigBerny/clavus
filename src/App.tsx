@@ -1,11 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Header } from './components/layout/Header.tsx'
-import { Settings } from './components/layout/Settings.tsx'
-import { Sidebar } from './components/layout/Sidebar.tsx'
 import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
-import { HomeScreen, HomeDrawer } from './components/home/HomeScreen.tsx'
+import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
@@ -97,11 +95,9 @@ export function App() {
       if (e.touches.length > 1) return
       let el = e.target as HTMLElement | null
       while (el && el !== document.body) {
-        // If this element is scrollable, allow the touch move
         if (el.scrollHeight > el.clientHeight) return
         el = el.parentElement
       }
-      // Only prevent if at the very top (pull-to-refresh gesture)
       if (window.scrollY === 0) {
         e.preventDefault()
       }
@@ -121,11 +117,9 @@ export function App() {
     const onResize = () => {
       root.style.height = `${vv.height}px`
       root.style.transform = `translateY(${vv.offsetTop}px)`
-      // Force scroll container to recalculate after iOS keyboard open/close
       requestAnimationFrame(() => {
         const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
         if (scrollContainer) {
-          // Nudge the scroll position to force iOS to re-evaluate scrollability
           const { scrollTop } = scrollContainer
           scrollContainer.style.overflow = 'hidden'
           scrollContainer.offsetHeight // force reflow
@@ -145,24 +139,11 @@ export function App() {
     }
   }, [])
 
-  // Sync from server on startup, then auto-route
+  // Sync from server on startup, always start on home
   useEffect(() => {
     if (needsToken) return
-    
-    const doAutoRoute = () => {
-      const activeThread = useThreadsStore.getState().getActiveThread()
-      const setDrawerOpen = useUIStore.getState().setDrawerOpen
-      if (activeThread) {
-        setCurrentView('chat')
-        setDrawerOpen(true)
-      } else {
-        setCurrentView('home')
-        setDrawerOpen(true)
-      }
-    }
-    
-    // Try server sync first, then auto-route
-    syncFromServer().finally(doAutoRoute)
+    setCurrentView('home')
+    syncFromServer()
   }, [needsToken, setCurrentView])
 
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
@@ -177,13 +158,20 @@ export function App() {
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
-      <Header
-        isRecording={isRecording}
-        recordingDuration={recordingDuration}
-        onCancelRecording={() => cancelRecordingRef.current?.()}
-        isStreaming={isStreaming}
-        showHomeButton={currentView === 'chat'}
-      />
+      {currentView === 'chat' && (
+        <Header
+          isRecording={isRecording}
+          recordingDuration={recordingDuration}
+          onCancelRecording={() => cancelRecordingRef.current?.()}
+          isStreaming={isStreaming}
+        />
+      )}
+      {currentView === 'home' && (
+        <>
+          {/* Safe area for home screen */}
+          <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
+        </>
+      )}
       {connectionStatus === 'disconnected' && (
         <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15 animate-[fadeSlideIn_0.2s_ease-out]">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80" />
@@ -209,35 +197,24 @@ export function App() {
       {currentView === 'home' ? (
         <HomeScreen onSend={(text) => {
           setCurrentView('chat')
-          useUIStore.getState().setDrawerOpen(false)
           setTimeout(() => send(text), 50)
         }} />
       ) : (
-        <>
-          <HomeDrawer />
-          <ChatView key={activeThreadId} messages={messages} />
-        </>
+        <ChatView key={activeThreadId} messages={messages} />
       )}
       <InputBar
         onSend={(text, images) => {
           if (currentView === 'home') {
             setCurrentView('chat')
-            useUIStore.getState().setDrawerOpen(false)
             setTimeout(() => send(text, images), 50)
           } else {
-            useUIStore.getState().setDrawerOpen(false)
             send(text, images)
           }
-        }}
-        onInputFocus={() => {
-          useUIStore.getState().setDrawerOpen(false)
         }}
         onAbort={abort}
         isStreaming={isStreaming}
         onRecordingChange={handleRecordingChange}
       />
-      <Sidebar />
-      <Settings />
       <FileBrowser
         open={fileBrowserOpen}
         onClose={() => setFileBrowserOpen(false)}

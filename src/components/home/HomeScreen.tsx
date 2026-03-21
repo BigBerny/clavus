@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat'
 import { useUIStore } from '../../state/ui'
@@ -89,110 +89,6 @@ function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }
   )
 }
 
-function DrawerContent({ onSelectThread }: { onSelectThread: (id: string) => void }) {
-  const threads = useThreadsStore((s) => s.threads)
-  const [showAll, setShowAll] = useState(false)
-
-  const now = Date.now()
-  const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000
-
-  const sortedThreads = useMemo(() =>
-    [...threads]
-      .filter(t => {
-        const msgs = loadThreadMessages(t.id)
-        return msgs.length > 0 || t.lastMessagePreview
-      })
-      .sort((a, b) => b.updatedAt - a.updatedAt),
-    [threads]
-  )
-
-  const recentThreads = useMemo(() =>
-    showAll ? sortedThreads : sortedThreads.filter(t => t.updatedAt > twentyFourHoursAgo),
-    [sortedThreads, showAll, twentyFourHoursAgo]
-  )
-
-  const hasOlder = sortedThreads.some(t => t.updatedAt <= twentyFourHoursAgo)
-
-  return (
-    <div className="max-w-[760px] mx-auto pb-3">
-      <div className="pt-4">
-        <QuickActions />
-      </div>
-
-      {recentThreads.length > 0 && (
-        <div className="px-5 pt-5">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[11px] font-semibold text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-widest">
-              Recent Chats
-            </p>
-          </div>
-          <div className="space-y-0.5">
-            {recentThreads.map((thread) => (
-              <ChatItem
-                key={thread.id}
-                thread={thread}
-                onSelect={() => onSelectThread(thread.id)}
-              />
-            ))}
-          </div>
-          {!showAll && hasOlder && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="inline-btn w-full mt-3 py-2.5 text-[13px] text-accent/80 hover:text-accent font-medium transition-colors rounded-xl hover:bg-accent/5"
-            >
-              Show older conversations
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-export function HomeDrawer() {
-  const drawerOpen = useUIStore((s) => s.drawerOpen)
-  const setDrawerOpen = useUIStore((s) => s.setDrawerOpen)
-  const switchThread = useThreadsStore((s) => s.switchThread)
-  const loadThread = useChatStore((s) => s.loadThread)
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [contentHeight, setContentHeight] = useState(0)
-
-  // Measure content height for smooth animation
-  useEffect(() => {
-    if (!contentRef.current) return
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContentHeight(entry.contentRect.height)
-      }
-    })
-    observer.observe(contentRef.current)
-    return () => observer.disconnect()
-  }, [])
-
-  const handleSelectThread = useCallback((id: string) => {
-    switchThread(id)
-    loadThread(id)
-    setDrawerOpen(false)
-  }, [switchThread, loadThread, setDrawerOpen])
-
-  return (
-    <div
-      className="overflow-hidden border-b border-surface-light-3/30 dark:border-surface-dark-3/30"
-      style={{
-        maxHeight: drawerOpen ? `${contentHeight}px` : '0px',
-        opacity: drawerOpen ? 1 : 0,
-        borderBottomWidth: drawerOpen ? undefined : 0,
-        transition: 'max-height 400ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms ease',
-      }}
-    >
-      <div ref={contentRef}>
-        <DrawerContent onSelectThread={handleSelectThread} />
-      </div>
-    </div>
-  )
-}
-
-// Keep HomeScreen export for backwards compat (used when no threads exist)
 export function HomeScreen({ onSend }: { onSend: (message: string) => void }) {
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)

@@ -1,18 +1,19 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
+import { useUIStore } from '../../state/ui'
 
 interface Props {
   onSend: (message: string, images?: string[]) => void
   onAbort: () => void
   isStreaming: boolean
   onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
-  onInputFocus?: () => void
 }
 
 const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 
-export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, onInputFocus }: Props) {
+export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange }: Props) {
+  const currentView = useUIStore((s) => s.currentView)
   const [value, setValue] = useState('')
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
@@ -258,8 +259,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, onIn
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              onFocus={onInputFocus}
-              placeholder="Message..."
+              placeholder={currentView === 'home' ? "Start a new conversation..." : "Message..."}
               rows={1}
               disabled={isTranscribing}
               aria-label="Chat message input"

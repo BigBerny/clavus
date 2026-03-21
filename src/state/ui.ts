@@ -10,9 +10,6 @@ interface UIState {
   resolvedTheme: ResolvedTheme
   connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
   currentView: AppView
-  drawerOpen: boolean
-  settingsOpen: boolean
-  sidebarOpen: boolean
   fileBrowserOpen: boolean
   gatewayUrl: string
   gatewayToken: string
@@ -21,10 +18,6 @@ interface UIState {
   setThemeChoice: (choice: ThemeChoice) => void
   setConnectionStatus: (status: UIState['connectionStatus']) => void
   setCurrentView: (view: AppView) => void
-  setDrawerOpen: (open: boolean) => void
-  toggleDrawer: () => void
-  setSettingsOpen: (open: boolean) => void
-  setSidebarOpen: (open: boolean) => void
   setFileBrowserOpen: (open: boolean) => void
   setGatewayUrl: (url: string) => void
   setGatewayToken: (token: string) => void
@@ -61,9 +54,6 @@ export const useUIStore = create<UIState>((set) => ({
   resolvedTheme: initialResolved,
   connectionStatus: 'checking',
   currentView: 'home',
-  drawerOpen: true,
-  settingsOpen: false,
-  sidebarOpen: false,
   fileBrowserOpen: false,
   gatewayUrl: localStorage.getItem('clavus-gateway-url') || '',
   gatewayToken: localStorage.getItem('clavus-gateway-token') || '',
@@ -78,10 +68,6 @@ export const useUIStore = create<UIState>((set) => ({
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   setCurrentView: (view) => set({ currentView: view }),
-  setDrawerOpen: (open) => set({ drawerOpen: open }),
-  toggleDrawer: () => set((s) => ({ drawerOpen: !s.drawerOpen })),
-  setSettingsOpen: (open) => set({ settingsOpen: open }),
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setFileBrowserOpen: (open) => set({ fileBrowserOpen: open }),
 
   setGatewayUrl: (url) => {
