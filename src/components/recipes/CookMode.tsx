@@ -325,18 +325,18 @@ export function CookMode() {
             </div>
 
             {/* Timer buttons */}
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {step.duration_min > 0 && (
                 <button
                   onClick={() => startTimer(currentStep, step.duration_min, `${formatDuration(step.duration_min)}`)}
-                  className="inline-btn w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-amber-500/15 text-amber-400 text-[15px] font-medium hover:bg-amber-500/25 transition-colors"
+                  className="inline-btn flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-amber-500/15 text-amber-400 text-[14px] font-medium hover:bg-amber-500/25 transition-colors"
                 >
-                  ⏱ Timer starten ({formatDuration(step.duration_min)})
+                  ⏱ {formatDuration(step.duration_min)}
                 </button>
               )}
               <button
                 onClick={() => startManualTimer(currentStep)}
-                className="inline-btn w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gray-800 text-gray-300 text-[15px] font-medium hover:bg-gray-700 transition-colors"
+                className={`inline-btn flex items-center justify-center gap-2 px-3 py-3 rounded-xl bg-gray-800 text-gray-300 text-[14px] font-medium hover:bg-gray-700 transition-colors ${step.duration_min === 0 ? 'col-span-2' : ''}`}
               >
                 ⏱ Eigener Timer
               </button>
