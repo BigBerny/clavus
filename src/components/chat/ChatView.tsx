@@ -6,12 +6,13 @@ import type { Message } from '../../state/chat'
 
 interface Props {
   messages: Message[]
+  title?: string
 }
 
 // Cache scroll positions per thread
 const scrollPositionCache = new Map<string, number>()
 
-export function ChatView({ messages }: Props) {
+export function ChatView({ messages, title }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -156,6 +157,14 @@ export function ChatView({ messages }: Props) {
 
   return (
     <div className="flex-1 flex flex-col relative min-h-0 chat-bg">
+      {/* Floating title pill */}
+      {title && (
+        <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
+          <div className="px-4 py-1.5 rounded-full bg-surface-light/70 dark:bg-surface-dark/70 backdrop-blur-xl border border-surface-light-3/30 dark:border-surface-dark-3/30 shadow-sm shadow-black/5">
+            <span className="text-[13px] font-medium text-text-light/80 dark:text-text-dark/80 truncate max-w-[250px] block">{title}</span>
+          </div>
+        </div>
+      )}
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -171,17 +180,17 @@ export function ChatView({ messages }: Props) {
         className={`flex-1 min-h-0 ${isScrollable ? 'overflow-y-auto overscroll-y-contain' : 'overflow-y-visible'}`}
         style={{
           ...(isScrollable ? { WebkitOverflowScrolling: 'touch' } : {}),
-          // We don't set overflowX here to keep it visible/clean
           overflowX: 'visible',
           // Tell iOS: this container only handles vertical panning. 
-          // Crucial: when not scrollable, this property still aids the recognizer hint.
-          touchAction: 'pan-y',
+          // Crucial: when not scrollable, touch-action must be 'auto' or 'pan-x pan-y' 
+          // to let the parent horizontal scroll-snap take over the gesture.
+          touchAction: isScrollable ? 'pan-y' : 'auto',
         }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
       >
-        <div className="max-w-[900px] mx-auto px-4 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)' }}>
+        <div className="max-w-[900px] mx-auto px-4 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3rem)' }}>
         {isEmptyChat ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-text-light-muted/30 dark:text-text-dark-muted/30">New conversation</p>

@@ -156,11 +156,15 @@ export function App() {
       if (direction === 'horizontal') return
 
       // Only block vertical pull-to-refresh when the page itself is at the top
-      // AND there is no vertically-scrollable ancestor under the finger.
+      // AND there is no scrollable ancestor (vertical OR horizontal) under the finger.
+      // This is critical for iOS: if we call preventDefault on a vertical gesture that
+      // starts inside the horizontal snap scroller (e.g. a short chat that can't scroll),
+      // Safari may wedge the scroll chain and stop delivering horizontal swipes.
       let el = e.target as HTMLElement | null
       while (el && el !== document.body) {
         // Use a 1px buffer to avoid rounding issues.
         if (el.scrollHeight > el.clientHeight + 1) return
+        if (el.scrollWidth > el.clientWidth + 1) return
         el = el.parentElement
       }
 
@@ -396,6 +400,8 @@ export function App() {
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
+              // iOS Safari: keep the snap scroller strictly horizontal.
+              // Vertical panning should be handled by inner chat scroll areas.
               touchAction: 'pan-x',
             }}
           >
@@ -469,6 +475,8 @@ export function App() {
 function ChatViewPanel({ threadId, isVisible }: { threadId: string; isVisible: boolean }) {
   const storeMessages = useChatStore((s) => s.messages)
   const activeThreadId = useThreadsStore((s) => s.activeThreadId)
+  const threads = useThreadsStore((s) => s.threads)
+  const thread = threads.find(t => t.id === threadId)
 
   // If this is the active thread, use live store messages; otherwise load from storage
   const messages = useMemo(() => {
@@ -478,5 +486,5 @@ function ChatViewPanel({ threadId, isVisible }: { threadId: string; isVisible: b
     return loadThreadMessages(threadId)
   }, [threadId, activeThreadId, storeMessages])
 
-  return <ChatView messages={messages} />
+  return <ChatView messages={messages} title={thread?.title} />
 }
