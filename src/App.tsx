@@ -364,7 +364,7 @@ export function App() {
               <div
                 key={thread.id}
                 ref={setPanelRef(thread.id)}
-                className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
+                className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
               >
                 <ChatViewPanel
                   threadId={thread.id}

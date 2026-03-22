@@ -121,45 +121,29 @@ export function ChatView({ messages }: Props) {
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
 
-  // On iOS, a scroll container with overflow-y:auto captures vertical touch events
-  // even when content doesn't overflow. This blocks horizontal swipe on the parent.
-  // Fix: prevent vertical touchmove when not scrollable, so parent gets the event.
+  // On iOS, overflow-y:auto creates a scroll region that captures ALL touch events,
+  // even when content doesn't overflow. This blocks horizontal swipe on the parent
+  // scroll-snap container. Fix: only enable overflow-y:auto when actually scrollable.
+  const [isScrollable, setIsScrollable] = useState(false)
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-
-    let startY = 0
-    let startX = 0
-
-    const onTouchStart = (e: TouchEvent) => {
-      startY = e.touches[0].clientY
-      startX = e.touches[0].clientX
+    const check = () => {
+      const scrollable = el.scrollHeight > el.clientHeight + 2
+      setIsScrollable(scrollable)
     }
-
-    const onTouchMove = (e: TouchEvent) => {
-      const isContentScrollable = el.scrollHeight > el.clientHeight + 5
-      if (isContentScrollable) return // let normal scrolling work
-
-      const dy = Math.abs(e.touches[0].clientY - startY)
-      const dx = Math.abs(e.touches[0].clientX - startX)
-
-      // If mostly vertical swipe on non-scrollable content, prevent it
-      // so the parent horizontal scroll-snap can handle the gesture
-      if (dy > dx && dy > 5) {
-        e.preventDefault()
-      }
-    }
-
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-    }
-  }, [])
+    // Check after layout settles
+    requestAnimationFrame(check)
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    // Also check when child content changes
+    const mo = new MutationObserver(check)
+    mo.observe(el, { childList: true, subtree: true })
+    return () => { ro.disconnect(); mo.disconnect() }
+  }, [messages.length])
 
   return (
-    <div className="flex-1 flex flex-col relative overflow-hidden min-h-0 chat-bg">
+    <div className={`flex-1 flex flex-col relative min-h-0 chat-bg ${isScrollable ? 'overflow-hidden' : ''}`}>
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -172,8 +156,8 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className={`flex-1 min-h-0 overflow-x-hidden ${isScrollable ? 'overflow-y-auto overscroll-y-contain' : 'overflow-y-hidden'}`}
+        style={isScrollable ? { WebkitOverflowScrolling: 'touch' } : undefined}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
