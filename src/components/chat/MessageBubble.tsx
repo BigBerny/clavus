@@ -400,27 +400,17 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       role="article"
       aria-label={`${isUser ? 'You' : 'Jane'}: ${message.content.slice(0, 80)}`}
     >
-      {/* Assistant avatar (or spacer for grouped messages) */}
-      {isAssistant && (
-        showAvatar ? (
-          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-[#9333EA] to-[#B855F5] flex items-center justify-center text-white text-xs font-bold mr-2 mt-1 shadow-sm shadow-purple-500/20">
-            J
-          </div>
-        ) : (
-          <div className="flex-shrink-0 w-7 mr-2" />
-        )
-      )}
-      <div className={`flex flex-col gap-1 max-w-[78%] md:max-w-[65%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col gap-1 max-w-[92%] md:max-w-[85%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className={`px-4 py-2.5 min-w-0 max-w-full transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
-              ? `bg-gradient-to-br from-[rgba(130,60,210,0.78)] to-[rgba(155,85,235,0.78)] backdrop-blur-[20px] text-white shadow-sm shadow-purple-500/15 border border-purple-300/[0.12] ${
+              ? `bg-gradient-to-br from-[#7B2FBE] to-[#9B59D0] text-white shadow-sm shadow-purple-500/15 ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
                   showAvatar ? 'rounded-[20px] rounded-br-[6px]' :
                   isLastInGroup ? 'rounded-[20px] rounded-tr-[6px]' :
                   'rounded-[20px] rounded-r-[6px]'
                 }`
-              : `bg-[rgba(33,33,45,0.72)] backdrop-blur-[20px] text-text-light dark:text-text-dark shadow-sm shadow-black/15 border border-white/[0.08] ${
+              : `bg-[#1E1F2B] text-text-light dark:text-text-dark shadow-sm shadow-black/10 ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
                   showAvatar ? 'rounded-[20px] rounded-bl-[6px]' :
                   isLastInGroup ? 'rounded-[20px] rounded-tl-[6px]' :
