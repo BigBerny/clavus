@@ -448,7 +448,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 defaultExpanded={!!message.streaming && !message.thinkingDone}
               />
             )}
-            <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text overflow-x-auto overflow-y-hidden" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 select-text [&_pre]:overflow-x-auto [&_table]:overflow-x-auto [&_code]:break-all" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               {contentParts.length > 1 || contentParts.some(p => p.type === 'copy') ? (
                 contentParts.map((part, i) =>
                   part.type === 'copy' ? (
