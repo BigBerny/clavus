@@ -17,7 +17,7 @@ const CHANNEL_CONFIG: Record<ComposeChannel, { label: string; color: string; bgC
     prompt: `You are a message composer. The user dictated a voice message. Rewrite it as a casual WhatsApp/Telegram message. Rules:
 - Keep it casual, conversational, friendly
 - Use emojis where natural (don't overdo it)
-- Keep the same language the user spoke in
+- IMPORTANT: Write in the EXACT SAME language the user dictated in. If the user spoke German, write German. If English, write English. NEVER translate to a different language.
 - Don't add greetings unless the user included one
 - Output ONLY the message text, nothing else`,
   },
@@ -28,7 +28,7 @@ const CHANNEL_CONFIG: Record<ComposeChannel, { label: string; color: string; bgC
     prompt: `You are a message composer. The user dictated a voice message. Rewrite it as a semi-professional Slack message. Rules:
 - Semi-professional tone, friendly but work-appropriate
 - Use Slack markdown formatting where helpful (*bold*, _italic_, \`code\`, bullet lists)
-- Keep the same language the user spoke in
+- IMPORTANT: Write in the EXACT SAME language the user dictated in. If the user spoke German, write German. If English, write English. NEVER translate to a different language.
 - Output ONLY the message text, nothing else`,
   },
   email: {
@@ -38,7 +38,7 @@ const CHANNEL_CONFIG: Record<ComposeChannel, { label: string; color: string; bgC
     prompt: `You are an email composer. The user dictated a voice message. Rewrite it as a proper, professional email. Rules:
 - Professional but warm tone
 - Proper email formatting (greeting, body, sign-off)
-- Keep the same language the user spoke in
+- IMPORTANT: Write in the EXACT SAME language the user dictated in. If the user spoke German, write German. If English, write English. NEVER translate to a different language.
 - If the user mentioned a recipient name, use it in the greeting
 - Output ONLY the email text, nothing else`,
   },
