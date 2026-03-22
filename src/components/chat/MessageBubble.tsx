@@ -400,7 +400,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       role="article"
       aria-label={`${isUser ? 'You' : 'Jane'}: ${message.content.slice(0, 80)}`}
     >
-      <div className={`flex flex-col gap-1 max-w-[92%] md:max-w-[85%] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex flex-col gap-1 max-w-[80%] md:max-w-[600px] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className={`px-4 py-2.5 min-w-0 max-w-full transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
