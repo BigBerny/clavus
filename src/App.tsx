@@ -326,8 +326,6 @@ export function App() {
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-          {/* Glass blur overlay at top (includes safe area for status bar) */}
-          <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none chat-glass-top safe-area-top" style={{ height: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }} />
 
           {/* Horizontal scroll-snap container — full height, behind glass overlays */}
           <div
