@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat'
 import { useUIStore } from '../../state/ui'
@@ -94,39 +94,91 @@ function stripMarkdown(text: string): string {
     .trim()
 }
 
-function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }) {
+function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: () => void; onDelete: () => void }) {
   const messageCount = useMemo(() => {
     const msgs = loadThreadMessages(thread.id)
     return msgs.length
   }, [thread.id])
 
+  const [offsetX, setOffsetX] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+  const startX = useRef(0)
+  const startY = useRef(0)
+  const direction = useRef<'none' | 'h' | 'v'>('none')
+
   if (messageCount === 0) return null
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX
+    startY.current = e.touches[0].clientY
+    direction.current = 'none'
+    setSwiping(true)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!swiping) return
+    const dx = e.touches[0].clientX - startX.current
+    const dy = e.touches[0].clientY - startY.current
+    if (direction.current === 'none') {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+      direction.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
+    }
+    if (direction.current === 'h' && dx < 0) {
+      setOffsetX(dx)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setSwiping(false)
+    direction.current = 'none'
+    if (offsetX < -100) {
+      // Swipe far enough → delete
+      setOffsetX(-500) // animate out
+      setTimeout(onDelete, 200)
+    } else {
+      setOffsetX(0)
+    }
+  }
+
   return (
-    <button
-      onClick={onSelect}
-      className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:scale-[0.98] transition-all duration-150 text-left group"
-    >
-      <div className="w-9 h-9 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 flex items-center justify-center flex-shrink-0 group-hover:bg-accent/10 dark:group-hover:bg-accent/15 transition-colors duration-150">
-        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <div className="relative overflow-hidden rounded-xl">
+      {/* Delete background */}
+      <div className="absolute inset-0 flex items-center justify-end px-5 bg-red-500/90 rounded-xl">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
       </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate group-hover:text-accent transition-colors">
-            {thread.title}
-          </p>
-          <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 flex-shrink-0 tabular-nums">
-            {relativeTime(thread.updatedAt)}
-          </span>
+      <button
+        onClick={onSelect}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-surface-light dark:bg-surface-dark hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:scale-[0.98] transition-all duration-150 text-left group relative"
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: swiping ? 'none' : 'transform 0.2s ease-out',
+        }}
+      >
+        <div className="w-9 h-9 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 flex items-center justify-center flex-shrink-0 group-hover:bg-accent/10 dark:group-hover:bg-accent/15 transition-colors duration-150">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         </div>
-        {thread.lastMessagePreview && (
-          <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
-            {stripMarkdown(thread.lastMessagePreview)}
-          </p>
-        )}
-      </div>
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-text-light-muted/20 dark:text-text-dark-muted/20 group-hover:text-accent/50 transition-colors"><polyline points="9 18 15 12 9 6"/></svg>
-    </button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate group-hover:text-accent transition-colors">
+              {thread.title}
+            </p>
+            <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 flex-shrink-0 tabular-nums">
+              {relativeTime(thread.updatedAt)}
+            </span>
+          </div>
+          {thread.lastMessagePreview && (
+            <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
+              {stripMarkdown(thread.lastMessagePreview)}
+            </p>
+          )}
+        </div>
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-text-light-muted/20 dark:text-text-dark-muted/20 group-hover:text-accent/50 transition-colors"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
   )
 }
 
@@ -150,12 +202,18 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
     [threads]
   )
 
-  const recentThreads = useMemo(() =>
-    showAll ? sortedThreads : sortedThreads.filter(t => t.updatedAt > twentyFourHoursAgo),
-    [sortedThreads, showAll, twentyFourHoursAgo]
-  )
+  const recentThreads = useMemo(() => {
+    if (showAll) return sortedThreads
+    const recent = sortedThreads.filter(t => t.updatedAt > twentyFourHoursAgo)
+    return recent.slice(0, 5)
+  }, [sortedThreads, showAll, twentyFourHoursAgo])
 
-  const hasOlder = sortedThreads.some(t => t.updatedAt <= twentyFourHoursAgo)
+  const hasMore = sortedThreads.length > recentThreads.length
+
+  const deleteThread = useThreadsStore((s) => s.deleteThread)
+  const handleDelete = useCallback((id: string) => {
+    deleteThread(id)
+  }, [deleteThread])
 
   const handleSelectThread = useCallback((id: string) => {
     if (onSelectThread) {
@@ -187,15 +245,16 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
                   key={thread.id}
                   thread={thread}
                   onSelect={() => handleSelectThread(thread.id)}
+                  onDelete={() => handleDelete(thread.id)}
                 />
               ))}
             </div>
-            {!showAll && hasOlder && (
+            {!showAll && hasMore && (
               <button
                 onClick={() => setShowAll(true)}
                 className="inline-btn w-full mt-3 py-2.5 text-[13px] text-accent/80 hover:text-accent font-medium transition-colors rounded-xl hover:bg-accent/5"
               >
-                Show older conversations
+                Show more
               </button>
             )}
           </div>
