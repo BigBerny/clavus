@@ -121,6 +121,18 @@ export function ChatView({ messages }: Props) {
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
 
+  // Track whether content is scrollable (overflow-y: auto blocks horizontal swipe on iOS when content fits)
+  const [isScrollable, setIsScrollable] = useState(false)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const check = () => setIsScrollable(el.scrollHeight > el.clientHeight + 5)
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [messages])
+
   return (
     <div className="flex-1 flex flex-col relative overflow-hidden min-h-0 chat-bg">
       <div
@@ -135,7 +147,7 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
+        className={`flex-1 min-h-0 overflow-x-hidden ${isScrollable ? 'overflow-y-auto overscroll-y-contain' : 'overflow-y-hidden'}`}
         style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"
