@@ -335,9 +335,8 @@ export function App() {
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
-              overscrollBehaviorX: 'contain',
+              overscrollBehaviorX: 'none',
               overscrollBehaviorY: 'none',
-              touchAction: 'pan-x',
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
