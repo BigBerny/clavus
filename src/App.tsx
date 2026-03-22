@@ -360,23 +360,29 @@ export function App() {
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
-            {sortedThreads.map((thread) => (
-              <div
-                key={thread.id}
-                ref={setPanelRef(thread.id)}
-                className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
-              >
-                <ChatViewPanel
-                  threadId={thread.id}
-                  isVisible={visiblePanel === thread.id}
-                />
-              </div>
-            ))}
+            {sortedThreads.map((thread) => {
+              const isActive = visiblePanel === thread.id
+              return (
+                <div
+                  key={thread.id}
+                  ref={setPanelRef(thread.id)}
+                  className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
+                  // inert on off-screen panels prevents iOS from routing touch events to them
+                  {...(!isActive ? { inert: true } : {})}
+                >
+                  <ChatViewPanel
+                    threadId={thread.id}
+                    isVisible={isActive}
+                  />
+                </div>
+              )
+            })}
 
             {/* Home panel (rightmost) */}
             <div
               ref={setPanelRef('home')}
               className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
+              {...(visiblePanel !== 'home' ? { inert: true } : {})}
             >
               <HomeScreen
                 onSend={handleSend}
