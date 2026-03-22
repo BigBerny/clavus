@@ -41,8 +41,30 @@ export function ChatView({ messages }: Props) {
     }
   }, [threadId])
 
-  const scrollToBottom = useCallback((_instant = false) => {
-    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' })
+  const scrollToBottom = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+    const target = container.scrollHeight - container.clientHeight
+    const start = container.scrollTop
+    const distance = target - start
+    if (Math.abs(distance) < 10) {
+      container.scrollTop = target
+      setAutoScroll(true)
+      return
+    }
+    const duration = 150 // ms
+    const startTime = performance.now()
+    const step = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3)
+      container.scrollTop = start + distance * eased
+      if (progress < 1) {
+        requestAnimationFrame(step)
+      }
+    }
+    requestAnimationFrame(step)
     setAutoScroll(true)
   }, [])
 
@@ -175,7 +197,7 @@ export function ChatView({ messages }: Props) {
           onTouchStart={(e) => e.preventDefault()}
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => { e.stopPropagation(); scrollToBottom() }}
-          className="absolute bottom-24 right-4 flex items-center justify-center w-10 h-10 rounded-full bg-surface-light/95 dark:bg-surface-dark-2/95 text-text-light-muted dark:text-text-dark-muted shadow-lg shadow-black/10 dark:shadow-black/30 border border-surface-light-3/40 dark:border-surface-dark-3/40 backdrop-blur-sm hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+          className="absolute bottom-2 right-3 flex items-center justify-center w-11 h-11 rounded-full bg-surface-light/95 dark:bg-surface-dark-2/95 text-text-light-muted dark:text-text-dark-muted shadow-lg shadow-black/10 dark:shadow-black/30 border border-surface-light-3/40 dark:border-surface-dark-3/40 backdrop-blur-sm hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
           aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to bottom'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
