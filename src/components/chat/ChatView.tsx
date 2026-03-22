@@ -37,19 +37,12 @@ export function ChatView({ messages }: Props) {
       container.scrollTop = savedPos
       setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 100)
     } else {
-      container.scrollTop = container.scrollHeight
+      bottomRef.current?.scrollIntoView({ block: 'end' })
     }
   }, [threadId])
 
-  const scrollToBottom = useCallback((instant = false) => {
-    const container = containerRef.current
-    if (container) {
-      if (instant) {
-        container.scrollTop = container.scrollHeight
-      } else {
-        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-      }
-    }
+  const scrollToBottom = useCallback((_instant = false) => {
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'auto' })
     setAutoScroll(true)
   }, [])
 
@@ -68,7 +61,8 @@ export function ChatView({ messages }: Props) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight
+            // Use bottom sentinel to avoid iOS off-by-padding issues
+            bottomRef.current?.scrollIntoView({ block: 'end' })
           }
         })
       })
