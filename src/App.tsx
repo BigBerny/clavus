@@ -145,10 +145,13 @@ export function App() {
     if (!root) return
 
     const setAppHeight = () => {
-      const height = vv ? vv.height : window.innerHeight
+      // iOS Safari/PWA: position:fixed is anchored to the *layout* viewport, while the
+      // *visual* viewport moves when the keyboard opens (vv.offsetTop).
+      // Keep the app pinned to the visual viewport.
+      const height = Math.round((vv ? vv.height : window.innerHeight))
+      const offsetTop = Math.round((vv ? vv.offsetTop : 0))
       root.style.height = `${height}px`
-      // NOTE: Avoid window.scrollTo hacks. They can introduce a scrollable page + rubber-band on iOS.
-      // We only adjust the app root height to visualViewport.height.
+      root.style.transform = offsetTop ? `translateY(${offsetTop}px)` : ''
     }
 
     const onResize = () => {
