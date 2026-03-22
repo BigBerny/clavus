@@ -112,8 +112,14 @@ export function DebugOverlay() {
         // No transform - we no longer translate the root
       }}
     >
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>DebugOverlay (?debug=1)</div>
-      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(info, null, 2)}</pre>
+      <div style={{ fontWeight: 700, marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Debug</span>
+        <button
+          onClick={() => { navigator.clipboard.writeText(JSON.stringify(info, null, 2)); }}
+          style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '2px 8px', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}
+        >Copy</button>
+      </div>
+      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 10 }}>{JSON.stringify(info, null, 1)}</pre>
     </div>
   )
 }
