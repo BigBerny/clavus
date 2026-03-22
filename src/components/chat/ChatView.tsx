@@ -69,14 +69,22 @@ export function ChatView({ messages }: Props) {
   }, [])
 
   const prevMessagesLenRef = useRef(messages.length)
+  const prevLastMessageRef = useRef<string | null>(messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null)
   useEffect(() => {
     if (!autoScroll) {
       prevMessagesLenRef.current = messages.length
+      prevLastMessageRef.current = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
       return
     }
-    // New message added → instant scroll; streaming → instant to keep up; otherwise smooth
-    const isNewMessage = messages.length > prevMessagesLenRef.current
+    // Only scroll when messages actually changed (new message or content update)
+    const currentLastId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
+    const messagesChanged = messages.length !== prevMessagesLenRef.current || currentLastId !== prevLastMessageRef.current
     const isActivelyStreaming = messages.some(m => m.streaming)
+    if (!messagesChanged && !isActivelyStreaming) {
+      prevMessagesLenRef.current = messages.length
+      prevLastMessageRef.current = currentLastId
+      return
+    }
     const container = containerRef.current
     if (container) {
       // Double rAF ensures DOM is fully laid out (critical for iOS)
@@ -90,6 +98,7 @@ export function ChatView({ messages }: Props) {
       })
     }
     prevMessagesLenRef.current = messages.length
+    prevLastMessageRef.current = currentLastId
   }, [messages, autoScroll])
 
   // Track count of unseen messages when scrolled up
