@@ -64,11 +64,14 @@ export function ChatView({ messages }: Props) {
     const isActivelyStreaming = messages.some(m => m.streaming)
     const container = containerRef.current
     if (container) {
-      if (isNewMessage || isActivelyStreaming) {
-        container.scrollTop = container.scrollHeight
-      } else {
-        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-      }
+      // Double rAF ensures DOM is fully laid out (critical for iOS)
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (containerRef.current) {
+            containerRef.current.scrollTop = containerRef.current.scrollHeight
+          }
+        })
+      })
     }
     prevMessagesLenRef.current = messages.length
   }, [messages, autoScroll])
@@ -107,7 +110,7 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="h-full overflow-y-auto overscroll-y-contain"
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
         style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"

@@ -143,30 +143,17 @@ export function App() {
     const root = document.getElementById('root')
     if (!root) return
 
-    let lastHeight = 0
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    const onResize = () => {
-      const newHeight = Math.round(vv.height)
-      if (Math.abs(newHeight - lastHeight) < 5) return
-
-      // Debounce rapid viewport changes (e.g. keyboard flicker on send)
-      if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => {
-        lastHeight = newHeight
-        const keyboardOpen = newHeight < window.innerHeight * 0.9
-        if (keyboardOpen) {
-          root.style.height = `${newHeight}px`
-        } else {
-          root.style.height = '100%'
-          requestAnimationFrame(() => {
-            const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
-            if (scrollContainer) {
-              scrollContainer.scrollTop = scrollContainer.scrollHeight
-            }
-          })
-        }
-      }, 50)
+    const setAppHeight = () => {
+      const height = vv ? vv.height : window.innerHeight
+      root.style.setProperty('--app-height', `${height}px`)
+      root.style.height = `${height}px`
     }
+
+    const onResize = () => {
+      requestAnimationFrame(setAppHeight)
+    }
+
+    setAppHeight()
 
     vv.addEventListener('resize', onResize)
     vv.addEventListener('scroll', onResize)
@@ -359,7 +346,7 @@ export function App() {
               <div
                 key={thread.id}
                 ref={setPanelRef(thread.id)}
-                className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col"
+                className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col min-h-0 overflow-hidden"
               >
                 <ChatViewPanel
                   threadId={thread.id}
@@ -371,7 +358,7 @@ export function App() {
             {/* Home panel (rightmost) */}
             <div
               ref={setPanelRef('home')}
-              className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col"
+              className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col min-h-0 overflow-hidden"
             >
               <HomeScreen
                 onSend={handleSend}
