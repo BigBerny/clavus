@@ -146,10 +146,8 @@ export function App() {
     const setAppHeight = () => {
       const height = vv ? vv.height : window.innerHeight
       root.style.height = `${height}px`
-      // Counteract iOS pushing the page up when keyboard opens
-      window.scrollTo(0, 0)
-      document.documentElement.scrollTop = 0
-      document.body.scrollTop = 0
+      // NOTE: Avoid window.scrollTo hacks. They can introduce a scrollable page + rubber-band on iOS.
+      // We only adjust the app root height to visualViewport.height.
     }
 
     const onResize = () => {
@@ -181,9 +179,16 @@ export function App() {
     if (!container) return
     // Use requestAnimationFrame to ensure DOM is rendered
     requestAnimationFrame(() => {
-      container.scrollLeft = container.scrollWidth
+      isProgrammaticScroll.current = true
+      const homeIndex = sortedThreads.length
+      const targetLeft = container.clientWidth * homeIndex
+      container.scrollTo({ left: targetLeft, behavior: 'auto' })
       setVisiblePanel('home')
       initialScrollDone.current = true
+      // release programmatic flag after scroll settles
+      requestAnimationFrame(() => {
+        isProgrammaticScroll.current = false
+      })
     })
   }, [needsToken, sortedThreads])
 
