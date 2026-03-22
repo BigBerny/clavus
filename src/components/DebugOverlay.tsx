@@ -4,6 +4,41 @@ function getScrollInfo() {
   const root = document.getElementById('root')
   const vv = window.visualViewport
 
+  // Find horizontal scroll-snap container
+  const snapContainer = document.querySelector('.snap-x') as HTMLElement | null
+  const snapInfo = snapContainer ? {
+    scrollLeft: snapContainer.scrollLeft,
+    scrollWidth: snapContainer.scrollWidth,
+    clientWidth: snapContainer.clientWidth,
+    panelIndex: Math.round(snapContainer.scrollLeft / (snapContainer.clientWidth || 1)),
+    panelCount: snapContainer.children.length,
+    snapType: getComputedStyle(snapContainer).scrollSnapType,
+    overflowX: getComputedStyle(snapContainer).overflowX,
+  } : null
+
+  // Info about the currently visible panel and its children's overflow
+  const currentPanelIdx = snapContainer ? Math.round(snapContainer.scrollLeft / (snapContainer.clientWidth || 1)) : -1
+  const currentPanel = snapContainer?.children[currentPanelIdx] as HTMLElement | undefined
+  const panelOverflowInfo = currentPanel ? Array.from(currentPanel.querySelectorAll('*'))
+    .filter(el => {
+      const cs = getComputedStyle(el as HTMLElement)
+      return cs.overflowY === 'auto' || cs.overflowY === 'scroll' || cs.overflowY === 'hidden'
+    })
+    .slice(0, 5)
+    .map(el => {
+      const cs = getComputedStyle(el as HTMLElement)
+      return {
+        tag: el.tagName,
+        class: (typeof (el as HTMLElement).className === 'string' ? (el as HTMLElement).className : '').slice(0, 60),
+        overflowY: cs.overflowY,
+        overflowX: cs.overflowX,
+        touchAction: cs.touchAction,
+        h: el.clientHeight,
+        sh: el.scrollHeight,
+        scrollable: el.scrollHeight > el.clientHeight + 2,
+      }
+    }) : []
+
   const scrollables = Array.from(document.querySelectorAll('*'))
     .filter((el) => {
       const cs = getComputedStyle(el as HTMLElement)
@@ -28,16 +63,10 @@ function getScrollInfo() {
 
   return {
     ts: Date.now(),
-    location: window.location.href,
-    window: { innerH: window.innerHeight, innerW: window.innerWidth, scrollY: window.scrollY },
-    doc: { scrollTop: document.documentElement.scrollTop, bodyScrollTop: document.body.scrollTop },
-    vv: vv ? { h: vv.height, w: vv.width, offsetTop: vv.offsetTop, scale: vv.scale } : null,
-    root: root
-      ? {
-          h: root.clientHeight,
-          styleH: (root as HTMLElement).style.height,
-        }
-      : null,
+    window: { innerH: window.innerHeight, innerW: window.innerWidth },
+    vv: vv ? { h: Math.round(vv.height), w: Math.round(vv.width), offTop: Math.round(vv.offsetTop) } : null,
+    snap: snapInfo,
+    panel: { idx: currentPanelIdx, overflow: panelOverflowInfo },
     scrollables,
   }
 }
