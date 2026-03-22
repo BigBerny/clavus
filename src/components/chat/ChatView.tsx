@@ -94,7 +94,7 @@ export function ChatView({ messages }: Props) {
   const isEmptyChat = messages.length === 0
 
   return (
-    <div className="flex-1 relative overflow-hidden min-h-0 chat-bg chat-fade-top">
+    <div className="flex-1 relative overflow-hidden min-h-0 chat-bg">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -107,13 +107,13 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="h-full overflow-y-auto overscroll-y-contain py-3"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className="h-full overflow-y-auto overscroll-y-contain"
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
       >
-        <div className={`max-w-[900px] mx-auto px-4`}>
+        <div className="max-w-[900px] mx-auto px-4 pb-24" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)' }}>
         {isEmptyChat ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-text-light-muted/30 dark:text-text-dark-muted/30">New conversation</p>
@@ -178,7 +178,7 @@ export function ChatView({ messages }: Props) {
           onTouchStart={(e) => e.preventDefault()}
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => { e.stopPropagation(); scrollToBottom() }}
-          className="absolute bottom-3 right-4 flex items-center justify-center w-10 h-10 rounded-full bg-surface-light/95 dark:bg-surface-dark-2/95 text-text-light-muted dark:text-text-dark-muted shadow-lg shadow-black/10 dark:shadow-black/30 border border-surface-light-3/40 dark:border-surface-dark-3/40 backdrop-blur-sm hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+          className="absolute bottom-24 right-4 flex items-center justify-center w-10 h-10 rounded-full bg-surface-light/95 dark:bg-surface-dark-2/95 text-text-light-muted dark:text-text-dark-muted shadow-lg shadow-black/10 dark:shadow-black/30 border border-surface-light-3/40 dark:border-surface-dark-3/40 backdrop-blur-sm hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
           aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to bottom'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>

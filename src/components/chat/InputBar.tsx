@@ -206,7 +206,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   const hasContent = hasText || pendingImages.length > 0
 
   return (
-    <div className="border-t border-surface-light-3/40 dark:border-surface-dark-3/40 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] dark:shadow-[0_-2px_8px_rgba(0,0,0,0.15)] bg-surface-light/98 dark:bg-surface-dark/98 backdrop-blur-xl safe-area-bottom">
+    <div className="backdrop-blur-2xl bg-surface-light/70 dark:bg-[#0a0b0e]/70 border-t border-white/10 dark:border-white/5 safe-area-bottom">
       <div className="max-w-[900px] mx-auto p-3">
         {/* Voice error */}
         {voice.error && (

@@ -299,11 +299,6 @@ export function App() {
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
-      {/* Safe area top for non-recipe views */}
-      {!isRecipeView && (
-        <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
-      )}
-
       {/* Connection status banners */}
       {connectionStatus === 'disconnected' && (
         <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15">
@@ -338,8 +333,11 @@ export function App() {
           )}
         </div>
       ) : (
-        <>
-          {/* Horizontal scroll-snap container */}
+        <div className="flex-1 min-h-0 relative flex flex-col">
+          {/* Glass blur overlay at top (includes safe area for status bar) */}
+          <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none chat-glass-top safe-area-top" style={{ height: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }} />
+
+          {/* Horizontal scroll-snap container — full height, behind glass overlays */}
           <div
             ref={scrollContainerRef}
             className="flex-1 min-h-0 flex flex-row overflow-x-auto overflow-y-hidden snap-x snap-mandatory"
@@ -376,15 +374,17 @@ export function App() {
             </div>
           </div>
 
-          {/* InputBar at bottom */}
-          <InputBar
-            onSend={handleSend}
-            onAbort={abort}
-            isStreaming={isStreaming}
-            onRecordingChange={handleRecordingChange}
-            isHome={visiblePanel === 'home'}
-          />
-        </>
+          {/* InputBar as glass overlay at bottom — floats over chat */}
+          <div className="absolute bottom-0 left-0 right-0 z-10">
+            <InputBar
+              onSend={handleSend}
+              onAbort={abort}
+              isStreaming={isStreaming}
+              onRecordingChange={handleRecordingChange}
+              isHome={visiblePanel === 'home'}
+            />
+          </div>
+        </div>
       )}
 
       <FileBrowser

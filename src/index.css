@@ -116,23 +116,16 @@ button.inline-btn {
   min-width: auto;
 }
 
-/* Chat fade edges */
-.chat-fade-top::before,
-.chat-fade-bottom::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 20px;
-  pointer-events: none;
-  z-index: 1;
-}
-.chat-fade-top::before {
-  top: 0;
+/* Glass top overlay for chat — blur + fade gradient */
+.chat-glass-top {
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 40%, transparent 100%);
   background: linear-gradient(to bottom, var(--color-surface-light) 0%, transparent 100%);
-  opacity: 0.8;
+  opacity: 0.85;
 }
-.dark .chat-fade-top::before {
+.dark .chat-glass-top {
   background: linear-gradient(to bottom, #0a0b0e 0%, transparent 100%);
   opacity: 0.9;
 }
