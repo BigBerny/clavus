@@ -156,7 +156,7 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className={`flex-1 min-h-0 overflow-x-hidden ${isScrollable ? 'overflow-y-auto overscroll-y-contain' : 'overflow-y-hidden'}`}
+        className={`flex-1 min-h-0 ${isScrollable ? 'overflow-y-auto overflow-x-hidden overscroll-y-contain' : ''}`}
         style={isScrollable ? { WebkitOverflowScrolling: 'touch' } : undefined}
         role="log"
         aria-label="Chat messages"
