@@ -64,6 +64,11 @@ export function getDb(): Database.Database {
     db.exec(`ALTER TABLE recipes ADD COLUMN source_urls TEXT DEFAULT '[]'`)
   } catch { /* column already exists */ }
 
+  // Migration: add last_opened_at column if missing
+  try {
+    db.exec(`ALTER TABLE recipes ADD COLUMN last_opened_at TEXT`)
+  } catch { /* column already exists */ }
+
   // Migration: populate source_urls from source_url for existing recipes
   try {
     const rows = db.prepare(`SELECT id, source_url, source_urls FROM recipes WHERE source_url != '' AND source_url IS NOT NULL AND (source_urls = '[]' OR source_urls IS NULL OR source_urls = '')`).all() as any[]
@@ -317,4 +322,9 @@ export function deleteRecipe(id: number) {
 export function markCooked(id: number) {
   const d = getDb()
   d.prepare("UPDATE recipes SET last_cooked_at = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(id)
+}
+
+export function markOpened(id: number) {
+  const d = getDb()
+  d.prepare("UPDATE recipes SET last_opened_at = datetime('now') WHERE id = ?").run(id)
 }

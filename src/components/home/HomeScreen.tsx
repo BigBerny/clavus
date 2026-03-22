@@ -1,9 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat'
 import { useUIStore } from '../../state/ui'
-import { fetchRecipes } from '../../api/recipes'
-import type { Recipe } from '../../api/recipes'
 import type { Thread } from '../../state/threads'
 
 function relativeTime(timestamp: number): string {
@@ -106,69 +104,12 @@ function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }
   )
 }
 
-function RecipeItem({ recipe, onSelect }: { recipe: Recipe; onSelect: () => void }) {
-  const imageUrl = recipe.image_path
-    ? (recipe.image_path.startsWith('/') || recipe.image_path.startsWith('http') ? recipe.image_path : `/recipe-images/${recipe.image_path}`)
-    : null
-
-  return (
-    <button
-      onClick={onSelect}
-      className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:scale-[0.98] transition-all duration-150 text-left group"
-    >
-      {imageUrl ? (
-        <div className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0">
-          <img src={imageUrl} alt={recipe.title} className="w-full h-full object-cover" />
-        </div>
-      ) : (
-        <div className="w-9 h-9 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 flex items-center justify-center flex-shrink-0 group-hover:bg-amber-500/20 transition-colors duration-150">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500/70 dark:text-amber-400/60">
-            <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/>
-          </svg>
-        </div>
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate group-hover:text-amber-500 transition-colors">
-            {recipe.title}
-          </p>
-          {recipe.rating > 0 && (
-            <span className="text-[11px] text-amber-400 flex-shrink-0">{'★'.repeat(recipe.rating)}</span>
-          )}
-        </div>
-        {recipe.tags.length > 0 && (
-          <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
-            {recipe.tags.slice(0, 3).join(' · ')}
-          </p>
-        )}
-      </div>
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-text-light-muted/20 dark:text-text-dark-muted/20 group-hover:text-amber-500/50 transition-colors"><polyline points="9 18 15 12 9 6"/></svg>
-    </button>
-  )
-}
-
 export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void; onSelectThread?: (threadId: string) => void }) {
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const loadThread = useChatStore((s) => s.loadThread)
   const setCurrentView = useUIStore((s) => s.setCurrentView)
-  const setSelectedRecipeId = useUIStore((s) => s.setSelectedRecipeId)
   const [showAll, setShowAll] = useState(false)
-  const [recentRecipes, setRecentRecipes] = useState<Recipe[]>([])
-
-  useEffect(() => {
-    fetchRecipes().then(recipes => {
-      // Show most recently updated/cooked recipes
-      const sorted = recipes
-        .sort((a, b) => {
-          const aTime = a.last_cooked_at ? new Date(a.last_cooked_at).getTime() : new Date(a.updated_at).getTime()
-          const bTime = b.last_cooked_at ? new Date(b.last_cooked_at).getTime() : new Date(b.updated_at).getTime()
-          return bTime - aTime
-        })
-        .slice(0, 5)
-      setRecentRecipes(sorted)
-    }).catch(() => {})
-  }, [])
 
   const now = Date.now()
   const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000
@@ -200,32 +141,12 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
     }
   }, [switchThread, loadThread, setCurrentView, onSelectThread])
 
-  const handleSelectRecipe = useCallback((id: number) => {
-    setSelectedRecipeId(id)
-    setCurrentView('recipe-detail')
-  }, [setSelectedRecipeId, setCurrentView])
-
   return (
     <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="max-w-[900px] mx-auto pb-4">
         <div className="pt-6">
           <QuickActions onCompose={onCompose} />
         </div>
-
-        {recentRecipes.length > 0 && (
-          <div className="px-5 pt-5">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-[11px] font-semibold text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-widest">
-                Rezepte
-              </p>
-            </div>
-            <div className="space-y-0.5">
-              {recentRecipes.map(recipe => (
-                <RecipeItem key={recipe.id} recipe={recipe} onSelect={() => handleSelectRecipe(recipe.id)} />
-              ))}
-            </div>
-          </div>
-        )}
 
         {recentThreads.length > 0 && (
           <div className="px-5 pt-6">

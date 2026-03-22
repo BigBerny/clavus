@@ -34,6 +34,7 @@ export interface Recipe {
   rating: number
   notes: string
   last_cooked_at: string | null
+  last_opened_at: string | null
   created_at: string
   updated_at: string
   tags: string[]
@@ -72,6 +73,10 @@ export async function updateRecipe(id: number, data: Partial<Recipe>): Promise<R
 
 export async function markCooked(id: number): Promise<void> {
   await fetch(`/api/recipes/${id}/cook`, { method: 'POST' })
+}
+
+export async function markOpened(id: number): Promise<void> {
+  await fetch(`/api/recipes/${id}/open`, { method: 'POST' })
 }
 
 export async function addToBring(items: { name: string; spec: string }[]): Promise<{ ok: boolean; results: { item: string; ok: boolean; error?: string }[] }> {

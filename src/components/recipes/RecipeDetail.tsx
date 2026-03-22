@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useUIStore } from '../../state/ui'
-import { fetchRecipe, updateRecipe as updateRecipeApi, markCooked, addToBring } from '../../api/recipes'
+import { fetchRecipe, updateRecipe as updateRecipeApi, markCooked, markOpened, addToBring } from '../../api/recipes'
 import type { Recipe, Ingredient, SourceUrl } from '../../api/recipes'
 
 function formatDuration(mins: number): string {
@@ -217,6 +217,8 @@ export function RecipeDetail() {
         setRecipe(r)
         setServings(r.servings || 3)
         setNotesText(r.notes || '')
+        // Track that the recipe was opened
+        markOpened(selectedRecipeId).catch(() => {})
       })
       .finally(() => setLoading(false))
   }, [selectedRecipeId])

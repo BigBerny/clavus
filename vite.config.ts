@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
 import nodePath from 'path'
-import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
+import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, markOpened, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
@@ -296,6 +296,14 @@ function recipesApiPlugin() {
           const cookMatch = req.url.match(/^\/api\/recipes\/(\d+)\/cook$/)
           if (cookMatch && req.method === 'POST') {
             markCooked(parseInt(cookMatch[1]))
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          // POST /api/recipes/:id/open - track last opened
+          const openMatch = req.url.match(/^\/api\/recipes\/(\d+)\/open$/)
+          if (openMatch && req.method === 'POST') {
+            markOpened(parseInt(openMatch[1]))
             res.end(JSON.stringify({ ok: true }))
             return
           }

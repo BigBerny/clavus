@@ -265,27 +265,31 @@ export function App() {
   // Handle sending from any panel
   const handleSend = useCallback((text: string, images?: string[]) => {
     if (visiblePanel === 'home') {
-      // Create new thread & send — the useChat hook handles thread creation
-      // After send, we need to scroll to the new thread
-      send(text, images)
-      // After a short delay, the new thread will exist - scroll to it
+      // Create a NEW thread, switch to it, then send the message there
+      const createThread = useThreadsStore.getState().createThread
+      const newThreadId = createThread()
+      // switchThread + loadThread so useChat sends to the new thread
+      switchThread(newThreadId)
+      loadThread(newThreadId)
+      setVisiblePanel(newThreadId)
+
+      // Send after state has settled
       setTimeout(() => {
-        const newActiveId = useThreadsStore.getState().activeThreadId
-        if (newActiveId) {
-          // Wait for panel to render
+        send(text, images)
+        // Scroll to the new thread panel once it renders
+        requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            const panel = panelRefs.current.get(newActiveId)
+            const panel = panelRefs.current.get(newThreadId)
             if (panel) {
-              setVisiblePanel(newActiveId)
               panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
             }
           })
-        }
-      }, 100)
+        })
+      }, 50)
     } else {
       send(text, images)
     }
-  }, [visiblePanel, send])
+  }, [visiblePanel, send, switchThread, loadThread])
 
   // Set panel ref callback
   const setPanelRef = useCallback((id: string) => (el: HTMLDivElement | null) => {

@@ -54,17 +54,24 @@ export function ComposeFlow({ channel, onClose }: Props) {
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
   const closingRef = useRef(false)
+  const startedRef = useRef(false)
+  const transcriptionProcessedRef = useRef(false)
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
+      // Prevent duplicate processing from StrictMode double-mount
+      if (transcriptionProcessedRef.current) return
+      transcriptionProcessedRef.current = true
       setTranscription(text)
       setComposeState('composing')
     },
     silenceAutoStop: true,
   })
 
-  // Auto-start recording on mount
+  // Auto-start recording on mount (guarded against StrictMode double-mount)
   useEffect(() => {
+    if (startedRef.current) return
+    startedRef.current = true
     voice.start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -77,8 +84,11 @@ export function ComposeFlow({ channel, onClose }: Props) {
   }, [voice.state])
 
   // When transcription arrives, send to LLM for reformulation
+  const reformulatingRef = useRef(false)
   useEffect(() => {
     if (composeState !== 'composing' || !transcription) return
+    if (reformulatingRef.current) return
+    reformulatingRef.current = true
 
     const abortController = new AbortController()
     

@@ -3,7 +3,7 @@ import { useUIStore } from '../../state/ui'
 import { fetchRecipes, searchRecipes as searchApi } from '../../api/recipes'
 import type { Recipe } from '../../api/recipes'
 
-type SortMode = 'recent' | 'rating' | 'alpha' | 'added'
+type SortMode = 'recent' | 'last_opened' | 'rating' | 'alpha' | 'added'
 
 function formatDuration(mins: number): string {
   if (!mins) return ''
@@ -86,6 +86,7 @@ function RecipeCard({ recipe, onClick }: { recipe: Recipe; onClick: () => void }
 
 const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: 'recent', label: 'Zuletzt gekocht' },
+  { value: 'last_opened', label: 'Zuletzt geöffnet' },
   { value: 'rating', label: 'Bewertung' },
   { value: 'alpha', label: 'A-Z' },
   { value: 'added', label: 'Neu hinzugefügt' },
@@ -154,6 +155,13 @@ export function RecipeList() {
           if (!b.last_cooked_at) return -1
           return new Date(b.last_cooked_at).getTime() - new Date(a.last_cooked_at).getTime()
         })
+      case 'last_opened':
+        return list.sort((a, b) => {
+          if (!a.last_opened_at && !b.last_opened_at) return 0
+          if (!a.last_opened_at) return 1
+          if (!b.last_opened_at) return -1
+          return new Date(b.last_opened_at).getTime() - new Date(a.last_opened_at).getTime()
+        })
       case 'rating':
         return list.sort((a, b) => b.rating - a.rating)
       case 'alpha':
@@ -207,7 +215,7 @@ export function RecipeList() {
       {/* Tag filter chips */}
       {allTags.length > 0 && (
         <div className="px-4 pb-2">
-          <div className="flex gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
+          <div className="flex flex-nowrap gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
             {allTags.map(tag => (
               <button
                 key={tag}
