@@ -213,25 +213,9 @@ export function ChatView({ messages, title }: Props) {
               const isLastInGroup = !nextMsg || nextMsg.role !== msg.role || (nextMsg && new Date(nextMsg.timestamp).toDateString() !== new Date(msg.timestamp).toDateString()) || nextHasTimeGap
               // Tighter spacing for consecutive same-role messages, wider for role transitions
               const isRoleTransition = prevMsg && prevMsg.role !== msg.role
-              const spacing = !prevMsg ? '' : showDate ? 'mt-5' : showTimeGap ? 'mt-5' : isRoleTransition ? 'mt-4' : 'mt-1'
+              const spacing = !prevMsg ? '' : isRoleTransition ? 'mt-2' : 'mt-0.5'
               return (
                 <div key={msg.id} className={spacing}>
-                  {showDate && (
-                    <div className="flex items-center gap-3 py-1.5 mb-1">
-                      <div className="flex-1 h-px bg-surface-light-3/40 dark:bg-surface-dark-3/40" />
-                      <span className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50 font-medium tracking-wide uppercase">
-                        {new Date(msg.timestamp).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
-                      </span>
-                      <div className="flex-1 h-px bg-surface-light-3/40 dark:bg-surface-dark-3/40" />
-                    </div>
-                  )}
-                  {showTimeGap && !showDate && (
-                    <div className="flex justify-center py-1 mb-0.5">
-                      <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 font-medium">
-                        {new Date(msg.timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                  )}
                   <MessageBubble
                     message={msg}
                     isSpeaking={tts.speakingId === msg.id}
