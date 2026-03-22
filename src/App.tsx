@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { Header } from './components/layout/Header.tsx'
 import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
@@ -247,15 +246,6 @@ export function App() {
     }
   }, [switchThread, loadThread])
 
-  // Scroll to home panel
-  const scrollToHome = useCallback(() => {
-    const panel = panelRefs.current.get('home')
-    if (panel) {
-      setVisiblePanel('home')
-      panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
-    }
-  }, [])
-
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
     setIsRecording(recording)
     setRecordingDuration(duration)
@@ -300,8 +290,6 @@ export function App() {
     }
   }, [])
 
-  // Is the current visible panel showing a chat?
-  const isOnChat = visiblePanel !== 'home'
   // Is the current view a recipe overlay?
   const isRecipeView = currentView === 'recipes' || currentView === 'recipe-detail' || currentView === 'cook-mode'
 
@@ -311,19 +299,8 @@ export function App() {
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
-      {/* Header: show for chat panels */}
-      {isOnChat && !isRecipeView && (
-        <Header
-          isRecording={isRecording}
-          recordingDuration={recordingDuration}
-          onCancelRecording={() => cancelRecordingRef.current?.()}
-          isStreaming={isStreaming}
-          visibleThreadId={visiblePanel}
-          onBack={scrollToHome}
-        />
-      )}
-      {/* Safe area for home */}
-      {!isOnChat && !isRecipeView && (
+      {/* Safe area top for non-recipe views */}
+      {!isRecipeView && (
         <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
       )}
 
