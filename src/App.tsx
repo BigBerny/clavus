@@ -190,13 +190,16 @@ export function App() {
       if (scrollTimeout) clearTimeout(scrollTimeout)
       scrollTimeout = setTimeout(() => {
         const containerWidth = container.clientWidth
+        if (!containerWidth) return
         const scrollLeft = container.scrollLeft
-        // Which panel index is in view?
         const panelIndex = Math.round(scrollLeft / containerWidth)
+
+        // Only act if scroll has truly snapped (within 5px of a panel boundary)
+        const snappedPosition = panelIndex * containerWidth
+        if (Math.abs(scrollLeft - snappedPosition) > 5) return
         
         // Total panels: sortedThreads.length + 1 (home)
         if (panelIndex >= sortedThreads.length) {
-          // Home panel
           if (visiblePanel !== 'home') {
             setVisiblePanel('home')
           }
@@ -204,12 +207,11 @@ export function App() {
           const thread = sortedThreads[panelIndex]
           if (thread && visiblePanel !== thread.id) {
             setVisiblePanel(thread.id)
-            // Switch the active thread so useChat works with this thread
             switchThread(thread.id)
             loadThread(thread.id)
           }
         }
-      }, 50)
+      }, 200) // Wait for snap animation to settle
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
