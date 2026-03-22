@@ -327,6 +327,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
+
+  // Hide empty assistant messages (no content, not streaming)
+  if (isAssistant && !message.content?.trim() && !message.streaming && !message.thinking) {
+    return null
+  }
   const contentParts = useMemo(() => 
     isAssistant ? splitCopyBlocks(message.content) : [],
     [isAssistant, message.content]
