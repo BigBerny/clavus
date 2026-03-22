@@ -255,27 +255,27 @@ export function App() {
   // Handle sending from any panel
   const handleSend = useCallback((text: string, images?: string[]) => {
     if (visiblePanel === 'home') {
-      // Create a NEW thread, switch to it, then send the message there
+      // Create a NEW thread, switch to it, then send the message
       const createThread = useThreadsStore.getState().createThread
       const newThreadId = createThread()
       // switchThread + loadThread so useChat sends to the new thread
       switchThread(newThreadId)
       loadThread(newThreadId)
+
+      // Send immediately (same tick) so the thread has a message
+      // before React re-renders and creates the panel
+      send(text, images)
       setVisiblePanel(newThreadId)
 
-      // Send after state has settled
-      setTimeout(() => {
-        send(text, images)
-        // Scroll to the new thread panel once it renders
+      // Scroll to the new thread panel once it renders
+      requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            const panel = panelRefs.current.get(newThreadId)
-            if (panel) {
-              panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
-            }
-          })
+          const panel = panelRefs.current.get(newThreadId)
+          if (panel) {
+            panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+          }
         })
-      }, 50)
+      })
     } else {
       send(text, images)
     }
@@ -345,6 +345,8 @@ export function App() {
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
+              overscrollBehaviorX: 'none',
+              overscrollBehaviorY: 'none',
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
