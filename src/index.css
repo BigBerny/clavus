@@ -29,6 +29,11 @@ html, body {
   overscroll-behavior: none;
   -webkit-overflow-scrolling: auto;
   background-color: var(--color-surface-dark, #111318);
+  /* Force-hide any page-level scrollbar (iOS keyboard can create phantom scrollbars) */
+  scrollbar-width: none;
+}
+html::-webkit-scrollbar, body::-webkit-scrollbar {
+  display: none;
 }
 
 body {
@@ -44,6 +49,10 @@ body {
   overflow: hidden;
   overscroll-behavior: none;
   background-color: var(--color-surface-dark, #111318);
+  scrollbar-width: none;
+}
+#root::-webkit-scrollbar {
+  display: none;
 }
 
 html:not(.dark), html:not(.dark) body, html:not(.dark) #root {

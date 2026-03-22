@@ -91,7 +91,7 @@ export function ChatView({ messages }: Props) {
   const isEmptyChat = messages.length === 0
 
   return (
-    <div className="flex-1 relative overflow-hidden min-h-0 chat-bg">
+    <div className="flex-1 flex flex-col relative overflow-hidden min-h-0 chat-bg">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -110,7 +110,7 @@ export function ChatView({ messages }: Props) {
         aria-label="Chat messages"
         aria-live="polite"
       >
-        <div className="max-w-[900px] mx-auto px-4 pb-8" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)' }}>
+        <div className="max-w-[900px] mx-auto px-4 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 4rem)' }}>
         {isEmptyChat ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-text-light-muted/30 dark:text-text-dark-muted/30">New conversation</p>
