@@ -85,46 +85,10 @@ export function ChatView({ messages }: Props) {
         aria-label="Chat messages"
         aria-live="polite"
       >
-        <div className={`max-w-[900px] mx-auto px-4 ${isEmptyChat ? 'h-full' : ''}`}>
+        <div className={`max-w-[900px] mx-auto px-4`}>
         {isEmptyChat ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-6 animate-[fadeSlideIn_0.5s_ease-out]">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold mb-5 shadow-lg shadow-violet-500/20">
-              J
-            </div>
-            <h2 className="text-xl font-semibold text-text-light dark:text-text-dark mb-1.5 tracking-tight">
-              {(() => {
-                const hour = new Date().getHours()
-                if (hour < 5) return 'Late night, huh?'
-                if (hour < 12) return 'Good morning!'
-                if (hour < 17) return 'Good afternoon!'
-                if (hour < 21) return 'Good evening!'
-                return 'Late night, huh?'
-              })()}
-            </h2>
-            <p className="text-sm text-text-light-muted dark:text-text-dark-muted max-w-[280px] leading-relaxed">
-              I'm Jane, your AI assistant. Ask me anything, send images, or use voice.
-            </p>
-            <div className="grid grid-cols-2 gap-3 mt-8 w-full max-w-[320px]">
-              {[
-                { icon: '💡', text: 'What can you do?' },
-                { icon: '✍️', text: 'Help me write' },
-                { icon: '🔍', text: 'Explain a concept' },
-                { icon: '💻', text: 'Help me code' },
-              ].map(({ icon, text }, i) => (
-                <button
-                  key={text}
-                  onClick={() => {
-                    const event = new CustomEvent('clavus:send', { detail: text })
-                    window.dispatchEvent(event)
-                  }}
-                  className="inline-btn flex items-center gap-2.5 p-4 text-sm text-left rounded-xl border border-surface-light-3/60 dark:border-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2/80 dark:hover:bg-surface-dark-2/80 hover:text-text-light dark:hover:text-text-dark hover:border-accent/25 transition-all active:scale-[0.97] animate-[fadeSlideIn_0.3s_ease-out_both]"
-                  style={{ animationDelay: `${0.35 + i * 0.07}s` }}
-                >
-                  <span className="text-base">{icon}</span>
-                  <span>{text}</span>
-                </button>
-              ))}
-            </div>
+          <div className="flex items-center justify-center h-full">
+            <p className="text-sm text-text-light-muted/30 dark:text-text-dark-muted/30">New conversation</p>
           </div>
         ) : (
           <>
