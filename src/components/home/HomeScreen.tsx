@@ -214,7 +214,7 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
     [...threads]
       .filter(t => {
         const msgs = loadThreadMessages(t.id)
-        return msgs.length > 0 || t.lastMessagePreview
+        return msgs.length > 0
       })
       .sort((a, b) => b.updatedAt - a.updatedAt),
     [threads]
