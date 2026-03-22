@@ -352,7 +352,7 @@ export function App() {
           </div>
 
           {/* InputBar as flex child at bottom */}
-          <div className="flex-shrink-0">
+          <div className="flex-shrink-0" style={{ touchAction: 'none' }}>
             <InputBar
               onSend={handleSend}
               onAbort={abort}
