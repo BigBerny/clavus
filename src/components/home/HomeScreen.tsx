@@ -168,7 +168,7 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
   }, [switchThread, loadThread, setCurrentView, onSelectThread])
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+    <div className="flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y pinch-zoom' }}>
       <div className="max-w-[900px] mx-auto pb-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}>
         <div className="pt-10">
           <QuickActions onCompose={onCompose} />

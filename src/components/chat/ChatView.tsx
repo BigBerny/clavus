@@ -107,8 +107,8 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="h-full overflow-y-auto overscroll-y-contain"
-        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+        className="h-full overflow-y-auto overflow-x-hidden overscroll-y-contain"
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y pinch-zoom' }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
