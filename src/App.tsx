@@ -145,8 +145,11 @@ export function App() {
 
     const setAppHeight = () => {
       const height = vv ? vv.height : window.innerHeight
-      root.style.setProperty('--app-height', `${height}px`)
       root.style.height = `${height}px`
+      // Counteract iOS pushing the page up when keyboard opens
+      window.scrollTo(0, 0)
+      document.documentElement.scrollTop = 0
+      document.body.scrollTop = 0
     }
 
     const onResize = () => {
