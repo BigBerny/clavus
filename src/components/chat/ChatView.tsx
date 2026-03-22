@@ -52,7 +52,7 @@ export function ChatView({ messages }: Props) {
       setAutoScroll(true)
       return
     }
-    const duration = 150 // ms
+    const duration = 300 // ms
     const startTime = performance.now()
     const step = (now: number) => {
       const elapsed = now - startTime
