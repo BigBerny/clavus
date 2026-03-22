@@ -1,17 +1,45 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
 import { useTTS } from '../../hooks/useTTS'
+import { useThreadsStore } from '../../state/threads'
 import type { Message } from '../../state/chat'
 
 interface Props {
   messages: Message[]
 }
 
+// Cache scroll positions per thread
+const scrollPositionCache = new Map<string, number>()
+
 export function ChatView({ messages }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const tts = useTTS()
+
+  const threadId = useThreadsStore((s) => s.activeThreadId)
+
+  // Save scroll position on unmount
+  useEffect(() => {
+    return () => {
+      if (containerRef.current && threadId) {
+        scrollPositionCache.set(threadId, containerRef.current.scrollTop)
+      }
+    }
+  }, [threadId])
+
+  // Restore scroll position on mount (or scroll to bottom for new)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const savedPos = scrollPositionCache.get(threadId)
+    if (savedPos !== undefined) {
+      container.scrollTop = savedPos
+      setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 100)
+    } else {
+      container.scrollTop = container.scrollHeight
+    }
+  }, [threadId])
 
   const scrollToBottom = useCallback((instant = false) => {
     const container = containerRef.current
