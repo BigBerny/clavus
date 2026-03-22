@@ -223,14 +223,34 @@ export function App() {
 
   // Scroll to a specific thread panel
   const scrollToThread = useCallback((threadId: string) => {
+    const container = scrollContainerRef.current
     const panel = panelRefs.current.get(threadId)
-    if (panel) {
-      // Set active thread before scrolling
+    if (!container || !panel) {
+      // Fallback: switch thread without scrolling
       switchThread(threadId)
       loadThread(threadId)
       setVisiblePanel(threadId)
-      panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+      return
     }
+    // Disable snap temporarily to prevent it from fighting the scroll
+    isProgrammaticScroll.current = true
+    container.style.scrollSnapType = 'none'
+    // Update visible panel + switch thread
+    setVisiblePanel(threadId)
+    switchThread(threadId)
+    loadThread(threadId)
+    // Use requestAnimationFrame to ensure state is settled before scrolling
+    requestAnimationFrame(() => {
+      const target = panelRefs.current.get(threadId)
+      if (target && container) {
+        container.scrollTo({ left: target.offsetLeft, behavior: 'instant' })
+      }
+      // Re-enable snap after scroll is done
+      requestAnimationFrame(() => {
+        container.style.scrollSnapType = ''
+        isProgrammaticScroll.current = false
+      })
+    })
   }, [switchThread, loadThread])
 
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
