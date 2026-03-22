@@ -350,11 +350,12 @@ export function App() {
           {/* Horizontal scroll-snap container — full height, behind glass overlays */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory"
+            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-x',
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
@@ -365,6 +366,7 @@ export function App() {
                   key={thread.id}
                   ref={setPanelRef(thread.id)}
                   className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
+                  style={{ touchAction: 'pan-x' }}
                   // inert on off-screen panels prevents iOS from routing touch events to them
                   {...(!isActive ? { inert: true } : {})}
                 >

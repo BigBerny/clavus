@@ -157,7 +157,11 @@ export function ChatView({ messages }: Props) {
           }
         }}
         className={`flex-1 min-h-0 ${isScrollable ? 'overflow-y-auto overflow-x-hidden overscroll-y-contain' : ''}`}
-        style={isScrollable ? { WebkitOverflowScrolling: 'touch' } : undefined}
+        style={{
+          ...(isScrollable ? { WebkitOverflowScrolling: 'touch' } : {}),
+          // Tell iOS gesture recognizer: this container only handles vertical panning
+          touchAction: 'pan-y',
+        }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
