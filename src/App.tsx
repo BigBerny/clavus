@@ -345,18 +345,16 @@ export function App() {
           )}
         </div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col">
 
           {/* Horizontal scroll-snap container — full height, behind glass overlays */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto overflow-y-hidden snap-x snap-mandatory"
+            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory"
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
-              overscrollBehaviorX: 'contain',
-              overscrollBehaviorY: 'none',
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
