@@ -144,23 +144,28 @@ export function App() {
     if (!root) return
 
     let lastHeight = 0
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
     const onResize = () => {
       const newHeight = Math.round(vv.height)
-      if (Math.abs(newHeight - lastHeight) < 3) return
-      lastHeight = newHeight
+      if (Math.abs(newHeight - lastHeight) < 5) return
 
-      const keyboardOpen = newHeight < window.innerHeight * 0.9
-      if (keyboardOpen) {
-        root.style.height = `${newHeight}px`
-      } else {
-        root.style.height = '100%'
-        requestAnimationFrame(() => {
-          const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
-          if (scrollContainer) {
-            scrollContainer.scrollTop = scrollContainer.scrollHeight
-          }
-        })
-      }
+      // Debounce rapid viewport changes (e.g. keyboard flicker on send)
+      if (debounceTimer) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        lastHeight = newHeight
+        const keyboardOpen = newHeight < window.innerHeight * 0.9
+        if (keyboardOpen) {
+          root.style.height = `${newHeight}px`
+        } else {
+          root.style.height = '100%'
+          requestAnimationFrame(() => {
+            const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
+            if (scrollContainer) {
+              scrollContainer.scrollTop = scrollContainer.scrollHeight
+            }
+          })
+        }
+      }, 50)
     }
 
     vv.addEventListener('resize', onResize)
