@@ -155,6 +155,56 @@ export function ChatView({ messages, title }: Props) {
     return () => { ro.disconnect(); mo.disconnect() }
   }, [messages.length])
 
+  // Direction-lock: when user swipes horizontally on a scrollable chat,
+  // temporarily disable vertical scrolling so the parent snap container wins.
+  // This prevents iOS Safari from "capturing" the gesture on the vertical scroller.
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    let startX = 0
+    let startY = 0
+    let locked: 'none' | 'h' | 'v' = 'none'
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      startX = e.touches[0].clientX
+      startY = e.touches[0].clientY
+      locked = 'none'
+      el.style.overflowY = 'auto'
+    }
+
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      if (locked !== 'none') {
+        // Already decided direction
+        if (locked === 'h') el.style.overflowY = 'hidden'
+        return
+      }
+      const dx = Math.abs(e.touches[0].clientX - startX)
+      const dy = Math.abs(e.touches[0].clientY - startY)
+      if (dx < 8 && dy < 8) return
+      locked = dx > dy ? 'h' : 'v'
+      if (locked === 'h') el.style.overflowY = 'hidden'
+    }
+
+    const onEnd = () => {
+      locked = 'none'
+      el.style.overflowY = 'auto'
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: true })
+    el.addEventListener('touchend', onEnd, { passive: true })
+    el.addEventListener('touchcancel', onEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [])
+
   return (
     <div className="flex-1 flex flex-col relative min-h-0 chat-bg">
       {/* Floating title pill */}
@@ -184,7 +234,7 @@ export function ChatView({ messages, title }: Props) {
           // Tell iOS: this container only handles vertical panning. 
           // Crucial: when not scrollable, touch-action must be 'auto' or 'pan-x pan-y' 
           // to let the parent horizontal scroll-snap take over the gesture.
-          touchAction: isScrollable ? 'pan-y' : 'auto',
+          touchAction: 'auto',
         }}
         role="log"
         aria-label="Chat messages"
