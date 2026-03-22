@@ -206,7 +206,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   const hasContent = hasText || pendingImages.length > 0
 
   return (
-    <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom">
+    <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), var(--kb, 0px))' }}>
       <div className="max-w-[900px] mx-auto p-3">
         {/* Voice error */}
         {voice.error && (

@@ -144,12 +144,9 @@ export function App() {
     if (!root) return
 
     const setAppHeight = () => {
-      const height = vv ? vv.height : window.innerHeight
-      root.style.height = `${height}px`
-      // Counteract iOS pushing the page up when keyboard opens
-      window.scrollTo(0, 0)
-      document.documentElement.scrollTop = 0
-      document.body.scrollTop = 0
+      // Prefer CSS dvh. We only expose keyboard inset as a CSS var.
+      const keyboardInset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+      document.documentElement.style.setProperty('--kb', `${keyboardInset}px`)
     }
 
     const onResize = () => {
