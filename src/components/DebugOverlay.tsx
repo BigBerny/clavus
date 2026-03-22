@@ -80,8 +80,7 @@ export function DebugOverlay() {
         padding: 10,
         borderRadius: 10,
         border: '1px solid rgba(255,255,255,0.12)',
-        // Ensure overlay stays visible when iOS moves viewports (keyboard)
-        transform: `translateY(${window.visualViewport ? window.visualViewport.offsetTop : 0}px)`,
+        // No transform - we no longer translate the root
       }}
     >
       <div style={{ fontWeight: 700, marginBottom: 6 }}>DebugOverlay (?debug=1)</div>

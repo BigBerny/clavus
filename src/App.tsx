@@ -144,29 +144,30 @@ export function App() {
     const root = document.getElementById('root')
     if (!root) return
 
-    const setAppHeight = () => {
-      // iOS Safari/PWA: position:fixed is anchored to the *layout* viewport, while the
-      // *visual* viewport moves when the keyboard opens (vv.offsetTop).
-      // Keep the app pinned to the visual viewport.
-      const height = Math.round((vv ? vv.height : window.innerHeight))
-      const offsetTop = Math.round((vv ? vv.offsetTop : 0))
+    let raf = 0
+    const apply = () => {
+      const height = Math.round(vv ? vv.height : window.innerHeight)
       root.style.height = `${height}px`
-      root.style.transform = offsetTop ? `translateY(${offsetTop}px)` : ''
+      // No transform! translateY(offsetTop) causes jitter on iOS.
+      // We rely on position:fixed anchoring to the visual viewport in modern iOS.
     }
 
-    const onResize = () => {
-      requestAnimationFrame(setAppHeight)
+    const schedule = () => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(apply)
     }
 
-    setAppHeight()
+    apply()
 
-    vv.addEventListener('resize', onResize)
-    vv.addEventListener('scroll', onResize)
+    vv.addEventListener('resize', schedule, { passive: true })
+    vv.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule, { passive: true })
     return () => {
-      vv.removeEventListener('resize', onResize)
-      vv.removeEventListener('scroll', onResize)
+      cancelAnimationFrame(raf)
+      vv.removeEventListener('resize', schedule)
+      vv.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
       root.style.height = ''
-      root.style.transform = ''
     }
   }, [])
 
@@ -342,13 +343,14 @@ export function App() {
           {/* Horizontal scroll-snap container — full height, behind glass overlays */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 min-h-0 flex flex-row overflow-x-auto overflow-y-hidden snap-x snap-mandatory"
+            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto overflow-y-hidden snap-x snap-mandatory"
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
-              overscrollBehaviorX: 'none',
+              overscrollBehaviorX: 'contain',
               overscrollBehaviorY: 'none',
+              touchAction: 'pan-x',
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
@@ -356,7 +358,7 @@ export function App() {
               <div
                 key={thread.id}
                 ref={setPanelRef(thread.id)}
-                className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col min-h-0 overflow-hidden"
+                className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
               >
                 <ChatViewPanel
                   threadId={thread.id}
@@ -368,7 +370,7 @@ export function App() {
             {/* Home panel (rightmost) */}
             <div
               ref={setPanelRef('home')}
-              className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col min-h-0 overflow-hidden"
+              className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
             >
               <HomeScreen
                 onSend={handleSend}

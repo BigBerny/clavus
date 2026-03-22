@@ -104,8 +104,8 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-none"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
+        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
