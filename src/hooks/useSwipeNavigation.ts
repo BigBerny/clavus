@@ -132,6 +132,9 @@ export function useSwipeNavigation() {
 
     if (directionLocked.current === 'vertical') return
 
+    // Prevent vertical scrolling while swiping horizontally
+    e.preventDefault()
+
     // Calculate instantaneous velocity
     const now = Date.now()
     const dt = now - lastMoveTime.current
