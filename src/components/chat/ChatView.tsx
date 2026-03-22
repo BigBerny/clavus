@@ -134,7 +134,7 @@ export function ChatView({ messages }: Props) {
   }, [messages])
 
   return (
-    <div className="flex-1 flex flex-col relative overflow-hidden min-h-0 chat-bg">
+    <div className="flex-1 flex flex-col relative overflow-hidden min-h-0 chat-bg" style={{ touchAction: isScrollable ? 'auto' : 'pan-x' }}>
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -148,7 +148,11 @@ export function ChatView({ messages }: Props) {
           }
         }}
         className={`flex-1 min-h-0 overflow-x-hidden ${isScrollable ? 'overflow-y-auto overscroll-y-contain' : 'overflow-y-hidden'}`}
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          // When content doesn't scroll, only allow horizontal pan (pass through to parent swipe)
+          touchAction: isScrollable ? 'auto' : 'pan-x',
+        }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
