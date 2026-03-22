@@ -414,13 +414,13 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         <div
           className={`px-4 py-2.5 min-w-0 max-w-full transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
-              ? `bg-gradient-to-br from-[#9333EA] to-[#B855F5] text-white shadow-sm shadow-purple-500/15 ${
+              ? `bg-gradient-to-br from-[rgba(130,60,210,0.78)] to-[rgba(155,85,235,0.78)] backdrop-blur-[20px] text-white shadow-sm shadow-purple-500/15 border border-purple-300/[0.12] ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
                   showAvatar ? 'rounded-[20px] rounded-br-[6px]' :
                   isLastInGroup ? 'rounded-[20px] rounded-tr-[6px]' :
                   'rounded-[20px] rounded-r-[6px]'
                 }`
-              : `bg-white/[0.06] dark:bg-white/[0.08] backdrop-blur-md text-text-light dark:text-text-dark shadow-sm shadow-black/5 dark:shadow-black/10 border border-white/[0.06] dark:border-white/[0.06] ${
+              : `bg-[rgba(33,33,45,0.72)] backdrop-blur-[20px] text-text-light dark:text-text-dark shadow-sm shadow-black/15 border border-white/[0.08] ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
                   showAvatar ? 'rounded-[20px] rounded-bl-[6px]' :
                   isLastInGroup ? 'rounded-[20px] rounded-tl-[6px]' :

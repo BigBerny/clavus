@@ -68,7 +68,7 @@ export function App() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState('0:00')
   const cancelRecordingRef = useRef<(() => void) | null>(null)
-  const swipe = useSwipeNavigation()
+  const { onTouchStart, onTouchMove, onTouchEnd, swipeStyle, isDragging } = useSwipeNavigation()
   const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
 
   const handleTokenSave = useCallback((token: string) => {
@@ -171,7 +171,7 @@ export function App() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark" onTouchStart={swipe.onTouchStart} onTouchEnd={swipe.onTouchEnd}>
+    <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
       {currentView === 'chat' && (
         <Header
           isRecording={isRecording}
@@ -208,23 +208,25 @@ export function App() {
           <span className="text-[12px] text-amber-600 dark:text-amber-400/90">Reconnecting...</span>
         </div>
       )}
-      {currentView === 'home' ? (
-        <HomeScreen
-          onSend={(text) => {
-            setCurrentView('chat')
-            setTimeout(() => send(text), 50)
-          }}
-          onCompose={(channel) => setComposeChannel(channel)}
-        />
-      ) : currentView === 'recipes' ? (
-        <RecipeList />
-      ) : currentView === 'recipe-detail' ? (
-        <RecipeDetail />
-      ) : currentView === 'cook-mode' ? (
-        <CookMode />
-      ) : (
-        <ChatView key={activeThreadId} messages={messages} />
-      )}
+      <div className="flex-1 min-h-0 flex flex-col" style={swipeStyle}>
+        {currentView === 'home' ? (
+          <HomeScreen
+            onSend={(text) => {
+              setCurrentView('chat')
+              setTimeout(() => send(text), 50)
+            }}
+            onCompose={(channel) => setComposeChannel(channel)}
+          />
+        ) : currentView === 'recipes' ? (
+          <RecipeList />
+        ) : currentView === 'recipe-detail' ? (
+          <RecipeDetail />
+        ) : currentView === 'cook-mode' ? (
+          <CookMode />
+        ) : (
+          <ChatView key={activeThreadId} messages={messages} />
+        )}
+      </div>
       {(currentView === 'home' || currentView === 'chat') && <InputBar
         onSend={(text, images) => {
           if (currentView === 'home') {
