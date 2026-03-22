@@ -29,7 +29,7 @@ export function ChatView({ messages, title }: Props) {
     }
   }, [threadId])
 
-  // Restore scroll position on mount (or scroll to bottom for new)
+  // Restore scroll position on mount, or scroll to bottom by default
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -38,7 +38,13 @@ export function ChatView({ messages, title }: Props) {
       container.scrollTop = savedPos
       setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 100)
     } else {
-      bottomRef.current?.scrollIntoView({ block: 'end' })
+      // Default: scroll to bottom (latest messages)
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTop = containerRef.current.scrollHeight
+          setAutoScroll(true)
+        }
+      })
     }
   }, [threadId])
 
