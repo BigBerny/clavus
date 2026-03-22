@@ -207,8 +207,8 @@ export function App() {
           const thread = sortedThreads[panelIndex]
           if (thread && visiblePanel !== thread.id) {
             setVisiblePanel(thread.id)
-            switchThread(thread.id)
-            loadThread(thread.id)
+            // Defer switchThread/loadThread to avoid re-render during snap animation.
+            // The active thread is only needed for sending, not for viewing.
           }
         }
       }, 200) // Wait for snap animation to settle
@@ -264,6 +264,11 @@ export function App() {
         })
       })
     } else {
+      // Ensure the active thread matches the visible panel before sending
+      if (visiblePanel !== 'home') {
+        switchThread(visiblePanel)
+        loadThread(visiblePanel)
+      }
       send(text, images)
     }
   }, [visiblePanel, send, switchThread, loadThread])
