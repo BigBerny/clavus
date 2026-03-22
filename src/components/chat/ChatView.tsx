@@ -121,20 +121,45 @@ export function ChatView({ messages }: Props) {
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
 
-  // Track whether content is scrollable (overflow-y: auto blocks horizontal swipe on iOS when content fits)
-  const [isScrollable, setIsScrollable] = useState(false)
+  // On iOS, a scroll container with overflow-y:auto captures vertical touch events
+  // even when content doesn't overflow. This blocks horizontal swipe on the parent.
+  // Fix: prevent vertical touchmove when not scrollable, so parent gets the event.
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const check = () => setIsScrollable(el.scrollHeight > el.clientHeight + 5)
-    check()
-    const ro = new ResizeObserver(check)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [messages])
+
+    let startY = 0
+    let startX = 0
+
+    const onTouchStart = (e: TouchEvent) => {
+      startY = e.touches[0].clientY
+      startX = e.touches[0].clientX
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      const isContentScrollable = el.scrollHeight > el.clientHeight + 5
+      if (isContentScrollable) return // let normal scrolling work
+
+      const dy = Math.abs(e.touches[0].clientY - startY)
+      const dx = Math.abs(e.touches[0].clientX - startX)
+
+      // If mostly vertical swipe on non-scrollable content, prevent it
+      // so the parent horizontal scroll-snap can handle the gesture
+      if (dy > dx && dy > 5) {
+        e.preventDefault()
+      }
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+    }
+  }, [])
 
   return (
-    <div className="flex-1 flex flex-col relative overflow-hidden min-h-0 chat-bg" style={{ touchAction: isScrollable ? 'auto' : 'pan-x' }}>
+    <div className="flex-1 flex flex-col relative overflow-hidden min-h-0 chat-bg">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -147,12 +172,8 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className={`flex-1 min-h-0 overflow-x-hidden ${isScrollable ? 'overflow-y-auto overscroll-y-contain' : 'overflow-y-hidden'}`}
-        style={{
-          WebkitOverflowScrolling: 'touch',
-          // When content doesn't scroll, only allow horizontal pan (pass through to parent swipe)
-          touchAction: isScrollable ? 'auto' : 'pan-x',
-        }}
+        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
+        style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
