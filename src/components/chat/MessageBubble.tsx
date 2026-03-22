@@ -402,7 +402,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     >
       <div className={`flex flex-col gap-1 max-w-[80%] md:max-w-[600px] min-w-0 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
-          className={`px-4 py-2.5 min-w-0 max-w-full transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
+          className={`px-4 py-2.5 min-w-0 w-fit transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
               ? `bg-gradient-to-br from-[#7B2FBE] to-[#9B59D0] text-white shadow-sm shadow-purple-500/15 ${
                   showAvatar && isLastInGroup ? 'rounded-[20px]' :
