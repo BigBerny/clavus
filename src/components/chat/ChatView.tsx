@@ -121,14 +121,26 @@ export function ChatView({ messages }: Props) {
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
 
-  // On iOS, overflow-y:auto creates a scroll region that captures ALL touch events,
-  // even when content doesn't overflow. This blocks horizontal swipe on the parent
-  // scroll-snap container. Fix: only enable overflow-y:auto when actually scrollable.
+  /**
+   * THE iOS SAFARI SWIPE BUG FIX:
+   * 
+   * On iOS, even with `touch-action: pan-x`, if an element has `overflow-y: auto`, 
+   * the gesture recognizer may "hand off" to the vertical scroll behavior 
+   * if a vertical movement is detected first, even if scrollable=false.
+   * 
+   * This locks out the horizontal parent scroll-snap container.
+   * 
+   * FIX: We change the CSS `overflow` property to `visible` (instead of `auto` or `hidden`)
+   * when the content doesn't need vertical scrolling. iOS Safari 15+ seems to 
+   * only trigger the vertical scroll capture if the computed overflow includes 
+   * a scroll capability.
+   */
   const [isScrollable, setIsScrollable] = useState(false)
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
     const check = () => {
+      // 2px buffer to avoid rounding issues
       const scrollable = el.scrollHeight > el.clientHeight + 2
       setIsScrollable(scrollable)
     }
@@ -143,7 +155,7 @@ export function ChatView({ messages }: Props) {
   }, [messages.length])
 
   return (
-    <div className={`flex-1 flex flex-col relative min-h-0 chat-bg ${isScrollable ? 'overflow-hidden' : ''}`}>
+    <div className="flex-1 flex flex-col relative min-h-0 chat-bg">
       <div
         ref={containerRef}
         onScroll={handleScroll}
@@ -156,10 +168,13 @@ export function ChatView({ messages }: Props) {
             active.blur()
           }
         }}
-        className={`flex-1 min-h-0 ${isScrollable ? 'overflow-y-auto overflow-x-hidden overscroll-y-contain' : ''}`}
+        className={`flex-1 min-h-0 ${isScrollable ? 'overflow-y-auto overscroll-y-contain' : 'overflow-y-visible'}`}
         style={{
           ...(isScrollable ? { WebkitOverflowScrolling: 'touch' } : {}),
-          // Tell iOS gesture recognizer: this container only handles vertical panning
+          // We don't set overflowX here to keep it visible/clean
+          overflowX: 'visible',
+          // Tell iOS: this container only handles vertical panning. 
+          // Crucial: when not scrollable, this property still aids the recognizer hint.
           touchAction: 'pan-y',
         }}
         role="log"
@@ -219,7 +234,6 @@ export function ChatView({ messages }: Props) {
                 </div>
               )
             })}
-            {/* Typing indicator removed — dots now render inside MessageBubble */}
           </>
         )}
         </div>
