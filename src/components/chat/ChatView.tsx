@@ -86,7 +86,7 @@ export function ChatView({ messages }: Props) {
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200
     setAutoScroll(atBottom)
   }, [])
 
