@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat'
 import { useUIStore } from '../../state/ui'
@@ -108,50 +108,68 @@ function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: ()
 
   if (messageCount === 0) return null
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    startX.current = e.touches[0].clientX
-    startY.current = e.touches[0].clientY
-    direction.current = 'none'
-    setSwiping(true)
-  }
+  const itemRef = useRef<HTMLDivElement>(null)
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!swiping) return
-    const dx = e.touches[0].clientX - startX.current
-    const dy = e.touches[0].clientY - startY.current
-    if (direction.current === 'none') {
-      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
-      direction.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
-    }
-    if (direction.current === 'h' && dx < 0) {
-      setOffsetX(dx)
-    }
-  }
+  // Use native touch listeners so we can preventDefault to stop parent scroll-snap
+  useEffect(() => {
+    const el = itemRef.current
+    if (!el) return
 
-  const handleTouchEnd = () => {
-    setSwiping(false)
-    direction.current = 'none'
-    if (offsetX < -100) {
-      // Swipe far enough → delete
-      setOffsetX(-500) // animate out
-      setTimeout(onDelete, 200)
-    } else {
-      setOffsetX(0)
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      startX.current = e.touches[0].clientX
+      startY.current = e.touches[0].clientY
+      direction.current = 'none'
+      setSwiping(true)
     }
-  }
+
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      const dx = e.touches[0].clientX - startX.current
+      const dy = e.touches[0].clientY - startY.current
+      if (direction.current === 'none') {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+        direction.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
+      }
+      if (direction.current === 'h' && dx < 0) {
+        e.preventDefault() // stop parent scroll-snap from moving
+        e.stopPropagation()
+        setOffsetX(dx)
+      }
+    }
+
+    const onEnd = () => {
+      setSwiping(false)
+      direction.current = 'none'
+      setOffsetX(prev => {
+        if (prev < -100) {
+          setTimeout(onDelete, 200)
+          return -500
+        }
+        return 0
+      })
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd, { passive: true })
+    el.addEventListener('touchcancel', onEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [onDelete])
 
   return (
-    <div className="relative overflow-hidden rounded-xl">
+    <div ref={itemRef} className="relative overflow-hidden rounded-xl">
       {/* Delete background */}
       <div className="absolute inset-0 flex items-center justify-end px-5 bg-red-500/90 rounded-xl">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
       </div>
       <button
         onClick={onSelect}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
         className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-surface-light dark:bg-surface-dark hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:scale-[0.98] transition-all duration-150 text-left group relative"
         style={{
           transform: `translateX(${offsetX}px)`,
