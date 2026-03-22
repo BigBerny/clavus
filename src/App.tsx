@@ -400,9 +400,7 @@ export function App() {
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
-              // iOS Safari: keep the snap scroller strictly horizontal.
-              // Vertical panning should be handled by inner chat scroll areas.
-              touchAction: 'pan-x',
+              touchAction: 'pan-x pan-y', // iOS Safari: allow both so inner vertical catch doesn't block outer horizontal
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
@@ -413,7 +411,7 @@ export function App() {
                   key={thread.id}
                   ref={setPanelRef(thread.id)}
                   className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
-                  style={{ touchAction: 'pan-x' }}
+                  style={{ touchAction: 'pan-x pan-y' }}
                   // inert on off-screen panels prevents iOS from routing touch events to them
                   {...(!isActive ? { inert: true } : {})}
                 >
