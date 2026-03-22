@@ -148,24 +148,33 @@ export function App() {
     syncFromServer()
   }, [needsToken])
 
-  // Initial scroll to home (rightmost panel)
+  // Initial scroll to home (rightmost panel) — retry until panels are rendered
   useEffect(() => {
-    if (needsToken || initialScrollDone.current) return
+    if (needsToken) return
     const container = scrollContainerRef.current
     if (!container) return
-    // Use requestAnimationFrame to ensure DOM is rendered
-    requestAnimationFrame(() => {
+
+    const scrollToHome = () => {
       isProgrammaticScroll.current = true
-      const homeIndex = sortedThreads.length
-      const targetLeft = container.clientWidth * homeIndex
-      container.scrollTo({ left: targetLeft, behavior: 'auto' })
+      // Home is always the rightmost panel → scroll to max
+      container.scrollLeft = container.scrollWidth
       setVisiblePanel('home')
-      initialScrollDone.current = true
-      // release programmatic flag after scroll settles
       requestAnimationFrame(() => {
+        // Double-check: if panels weren't rendered yet, scrollWidth might be 0
+        if (container.scrollWidth > container.clientWidth) {
+          container.scrollLeft = container.scrollWidth
+          initialScrollDone.current = true
+        }
         isProgrammaticScroll.current = false
       })
-    })
+    }
+
+    if (!initialScrollDone.current) {
+      // Try immediately and again after a short delay (panels may not be rendered yet)
+      requestAnimationFrame(scrollToHome)
+      const timer = setTimeout(scrollToHome, 100)
+      return () => clearTimeout(timer)
+    }
   }, [needsToken, sortedThreads])
 
   // Detect which panel is visible using scroll position
