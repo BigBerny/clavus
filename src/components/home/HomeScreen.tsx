@@ -147,7 +147,7 @@ function RecipeItem({ recipe, onSelect }: { recipe: Recipe; onSelect: () => void
   )
 }
 
-export function HomeScreen({ onSend, onCompose }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void }) {
+export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void; onSelectThread?: (threadId: string) => void }) {
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const loadThread = useChatStore((s) => s.loadThread)
@@ -191,10 +191,14 @@ export function HomeScreen({ onSend, onCompose }: { onSend: (message: string) =>
   const hasOlder = sortedThreads.some(t => t.updatedAt <= twentyFourHoursAgo)
 
   const handleSelectThread = useCallback((id: string) => {
-    switchThread(id)
-    loadThread(id)
-    setCurrentView('chat')
-  }, [switchThread, loadThread, setCurrentView])
+    if (onSelectThread) {
+      onSelectThread(id)
+    } else {
+      switchThread(id)
+      loadThread(id)
+      setCurrentView('chat')
+    }
+  }, [switchThread, loadThread, setCurrentView, onSelectThread])
 
   const handleSelectRecipe = useCallback((id: number) => {
     setSelectedRecipeId(id)

@@ -86,6 +86,11 @@ body {
   display: none;
 }
 
+/* Hide scrollbar on snap container */
+.snap-x::-webkit-scrollbar {
+  display: none;
+}
+
 /* Safe areas */
 .safe-area-top {
   padding-top: env(safe-area-inset-top);

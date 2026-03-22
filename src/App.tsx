@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { Header } from './components/layout/Header.tsx'
 import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
@@ -9,10 +9,10 @@ import { RecipeDetail } from './components/recipes/RecipeDetail.tsx'
 import { CookMode } from './components/recipes/CookMode.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
-import { useThreadsStore, syncFromServer } from './state/threads.ts'
+import { useThreadsStore, syncFromServer, loadThreadMessages } from './state/threads.ts'
+import { useChatStore } from './state/chat.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
-import { useSwipeNavigation } from './hooks/useSwipeNavigation.ts'
 import { ComposeFlow } from './components/compose/ComposeFlow.tsx'
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
@@ -63,13 +63,37 @@ export function App() {
   const setCurrentView = useUIStore((s) => s.setCurrentView)
   const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
   const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
+  const threads = useThreadsStore((s) => s.threads)
   const activeThreadId = useThreadsStore((s) => s.activeThreadId)
+  const switchThread = useThreadsStore((s) => s.switchThread)
+  const loadThread = useChatStore((s) => s.loadThread)
   const [needsToken, setNeedsToken] = useState(!hasToken())
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState('0:00')
   const cancelRecordingRef = useRef<(() => void) | null>(null)
-  const { onTouchStart, onTouchMove, onTouchEnd, swipeStyle, isDragging } = useSwipeNavigation()
   const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
+
+  // Scroll container ref
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  // Track which panel is visible (thread id or 'home')
+  const [visiblePanel, setVisiblePanel] = useState<string>('home')
+  // Refs for each panel element
+  const panelRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  // Flag to prevent scroll handler from firing during programmatic scrolls
+  const isProgrammaticScroll = useRef(false)
+  // Track if initial scroll has been done
+  const initialScrollDone = useRef(false)
+
+  // Sorted threads: oldest first (leftmost), newest last (rightmost, before home)
+  const sortedThreads = useMemo(() =>
+    [...threads]
+      .filter(t => {
+        const msgs = loadThreadMessages(t.id)
+        return msgs.length > 0 || t.lastMessagePreview
+      })
+      .sort((a, b) => a.updatedAt - b.updatedAt), // oldest first
+    [threads]
+  )
 
   const handleTokenSave = useCallback((token: string) => {
     setGatewayToken(token)
@@ -85,7 +109,6 @@ export function App() {
       setConnectionStatus(ok ? 'connected' : 'disconnected')
     })
 
-    // Periodic reconnect check every 30s
     const interval = setInterval(async () => {
       const status = useUIStore.getState().connectionStatus
       if (status === 'disconnected') {
@@ -96,7 +119,7 @@ export function App() {
     return () => clearInterval(interval)
   }, [setConnectionStatus, needsToken])
 
-  // Prevent pull-to-refresh in standalone PWA (but allow scrolling in scrollable containers)
+  // Prevent pull-to-refresh in standalone PWA
   useEffect(() => {
     const handler = (e: TouchEvent) => {
       if (e.touches.length > 1) return
@@ -124,7 +147,6 @@ export function App() {
     let lastHeight = 0
     const onResize = () => {
       const newHeight = Math.round(vv.height)
-      // Only update if height changed by more than 2px (ignore sub-pixel jitter)
       if (Math.abs(newHeight - lastHeight) < 3) return
       lastHeight = newHeight
 
@@ -133,7 +155,6 @@ export function App() {
         root.style.height = `${newHeight}px`
       } else {
         root.style.height = '100%'
-        // When keyboard closes, scroll chat to bottom
         requestAnimationFrame(() => {
           const scrollContainer = root.querySelector('[role="log"]') as HTMLElement | null
           if (scrollContainer) {
@@ -153,12 +174,87 @@ export function App() {
     }
   }, [])
 
-  // Sync from server on startup, always start on home
+  // Sync from server on startup
   useEffect(() => {
     if (needsToken) return
-    setCurrentView('home')
     syncFromServer()
-  }, [needsToken, setCurrentView])
+  }, [needsToken])
+
+  // Initial scroll to home (rightmost panel)
+  useEffect(() => {
+    if (needsToken || initialScrollDone.current) return
+    const container = scrollContainerRef.current
+    if (!container) return
+    // Use requestAnimationFrame to ensure DOM is rendered
+    requestAnimationFrame(() => {
+      container.scrollLeft = container.scrollWidth
+      setVisiblePanel('home')
+      initialScrollDone.current = true
+    })
+  }, [needsToken, sortedThreads])
+
+  // Detect which panel is visible using scroll position
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    let scrollTimeout: ReturnType<typeof setTimeout> | null = null
+
+    const handleScroll = () => {
+      if (isProgrammaticScroll.current) return
+
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+      scrollTimeout = setTimeout(() => {
+        const containerWidth = container.clientWidth
+        const scrollLeft = container.scrollLeft
+        // Which panel index is in view?
+        const panelIndex = Math.round(scrollLeft / containerWidth)
+        
+        // Total panels: sortedThreads.length + 1 (home)
+        if (panelIndex >= sortedThreads.length) {
+          // Home panel
+          if (visiblePanel !== 'home') {
+            setVisiblePanel('home')
+          }
+        } else {
+          const thread = sortedThreads[panelIndex]
+          if (thread && visiblePanel !== thread.id) {
+            setVisiblePanel(thread.id)
+            // Switch the active thread so useChat works with this thread
+            switchThread(thread.id)
+            loadThread(thread.id)
+          }
+        }
+      }, 50)
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+    }
+  }, [sortedThreads, visiblePanel, switchThread, loadThread])
+
+  // Scroll to a specific thread panel
+  const scrollToThread = useCallback((threadId: string) => {
+    const panel = panelRefs.current.get(threadId)
+    if (panel) {
+      // Set active thread before scrolling
+      switchThread(threadId)
+      loadThread(threadId)
+      setVisiblePanel(threadId)
+      panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+    }
+  }, [switchThread, loadThread])
+
+  // Scroll to home panel
+  const scrollToHome = useCallback(() => {
+    const panel = panelRefs.current.get('home')
+    if (panel) {
+      setVisiblePanel('home')
+      panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+    }
+  }, [])
 
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
     setIsRecording(recording)
@@ -166,28 +262,70 @@ export function App() {
     cancelRecordingRef.current = cancel
   }, [])
 
+  // Handle sending from any panel
+  const handleSend = useCallback((text: string, images?: string[]) => {
+    if (visiblePanel === 'home') {
+      // Create new thread & send — the useChat hook handles thread creation
+      // After send, we need to scroll to the new thread
+      send(text, images)
+      // After a short delay, the new thread will exist - scroll to it
+      setTimeout(() => {
+        const newActiveId = useThreadsStore.getState().activeThreadId
+        if (newActiveId) {
+          // Wait for panel to render
+          requestAnimationFrame(() => {
+            const panel = panelRefs.current.get(newActiveId)
+            if (panel) {
+              setVisiblePanel(newActiveId)
+              panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+            }
+          })
+        }
+      }, 100)
+    } else {
+      send(text, images)
+    }
+  }, [visiblePanel, send])
+
+  // Set panel ref callback
+  const setPanelRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
+    if (el) {
+      panelRefs.current.set(id, el)
+    } else {
+      panelRefs.current.delete(id)
+    }
+  }, [])
+
+  // Is the current visible panel showing a chat?
+  const isOnChat = visiblePanel !== 'home'
+  // Is the current view a recipe overlay?
+  const isRecipeView = currentView === 'recipes' || currentView === 'recipe-detail' || currentView === 'cook-mode'
+
   if (needsToken) {
     return <TokenPrompt onSave={handleTokenSave} />
   }
 
   return (
-    <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
-      {currentView === 'chat' && (
+    <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
+      {/* Header: show for chat panels */}
+      {isOnChat && !isRecipeView && (
         <Header
           isRecording={isRecording}
           recordingDuration={recordingDuration}
           onCancelRecording={() => cancelRecordingRef.current?.()}
           isStreaming={isStreaming}
+          visibleThreadId={visiblePanel}
+          onBack={scrollToHome}
         />
       )}
-      {(currentView === 'home') && (
-        <>
-          {/* Safe area for home screen */}
-          <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
-        </>
+      {/* Safe area for home */}
+      {!isOnChat && !isRecipeView && (
+        <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
       )}
+
+      {/* Connection status banners */}
       {connectionStatus === 'disconnected' && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15 animate-[fadeSlideIn_0.2s_ease-out]">
+        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80" />
           <span className="text-[12px] text-amber-600 dark:text-amber-400/90">Connection lost.</span>
           <button
@@ -203,43 +341,73 @@ export function App() {
         </div>
       )}
       {connectionStatus === 'reconnecting' && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15 animate-[fadeSlideIn_0.2s_ease-out]">
+        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15">
           <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80 animate-pulse" />
           <span className="text-[12px] text-amber-600 dark:text-amber-400/90">Reconnecting...</span>
         </div>
       )}
-      <div className="flex-1 min-h-0 flex flex-col" style={swipeStyle}>
-        {currentView === 'home' ? (
-          <HomeScreen
-            onSend={(text) => {
-              setCurrentView('chat')
-              setTimeout(() => send(text), 50)
+
+      {/* Recipe views as overlays */}
+      {isRecipeView ? (
+        <div className="flex-1 min-h-0 flex flex-col">
+          {currentView === 'recipes' ? (
+            <RecipeList />
+          ) : currentView === 'recipe-detail' ? (
+            <RecipeDetail />
+          ) : (
+            <CookMode />
+          )}
+        </div>
+      ) : (
+        <>
+          {/* Horizontal scroll-snap container */}
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 min-h-0 flex flex-row overflow-x-auto overflow-y-hidden snap-x snap-mandatory"
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
             }}
-            onCompose={(channel) => setComposeChannel(channel)}
+          >
+            {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
+            {sortedThreads.map((thread) => (
+              <div
+                key={thread.id}
+                ref={setPanelRef(thread.id)}
+                className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col"
+              >
+                <ChatViewPanel
+                  threadId={thread.id}
+                  isVisible={visiblePanel === thread.id}
+                />
+              </div>
+            ))}
+
+            {/* Home panel (rightmost) */}
+            <div
+              ref={setPanelRef('home')}
+              className="min-w-full w-full h-full flex-shrink-0 snap-start flex flex-col"
+            >
+              <HomeScreen
+                onSend={handleSend}
+                onCompose={(channel) => setComposeChannel(channel)}
+                onSelectThread={scrollToThread}
+              />
+            </div>
+          </div>
+
+          {/* InputBar at bottom */}
+          <InputBar
+            onSend={handleSend}
+            onAbort={abort}
+            isStreaming={isStreaming}
+            onRecordingChange={handleRecordingChange}
+            isHome={visiblePanel === 'home'}
           />
-        ) : currentView === 'recipes' ? (
-          <RecipeList />
-        ) : currentView === 'recipe-detail' ? (
-          <RecipeDetail />
-        ) : currentView === 'cook-mode' ? (
-          <CookMode />
-        ) : (
-          <ChatView key={activeThreadId} messages={messages} />
-        )}
-      </div>
-      {(currentView === 'home' || currentView === 'chat') && <InputBar
-        onSend={(text, images) => {
-          if (currentView === 'home') {
-            setCurrentView('chat')
-            setTimeout(() => send(text, images), 50)
-          } else {
-            send(text, images)
-          }
-        }}
-        onAbort={abort}
-        isStreaming={isStreaming}
-        onRecordingChange={handleRecordingChange}
-      />}
+        </>
+      )}
+
       <FileBrowser
         open={fileBrowserOpen}
         onClose={() => setFileBrowserOpen(false)}
@@ -252,4 +420,23 @@ export function App() {
       )}
     </div>
   )
+}
+
+/**
+ * Wrapper for ChatView that loads its own messages from the thread store.
+ * Each conversation panel independently manages its messages.
+ */
+function ChatViewPanel({ threadId, isVisible }: { threadId: string; isVisible: boolean }) {
+  const storeMessages = useChatStore((s) => s.messages)
+  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
+
+  // If this is the active thread, use live store messages; otherwise load from storage
+  const messages = useMemo(() => {
+    if (threadId === activeThreadId) {
+      return storeMessages
+    }
+    return loadThreadMessages(threadId)
+  }, [threadId, activeThreadId, storeMessages])
+
+  return <ChatView messages={messages} />
 }

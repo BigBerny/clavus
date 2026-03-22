@@ -6,15 +6,17 @@ interface Props {
   recordingDuration?: string
   onCancelRecording?: () => void
   isStreaming?: boolean
+  visibleThreadId?: string
+  onBack?: () => void
 }
 
-export function Header({ isRecording, recordingDuration, onCancelRecording, isStreaming }: Props) {
+export function Header({ isRecording, recordingDuration, onCancelRecording, isStreaming, visibleThreadId, onBack }: Props) {
   const connectionStatus = useUIStore((s) => s.connectionStatus)
-  const setCurrentView = useUIStore((s) => s.setCurrentView)
-  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
   const threads = useThreadsStore((s) => s.threads)
 
-  const activeThread = threads.find((t) => t.id === activeThreadId)
+  const activeThread = visibleThreadId
+    ? threads.find((t) => t.id === visibleThreadId)
+    : threads.find((t) => t.id === useThreadsStore.getState().activeThreadId)
   const title = activeThread?.title || 'New conversation'
 
   const statusColor: Record<string, string> = {
@@ -22,6 +24,14 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
     disconnected: 'bg-amber-500',
     checking: 'bg-amber-500 animate-pulse',
     reconnecting: 'bg-amber-500 animate-pulse',
+  }
+
+  const handleBack = () => {
+    if (onBack) {
+      onBack()
+    } else {
+      useUIStore.getState().setCurrentView('home')
+    }
   }
 
   return (
@@ -47,9 +57,9 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
       )}
 
       <header className="flex items-center justify-between px-3 h-14 border-b border-surface-light-3/50 dark:border-surface-dark-3/50 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur-xl select-none">
-        {/* Left: Back/chevron (swipe replaces Home button) */}
+        {/* Left: Back button → scrolls to home */}
         <button
-          onClick={() => setCurrentView('home')}
+          onClick={handleBack}
           className="p-2 rounded-xl text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 active:scale-95 transition-all min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
           aria-label="Back"
           title="Back"
