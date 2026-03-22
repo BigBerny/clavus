@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { FileBrowser } from './components/layout/FileBrowser.tsx'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
+import { DebugOverlay } from './components/DebugOverlay.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { RecipeList } from './components/recipes/RecipeList.tsx'
 // RecipeDetail is now rendered inside RecipeList as a slide-in panel
@@ -386,6 +387,8 @@ export function App() {
           </div>
         </div>
       )}
+
+      <DebugOverlay />
 
       <FileBrowser
         open={fileBrowserOpen}
