@@ -144,14 +144,28 @@ export function App() {
     const root = document.getElementById('root')
     if (!root) return
 
-    let raf = 0
+    // GPU-accelerated transform for smooth repositioning
+    root.style.willChange = 'transform'
+
+    let lastHeight = 0
+    let lastOffset = 0
+
     const apply = () => {
       const height = Math.round(vv ? vv.height : window.innerHeight)
-      root.style.height = `${height}px`
-      // No transform! translateY(offsetTop) causes jitter on iOS.
-      // We rely on position:fixed anchoring to the visual viewport in modern iOS.
+      const offset = Math.round(vv ? vv.offsetTop : 0)
+
+      // Only update DOM when values actually changed (prevents jitter from redundant writes)
+      if (height !== lastHeight) {
+        root.style.height = `${height}px`
+        lastHeight = height
+      }
+      if (offset !== lastOffset) {
+        root.style.transform = offset ? `translateY(${offset}px)` : ''
+        lastOffset = offset
+      }
     }
 
+    let raf = 0
     const schedule = () => {
       cancelAnimationFrame(raf)
       raf = requestAnimationFrame(apply)
@@ -168,6 +182,8 @@ export function App() {
       vv.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', schedule)
       root.style.height = ''
+      root.style.transform = ''
+      root.style.willChange = ''
     }
   }, [])
 
