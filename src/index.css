@@ -43,9 +43,12 @@ body {
 
 #root {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   width: 100%;
-  height: 100%;
+  height: 100vh;
+  height: 100dvh; /* Dynamic viewport height: shrinks when keyboard opens */
   overflow: hidden;
   overscroll-behavior: none;
   background-color: var(--color-surface-dark, #111318);

@@ -136,56 +136,11 @@ export function App() {
     return () => document.removeEventListener('touchmove', handler)
   }, [])
 
-  // iOS keyboard: adjust layout using visualViewport API
-  useEffect(() => {
-    const vv = window.visualViewport
-    if (!vv) return
-
-    const root = document.getElementById('root')
-    if (!root) return
-
-    // GPU-accelerated transform for smooth repositioning
-    root.style.willChange = 'transform'
-
-    let lastHeight = 0
-    let lastOffset = 0
-
-    const apply = () => {
-      const height = Math.round(vv ? vv.height : window.innerHeight)
-      const offset = Math.round(vv ? vv.offsetTop : 0)
-
-      // Only update DOM when values actually changed (prevents jitter from redundant writes)
-      if (height !== lastHeight) {
-        root.style.height = `${height}px`
-        lastHeight = height
-      }
-      if (offset !== lastOffset) {
-        root.style.transform = offset ? `translateY(${offset}px)` : ''
-        lastOffset = offset
-      }
-    }
-
-    let raf = 0
-    const schedule = () => {
-      cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(apply)
-    }
-
-    apply()
-
-    vv.addEventListener('resize', schedule, { passive: true })
-    vv.addEventListener('scroll', schedule, { passive: true })
-    window.addEventListener('resize', schedule, { passive: true })
-    return () => {
-      cancelAnimationFrame(raf)
-      vv.removeEventListener('resize', schedule)
-      vv.removeEventListener('scroll', schedule)
-      window.removeEventListener('resize', schedule)
-      root.style.height = ''
-      root.style.transform = ''
-      root.style.willChange = ''
-    }
-  }, [])
+  // iOS keyboard handling:
+  // We use `interactive-widget=resizes-content` in the viewport meta tag.
+  // This tells the browser to resize the layout viewport when the keyboard opens,
+  // so position:fixed elements naturally stay above the keyboard.
+  // No JavaScript viewport hacks needed.
 
   // Sync from server on startup
   useEffect(() => {
