@@ -89,7 +89,7 @@ export function App() {
     [...threads]
       .filter(t => {
         const msgs = loadThreadMessages(t.id)
-        return msgs.length > 0 || t.lastMessagePreview
+        return msgs.length > 0
       })
       .sort((a, b) => a.updatedAt - b.updatedAt), // oldest first
     [threads]
