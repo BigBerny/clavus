@@ -330,7 +330,6 @@ export function App() {
               WebkitOverflowScrolling: 'touch',
               overscrollBehaviorX: 'contain',
               overscrollBehaviorY: 'none',
-              touchAction: 'pan-x',
             }}
           >
             {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}

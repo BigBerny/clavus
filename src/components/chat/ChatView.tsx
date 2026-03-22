@@ -127,7 +127,7 @@ export function ChatView({ messages }: Props) {
           }
         }}
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain"
-        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+        style={{ WebkitOverflowScrolling: 'touch' }}
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
