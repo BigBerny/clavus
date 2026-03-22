@@ -119,21 +119,62 @@ export function App() {
     return () => clearInterval(interval)
   }, [setConnectionStatus, needsToken])
 
-  // Prevent pull-to-refresh in standalone PWA
+  // Prevent pull-to-refresh in standalone PWA (iOS)
+  // IMPORTANT: must NOT block horizontal swipes on our scroll-snap container.
+  // iOS Safari's gesture recognizer can get "stuck" if we preventDefault
+  // on a non-scrollable vertical gesture; subsequent horizontal pans may stop working.
   useEffect(() => {
-    const handler = (e: TouchEvent) => {
-      if (e.touches.length > 1) return
+    let startX = 0
+    let startY = 0
+    let direction: 'unknown' | 'vertical' | 'horizontal' = 'unknown'
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      const t = e.touches[0]
+      startX = t.clientX
+      startY = t.clientY
+      direction = 'unknown'
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      if (!e.cancelable) return
+
+      const t = e.touches[0]
+      const dx = t.clientX - startX
+      const dy = t.clientY - startY
+
+      // Decide direction once, with a small threshold.
+      if (direction === 'unknown') {
+        const ax = Math.abs(dx)
+        const ay = Math.abs(dy)
+        if (ax < 6 && ay < 6) return
+        direction = ax > ay ? 'horizontal' : 'vertical'
+      }
+
+      // Never block horizontal pans (needed for panel swiping).
+      if (direction === 'horizontal') return
+
+      // Only block vertical pull-to-refresh when the page itself is at the top
+      // AND there is no vertically-scrollable ancestor under the finger.
       let el = e.target as HTMLElement | null
       while (el && el !== document.body) {
-        if (el.scrollHeight > el.clientHeight) return
+        // Use a 1px buffer to avoid rounding issues.
+        if (el.scrollHeight > el.clientHeight + 1) return
         el = el.parentElement
       }
+
       if (window.scrollY === 0) {
         e.preventDefault()
       }
     }
-    document.addEventListener('touchmove', handler, { passive: false })
-    return () => document.removeEventListener('touchmove', handler)
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove', onTouchMove)
+    }
   }, [])
 
   // iOS keyboard handling:
