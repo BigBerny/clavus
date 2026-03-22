@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useUIStore } from '../../state/ui'
 import { fetchRecipes, searchRecipes as searchApi } from '../../api/recipes'
+import { RecipeDetail } from './RecipeDetail'
 import type { Recipe } from '../../api/recipes'
 
 type SortMode = 'recent' | 'last_opened' | 'rating' | 'alpha' | 'added'
@@ -171,10 +172,21 @@ export function RecipeList() {
     }
   }, [filtered, sort])
 
+  const [detailRecipeId, setDetailRecipeId] = useState<number | null>(null)
+  const [detailVisible, setDetailVisible] = useState(false)
+
   const openRecipe = useCallback((id: number) => {
     setSelectedRecipeId(id)
-    setCurrentView('recipe-detail')
-  }, [setSelectedRecipeId, setCurrentView])
+    setDetailRecipeId(id)
+    // Trigger slide-in after a frame so CSS transition fires
+    requestAnimationFrame(() => setDetailVisible(true))
+  }, [setSelectedRecipeId])
+
+  const closeDetail = useCallback(() => {
+    setDetailVisible(false)
+    // Wait for slide-out animation to finish
+    setTimeout(() => setDetailRecipeId(null), 300)
+  }, [])
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -287,6 +299,73 @@ export function RecipeList() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Slide-in Recipe Detail */}
+      {detailRecipeId !== null && (
+        <SlideInDetail visible={detailVisible} onClose={closeDetail} />
+      )}
+    </div>
+  )
+}
+
+function SlideInDetail({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const touchStartX = useRef(0)
+  const touchStartY = useRef(0)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [translateX, setTranslateX] = useState(0)
+  const isDragging = useRef(false)
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+    touchStartY.current = e.touches[0].clientY
+    isDragging.current = false
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - touchStartX.current
+    const dy = e.touches[0].clientY - touchStartY.current
+    if (!isDragging.current) {
+      if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5 && dx > 0) {
+        isDragging.current = true
+      } else if (Math.abs(dy) > 10) {
+        return
+      } else {
+        return
+      }
+    }
+    if (isDragging.current && dx > 0) {
+      setTranslateX(dx)
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    if (isDragging.current && translateX > 80) {
+      onClose()
+    }
+    setTranslateX(0)
+    isDragging.current = false
+  }, [translateX, onClose])
+
+  return (
+    <div className="absolute inset-0 z-30">
+      <div
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        onClick={onClose}
+      />
+      <div
+        ref={panelRef}
+        className="absolute inset-0 bg-surface-light dark:bg-surface-dark transition-transform duration-300 ease-out"
+        style={{
+          transform: visible
+            ? `translateX(${translateX}px)`
+            : 'translateX(100%)',
+        }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        <RecipeDetail onBack={onClose} />
       </div>
     </div>
   )

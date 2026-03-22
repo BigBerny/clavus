@@ -4,7 +4,7 @@ import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { RecipeList } from './components/recipes/RecipeList.tsx'
-import { RecipeDetail } from './components/recipes/RecipeDetail.tsx'
+// RecipeDetail is now rendered inside RecipeList as a slide-in panel
 import { CookMode } from './components/recipes/CookMode.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
@@ -331,10 +331,8 @@ export function App() {
       {/* Recipe views as overlays */}
       {isRecipeView ? (
         <div className="flex-1 min-h-0 flex flex-col">
-          {currentView === 'recipes' ? (
+          {currentView === 'recipes' || currentView === 'recipe-detail' ? (
             <RecipeList />
-          ) : currentView === 'recipe-detail' ? (
-            <RecipeDetail />
           ) : (
             <CookMode />
           )}

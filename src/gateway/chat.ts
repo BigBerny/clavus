@@ -35,6 +35,7 @@ export async function sendChatStream(
     body: JSON.stringify({
       model: `openclaw:${config.agentId}`,
       stream: true,
+      stream_options: { include_reasoning: true },
       user: config.user,
       messages,
     }),

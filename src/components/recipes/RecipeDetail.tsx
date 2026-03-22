@@ -197,7 +197,7 @@ function BringModal({ ingredients, servings, defaultServings, onClose }: {
   )
 }
 
-export function RecipeDetail() {
+export function RecipeDetail({ onBack: onBackProp }: { onBack?: () => void } = {}) {
   const selectedRecipeId = useUIStore(s => s.selectedRecipeId)
   const setCurrentView = useUIStore(s => s.setCurrentView)
   const [recipe, setRecipe] = useState<Recipe | null>(null)
@@ -253,8 +253,12 @@ export function RecipeDetail() {
   }, [recipe, notesText])
 
   const goBack = useCallback(() => {
-    setCurrentView('recipes')
-  }, [setCurrentView])
+    if (onBackProp) {
+      onBackProp()
+    } else {
+      setCurrentView('recipes')
+    }
+  }, [setCurrentView, onBackProp])
 
   const startCooking = useCallback(async () => {
     if (!recipe) return

@@ -68,6 +68,32 @@ function QuickActions({ onCompose }: QuickActionsProps) {
   )
 }
 
+function stripMarkdown(text: string): string {
+  return text
+    // Remove :::copy and ::: fences
+    .replace(/^:::copy\s*$/gm, '')
+    .replace(/^:::\s*$/gm, '')
+    // Remove headings markers
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold/italic markers
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/_([^_]+)_/g, '$1')
+    // Remove links → show link text only
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    // Remove inline code backticks
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove code fences
+    .replace(/```[\s\S]*?```/g, '')
+    // Remove strikethrough
+    .replace(/~~([^~]+)~~/g, '$1')
+    // Collapse whitespace
+    .replace(/\n+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }) {
   const messageCount = useMemo(() => {
     const msgs = loadThreadMessages(thread.id)
@@ -95,7 +121,7 @@ function ChatItem({ thread, onSelect }: { thread: Thread; onSelect: () => void }
         </div>
         {thread.lastMessagePreview && (
           <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
-            {thread.lastMessagePreview}
+            {stripMarkdown(thread.lastMessagePreview)}
           </p>
         )}
       </div>
