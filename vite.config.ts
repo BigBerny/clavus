@@ -4,12 +4,56 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
 import nodePath from 'path'
+import webpush from 'web-push'
 import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, markOpened, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
 
 const THREADS_DATA_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus-data')
+const VAPID_FILE = nodePath.join(THREADS_DATA_DIR, 'vapid.json')
+const PUSH_SUBS_FILE = nodePath.join(THREADS_DATA_DIR, 'push-subscriptions.json')
+
+// Auto-generate VAPID keys on first run
+function getVapidKeys(): { publicKey: string; privateKey: string } {
+  if (fs.existsSync(VAPID_FILE)) {
+    return JSON.parse(fs.readFileSync(VAPID_FILE, 'utf-8'))
+  }
+  const keys = webpush.generateVAPIDKeys()
+  if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+  fs.writeFileSync(VAPID_FILE, JSON.stringify(keys, null, 2))
+  return keys
+}
+
+const vapidKeys = getVapidKeys()
+webpush.setVapidDetails('mailto:noreply@clavus.local', vapidKeys.publicKey, vapidKeys.privateKey)
+
+function loadPushSubscriptions(): webpush.PushSubscription[] {
+  if (!fs.existsSync(PUSH_SUBS_FILE)) return []
+  try { return JSON.parse(fs.readFileSync(PUSH_SUBS_FILE, 'utf-8')) } catch { return [] }
+}
+
+function savePushSubscriptions(subs: webpush.PushSubscription[]) {
+  fs.writeFileSync(PUSH_SUBS_FILE, JSON.stringify(subs, null, 2))
+}
+
+async function sendPushToAll(payload: { title: string; body: string; threadId: string }) {
+  const subs = loadPushSubscriptions()
+  const valid: webpush.PushSubscription[] = []
+  for (const sub of subs) {
+    try {
+      await webpush.sendNotification(sub, JSON.stringify(payload))
+      valid.push(sub)
+    } catch (err: any) {
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        // Subscription expired — drop it
+      } else {
+        valid.push(sub)
+      }
+    }
+  }
+  if (valid.length !== subs.length) savePushSubscriptions(valid)
+}
 
 function threadsApiPlugin() {
   // Ensure data directory exists
@@ -78,6 +122,51 @@ function threadsApiPlugin() {
             const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
             if (fs.existsSync(msgFile)) fs.unlinkSync(msgFile)
             res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          if (req.url === '/api/threads/push' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            const message: string = body.message
+            if (!message) {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'message is required' }))
+              return
+            }
+            const now = Date.now()
+            const threadId = `thread-${now}-${Math.random().toString(36).slice(2, 8)}`
+            const title: string = body.title || message.slice(0, 40)
+
+            const thread = {
+              id: threadId,
+              title,
+              createdAt: now,
+              updatedAt: now,
+              lastMessagePreview: message.slice(0, 80),
+            }
+
+            // Load existing threads, prepend new one, save
+            const threads = fs.existsSync(threadsFile)
+              ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
+              : []
+            threads.unshift(thread)
+            fs.writeFileSync(threadsFile, JSON.stringify(threads), 'utf-8')
+
+            // Create messages file with initial assistant message
+            const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
+            const messages = [{
+              id: `msg-${now}-0`,
+              role: 'assistant',
+              content: message,
+              timestamp: now,
+            }]
+            fs.writeFileSync(msgFile, JSON.stringify(messages), 'utf-8')
+
+            // Send push notification
+            sendPushToAll({ title, body: message.slice(0, 200), threadId }).catch(() => {})
+
+            res.statusCode = 201
+            res.end(JSON.stringify({ threadId, thread }))
             return
           }
 
@@ -379,6 +468,59 @@ function recipesApiPlugin() {
   }
 }
 
+function pushApiPlugin() {
+  return {
+    name: 'push-api',
+    configureServer(server: any) {
+      async function readBody(req: any): Promise<string> {
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(Buffer.from(chunk))
+        return Buffer.concat(chunks).toString('utf-8')
+      }
+
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        if (!req.url?.startsWith('/api/push')) return next()
+
+        res.setHeader('Content-Type', 'application/json')
+
+        try {
+          if (req.url === '/api/push/vapid' && req.method === 'GET') {
+            res.end(JSON.stringify({ publicKey: vapidKeys.publicKey }))
+            return
+          }
+
+          if (req.url === '/api/push/subscribe' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            const subs = loadPushSubscriptions()
+            // Deduplicate by endpoint
+            const existing = subs.findIndex((s: any) => s.endpoint === body.endpoint)
+            if (existing >= 0) subs[existing] = body
+            else subs.push(body)
+            savePushSubscriptions(subs)
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          if (req.url === '/api/push/subscribe' && req.method === 'DELETE') {
+            const body = JSON.parse(await readBody(req))
+            const subs = loadPushSubscriptions()
+            const filtered = subs.filter((s: any) => s.endpoint !== body.endpoint)
+            savePushSubscriptions(filtered)
+            res.end(JSON.stringify({ ok: true }))
+            return
+          }
+
+          res.statusCode = 404
+          res.end(JSON.stringify({ error: 'Not found' }))
+        } catch (err: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+    },
+  }
+}
+
 export default defineConfig({
   server: {
     host: '0.0.0.0',
@@ -405,10 +547,15 @@ export default defineConfig({
     recipesApiPlugin(),
     elevenLabsProxy(),
     workspacePlugin(),
+    pushApiPlugin(),
     react(),
     tailwindcss(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
+      injectRegister: 'auto',
       manifest: {
         name: 'Clavus — OpenClaw Chat',
         short_name: 'Clavus',
@@ -420,6 +567,10 @@ export default defineConfig({
           { src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },
           { src: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' },
         ],
+      },
+      devOptions: {
+        enabled: true,
+        type: 'module',
       },
     }),
   ],

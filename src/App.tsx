@@ -14,6 +14,7 @@ import { useChatStore } from './state/chat.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 import { ComposeFlow } from './components/compose/ComposeFlow.tsx'
+import { usePushNotifications } from './hooks/usePushNotifications.ts'
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   const [token, setToken] = useState('')
@@ -56,6 +57,7 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
 
 export function App() {
   const { send, abort } = useChat()
+  usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
@@ -192,10 +194,27 @@ export function App() {
   // so position:fixed elements naturally stay above the keyboard.
   // No JavaScript viewport hacks needed.
 
-  // Sync from server on startup
+  // Sync from server on startup + listen for SW navigation messages
   useEffect(() => {
     if (needsToken) return
     syncFromServer()
+
+    // Handle push notification clicks from service worker
+    const handleSWMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'navigate-thread' && event.data.threadId) {
+        // Re-sync to pick up the new thread, then navigate
+        syncFromServer().then(() => {
+          const store = useThreadsStore.getState()
+          const thread = store.threads.find(t => t.id === event.data.threadId)
+          if (thread) {
+            store.switchThread(thread.id)
+            // scrollToThread will be triggered by the state change
+          }
+        })
+      }
+    }
+    navigator.serviceWorker?.addEventListener('message', handleSWMessage)
+    return () => { navigator.serviceWorker?.removeEventListener('message', handleSWMessage) }
   }, [needsToken])
 
   // Initial scroll to home (rightmost panel) — retry until panels are rendered
