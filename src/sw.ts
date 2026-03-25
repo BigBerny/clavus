@@ -36,16 +36,18 @@ self.addEventListener('notificationclick', (event) => {
   const urlPath = threadId ? `/?thread=${threadId}` : '/'
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // Focus existing window if available
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
+      // Try to find and focus an existing window
       for (const client of clientList) {
         if ('focus' in client) {
-          client.focus()
+          await (client as WindowClient).focus()
+          // Small delay to ensure client is ready to receive messages
+          await new Promise(r => setTimeout(r, 300))
           client.postMessage({ type: 'navigate-thread', threadId })
           return
         }
       }
-      // Otherwise open a new window
+      // No existing window — open new one with thread param in URL
       return self.clients.openWindow(urlPath)
     }),
   )

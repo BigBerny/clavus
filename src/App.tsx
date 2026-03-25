@@ -195,27 +195,42 @@ export function App() {
   // No JavaScript viewport hacks needed.
 
   // Sync from server on startup + listen for SW navigation messages
+  // Ref to hold scrollToThread so we can use it in effects before it's defined
+  const scrollToThreadRef = useRef<(threadId: string) => void>(() => {})
+
+  const navigateToThread = useCallback((threadId: string) => {
+    syncFromServer().then(() => {
+      const store = useThreadsStore.getState()
+      const thread = store.threads.find(t => t.id === threadId)
+      if (thread) {
+        scrollToThreadRef.current(threadId)
+      }
+    })
+  }, [])
+
   useEffect(() => {
     if (needsToken) return
     syncFromServer()
 
-    // Handle push notification clicks from service worker
+    // Check URL for ?thread=xxx (from push notification openWindow)
+    const params = new URLSearchParams(window.location.search)
+    const threadParam = params.get('thread')
+    if (threadParam) {
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname)
+      // Navigate to the thread after sync
+      navigateToThread(threadParam)
+    }
+
+    // Handle push notification clicks from service worker (existing window)
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate-thread' && event.data.threadId) {
-        // Re-sync to pick up the new thread, then navigate
-        syncFromServer().then(() => {
-          const store = useThreadsStore.getState()
-          const thread = store.threads.find(t => t.id === event.data.threadId)
-          if (thread) {
-            store.switchThread(thread.id)
-            // scrollToThread will be triggered by the state change
-          }
-        })
+        navigateToThread(event.data.threadId)
       }
     }
     navigator.serviceWorker?.addEventListener('message', handleSWMessage)
     return () => { navigator.serviceWorker?.removeEventListener('message', handleSWMessage) }
-  }, [needsToken])
+  }, [needsToken, navigateToThread])
 
   // Initial scroll to home (rightmost panel) — retry until panels are rendered
   useEffect(() => {
@@ -311,6 +326,9 @@ export function App() {
       })
     })
   }, [switchThread])
+
+  // Wire up ref so navigateToThread can use scrollToThread
+  scrollToThreadRef.current = scrollToThread
 
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
     setIsRecording(recording)
