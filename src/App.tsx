@@ -239,24 +239,16 @@ export function App() {
         const scrollLeft = container.scrollLeft
         const panelIndex = Math.round(scrollLeft / containerWidth)
 
-        // Only act if scroll has truly snapped (within 5px of a panel boundary)
-        const snappedPosition = panelIndex * containerWidth
-        if (Math.abs(scrollLeft - snappedPosition) > 5) return
-        
         // Total panels: sortedThreads.length + 1 (home)
         if (panelIndex >= sortedThreads.length) {
-          if (visiblePanel !== 'home') {
-            setVisiblePanel('home')
-          }
+          setVisiblePanel('home')
         } else {
           const thread = sortedThreads[panelIndex]
-          if (thread && visiblePanel !== thread.id) {
+          if (thread) {
             setVisiblePanel(thread.id)
-            // Defer switchThread/loadThread to avoid re-render during snap animation.
-            // The active thread is only needed for sending, not for viewing.
           }
         }
-      }, 200) // Wait for snap animation to settle
+      }, 150) // Wait for snap animation to settle
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
@@ -264,7 +256,7 @@ export function App() {
       container.removeEventListener('scroll', handleScroll)
       if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [sortedThreads, visiblePanel, switchThread, loadThread])
+  }, [sortedThreads])
 
   // Scroll to a specific thread panel
   const scrollToThread = useCallback((threadId: string) => {
@@ -304,9 +296,20 @@ export function App() {
     cancelRecordingRef.current = cancel
   }, [])
 
+  // Check actual scroll position to determine if home panel is visible
+  // (avoids stale visiblePanel state from debounced scroll handler)
+  const isHomeVisible = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return visiblePanel === 'home'
+    const containerWidth = container.clientWidth
+    if (!containerWidth) return visiblePanel === 'home'
+    const panelIndex = Math.round(container.scrollLeft / containerWidth)
+    return panelIndex >= sortedThreads.length
+  }, [sortedThreads, visiblePanel])
+
   // Handle sending from any panel
   const handleSend = useCallback((text: string, images?: string[]) => {
-    if (visiblePanel === 'home') {
+    if (isHomeVisible()) {
       // Create a NEW thread, switch to it, then send the message
       const createThread = useThreadsStore.getState().createThread
       const newThreadId = createThread()
@@ -336,7 +339,7 @@ export function App() {
       }
       send(text, images)
     }
-  }, [visiblePanel, send, switchThread, loadThread])
+  }, [isHomeVisible, visiblePanel, send, switchThread, loadThread])
 
   // Set panel ref callback
   const setPanelRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
@@ -444,7 +447,7 @@ export function App() {
               onAbort={abort}
               isStreaming={isStreaming}
               onRecordingChange={handleRecordingChange}
-              isHome={visiblePanel === 'home'}
+              isHome={isHomeVisible()}
             />
           </div>
         </div>
