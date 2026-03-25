@@ -200,7 +200,7 @@ function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: ()
   )
 }
 
-export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void; onSelectThread?: (threadId: string) => void }) {
+export function HomeScreen({ onSend, onCompose, onSelectThread, pushState, onEnablePush }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void; onSelectThread?: (threadId: string) => void; pushState?: string; onEnablePush?: () => void }) {
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const setCurrentView = useUIStore((s) => s.setCurrentView)
@@ -252,6 +252,23 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
   return (
     <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="max-w-[900px] mx-auto pb-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}>
+        {/* Push notification prompt — iOS PWAs need user gesture */}
+        {pushState === 'prompt' && onEnablePush && (
+          <div className="mx-5 mt-6 mb-2">
+            <button
+              onClick={onEnablePush}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-accent/10 hover:bg-accent/15 transition-colors text-left"
+            >
+              <span className="text-xl">🔔</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-text-light dark:text-text-dark">Enable notifications</p>
+                <p className="text-[11px] text-text-light-muted dark:text-text-dark-muted">Get notified when Jane sends you a message</p>
+              </div>
+              <svg className="w-4 h-4 text-accent shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </button>
+          </div>
+        )}
+
         <div className="pt-10">
           <QuickActions onCompose={onCompose} />
         </div>

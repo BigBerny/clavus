@@ -57,7 +57,7 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
 
 export function App() {
   const { send, abort } = useChat()
-  usePushNotifications()
+  const { state: pushState, requestPermission } = usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
@@ -461,6 +461,8 @@ export function App() {
                 onSend={handleSend}
                 onCompose={(channel) => setComposeChannel(channel)}
                 onSelectThread={scrollToThread}
+                pushState={pushState}
+                onEnablePush={requestPermission}
               />
             </div>
           </div>
