@@ -26,7 +26,8 @@ function getVapidKeys(): { publicKey: string; privateKey: string } {
 }
 
 const vapidKeys = getVapidKeys()
-webpush.setVapidDetails('mailto:noreply@clavus.local', vapidKeys.publicKey, vapidKeys.privateKey)
+// Apple Push requires origin URL as subject (not mailto:) for web.push.apple.com
+webpush.setVapidDetails('https://mac-mini-von-janis.taild2ad59.ts.net:5173', vapidKeys.publicKey, vapidKeys.privateKey)
 
 function loadPushSubscriptions(): webpush.PushSubscription[] {
   if (!fs.existsSync(PUSH_SUBS_FILE)) return []
