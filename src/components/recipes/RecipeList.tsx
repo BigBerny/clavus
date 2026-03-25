@@ -355,7 +355,7 @@ function SlideInDetail({ visible, onClose }: { visible: boolean; onClose: () => 
       />
       <div
         ref={panelRef}
-        className="absolute inset-0 bg-surface-light dark:bg-surface-dark transition-transform duration-300 ease-out"
+        className="absolute inset-0 bg-surface-light dark:bg-surface-dark transition-transform duration-300 ease-out flex flex-col"
         style={{
           transform: visible
             ? `translateX(${translateX}px)`

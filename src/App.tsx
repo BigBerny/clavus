@@ -445,7 +445,7 @@ export function App() {
             <InputBar
               onSend={handleSend}
               onAbort={abort}
-              isStreaming={isStreaming}
+              isStreaming={isStreaming && visiblePanel === activeThreadId}
               onRecordingChange={handleRecordingChange}
               isHome={isHomeVisible()}
             />
