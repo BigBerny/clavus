@@ -13,6 +13,7 @@ import { useThreadsStore, syncFromServer, loadThreadMessages } from './state/thr
 import { useChatStore } from './state/chat.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
+import { consumePendingThread } from './lib/pendingThread.ts'
 import { ComposeFlow } from './components/compose/ComposeFlow.tsx'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 
@@ -208,29 +209,49 @@ export function App() {
     })
   }, [])
 
-  useEffect(() => {
-    if (needsToken) return
-    syncFromServer()
+  // Check for pending thread from IndexedDB (iOS push) or URL params
+  const checkPendingNavigation = useCallback(async () => {
+    // 1. Check IndexedDB (iOS-proof, set by service worker)
+    const pendingThreadId = await consumePendingThread()
+    if (pendingThreadId) {
+      navigateToThread(pendingThreadId)
+      return
+    }
 
-    // Check URL for ?thread=xxx (from push notification openWindow)
+    // 2. Check URL params (works on desktop/Android)
     const params = new URLSearchParams(window.location.search)
     const threadParam = params.get('thread')
     if (threadParam) {
-      // Clean up URL
       window.history.replaceState({}, '', window.location.pathname)
-      // Navigate to the thread after sync
       navigateToThread(threadParam)
     }
+  }, [navigateToThread])
 
-    // Handle push notification clicks from service worker (existing window)
+  useEffect(() => {
+    if (needsToken) return
+    syncFromServer().then(() => checkPendingNavigation())
+
+    // Handle push notification clicks from service worker (warm app fast-path)
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate-thread' && event.data.threadId) {
         navigateToThread(event.data.threadId)
       }
     }
     navigator.serviceWorker?.addEventListener('message', handleSWMessage)
-    return () => { navigator.serviceWorker?.removeEventListener('message', handleSWMessage) }
-  }, [needsToken, navigateToThread])
+
+    // iOS: when app comes back from background after notification tap, check IDB
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkPendingNavigation()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [needsToken, navigateToThread, checkPendingNavigation])
 
   // Initial scroll to home (rightmost panel) — retry until panels are rendered
   useEffect(() => {

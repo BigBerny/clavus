@@ -3,7 +3,30 @@ import { precacheAndRoute } from 'workbox-precaching'
 
 declare const self: ServiceWorkerGlobalScope
 
-// Take control immediately when updated (don't wait for tab close/reopen)
+// ---- Tiny IndexedDB helper (no deps, works in SW + window) ----
+const DB_NAME = 'clavus-push'
+const STORE = 'kv'
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1)
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE)
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function idbSet(key: string, value: unknown): Promise<void> {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite')
+    tx.objectStore(STORE).put(value, key)
+    tx.oncomplete = () => { db.close(); resolve() }
+    tx.onerror = () => { db.close(); reject(tx.error) }
+  })
+}
+
+// Take control immediately when updated
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
@@ -34,27 +57,45 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options))
 })
 
-// Notification click — open/focus app and navigate to thread
+// Notification click — iOS-proof deep linking
+// iOS ignores openWindow URL params and postMessage races app startup.
+// Solution: persist threadId in IndexedDB, app reads it on boot/focus.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
 
   const threadId = event.notification.data?.threadId as string | undefined
-  const urlPath = threadId ? `/?thread=${threadId}` : '/'
+  const targetUrl = threadId ? `/?thread=${threadId}` : '/'
 
-  event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async (clientList) => {
-      // Try to find and focus an existing window
-      for (const client of clientList) {
-        if ('focus' in client) {
-          await (client as WindowClient).focus()
-          // Small delay to ensure client is ready to receive messages
-          await new Promise(r => setTimeout(r, 300))
-          client.postMessage({ type: 'navigate-thread', threadId })
-          return
-        }
+  event.waitUntil((async () => {
+    // Always persist to IndexedDB (bulletproof for cold start)
+    if (threadId) {
+      await idbSet('pendingThread', { threadId, ts: Date.now() })
+    }
+
+    const clientList = await self.clients.matchAll({
+      type: 'window',
+      includeUncontrolled: true,
+    })
+
+    // Tier A: existing client — try navigate + focus + postMessage
+    for (const client of clientList) {
+      try {
+        const wc = client as WindowClient
+        if ('navigate' in wc) await wc.navigate(targetUrl)
+        if ('focus' in wc) await wc.focus()
+        // Also postMessage as fast-path (may work if app is warm)
+        wc.postMessage({ type: 'navigate-thread', threadId })
+        return
+      } catch {
+        // fall through to cold-start path
       }
-      // No existing window — open new one with thread param in URL
-      return self.clients.openWindow(urlPath)
-    }),
-  )
+    }
+
+    // Tier B: cold start — just open the app (iOS may ignore URL, that's OK)
+    try {
+      await self.clients.openWindow(targetUrl)
+    } catch {
+      await self.clients.openWindow('/')
+    }
+  })())
 })
