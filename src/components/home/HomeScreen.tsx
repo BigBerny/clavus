@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
-import { useChatStore } from '../../state/chat'
+import { useChatStore } from '../../state/chat.ts'
 import { useUIStore } from '../../state/ui'
 import type { Thread } from '../../state/threads'
 
@@ -203,7 +203,6 @@ function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: ()
 export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void; onSelectThread?: (threadId: string) => void }) {
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
-  const loadThread = useChatStore((s) => s.loadThread)
   const setCurrentView = useUIStore((s) => s.setCurrentView)
   const [showAll, setShowAll] = useState(false)
 
@@ -230,6 +229,14 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
 
   const deleteThread = useThreadsStore((s) => s.deleteThread)
   const handleDelete = useCallback((id: string) => {
+    // Abort streaming if this thread is streaming, then remove from store
+    const ts = useChatStore.getState().threadStates[id]
+    if (ts?.isStreaming) {
+      ts.abortController?.abort()
+    }
+    // Remove thread state from chat store
+    const { [id]: _, ...rest } = useChatStore.getState().threadStates
+    useChatStore.setState({ threadStates: rest })
     deleteThread(id)
   }, [deleteThread])
 
@@ -238,10 +245,9 @@ export function HomeScreen({ onSend, onCompose, onSelectThread }: { onSend: (mes
       onSelectThread(id)
     } else {
       switchThread(id)
-      loadThread(id)
       setCurrentView('chat')
     }
-  }, [switchThread, loadThread, setCurrentView, onSelectThread])
+  }, [switchThread, setCurrentView, onSelectThread])
 
   return (
     <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>

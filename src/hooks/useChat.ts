@@ -15,23 +15,10 @@ function delay(ms: number) {
 }
 
 export function useChat() {
-  const {
-    messages,
-    isStreaming,
-    addMessage,
-    appendToMessage,
-    appendThinking,
-    setThinkingDone,
-    finalizeMessage,
-    setStreaming,
-    setAbortController,
-    abortController,
-    clearMessages,
-  } = useChatStore()
-
+  const store = useChatStore
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
-  const offlineQueueRef = useRef<string[]>([])
-  const sendRef = useRef<((content: string, images?: string[], retryCount?: number) => Promise<void>) | undefined>(undefined)
+  const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[] }[]>([])
+  const sendRef = useRef<((threadId: string, content: string, images?: string[], retryCount?: number) => Promise<void>) | undefined>(undefined)
 
   // Online/offline detection + reconnect
   useEffect(() => {
@@ -43,8 +30,8 @@ export function useChat() {
 
       if (ok && offlineQueueRef.current.length > 0) {
         const queued = offlineQueueRef.current.splice(0)
-        for (const content of queued) {
-          sendRef.current?.(content)
+        for (const { threadId, content, images } of queued) {
+          sendRef.current?.(threadId, content, images)
         }
       }
     }
@@ -61,28 +48,46 @@ export function useChat() {
     }
   }, [setConnectionStatus])
 
-  const send = useCallback(async (content: string, images?: string[], retryCount = 0) => {
+  const send = useCallback(async (threadId: string, content: string, images?: string[], retryCount = 0) => {
     if (!content.trim() && (!images || images.length === 0)) return
-    const store = useChatStore.getState()
-    if (store.isStreaming) return
+
+    const {
+      getThreadState,
+      ensureThread,
+      addMessage,
+      appendToMessage,
+      appendThinking,
+      setThinkingDone,
+      finalizeMessage,
+      setStreaming,
+      setAbortController,
+      removeMessage,
+    } = store.getState()
+
+    // Per-thread streaming guard
+    const threadState = getThreadState(threadId)
+    if (threadState.isStreaming) return
+
+    // Ensure thread is loaded in store
+    ensureThread(threadId)
 
     // If offline, queue
     if (!navigator.onLine) {
-      addMessage({ role: 'user', content: content.trim(), images })
-      addMessage({ role: 'system', content: 'You are offline. Message will be sent when connection is restored.' })
-      offlineQueueRef.current.push(content.trim())
+      addMessage(threadId, { role: 'user', content: content.trim(), images })
+      addMessage(threadId, { role: 'system', content: 'You are offline. Message will be sent when connection is restored.' })
+      offlineQueueRef.current.push({ threadId, content: content.trim(), images })
       return
     }
 
     if (retryCount === 0) {
-      addMessage({ role: 'user', content: content.trim(), images })
+      addMessage(threadId, { role: 'user', content: content.trim(), images })
     }
 
-    const apiMessages: ChatCompletionMessage[] = useChatStore
+    const apiMessages: ChatCompletionMessage[] = store
       .getState()
+      .getThreadState(threadId)
       .messages.filter((m) => m.role !== 'system')
       .map((m) => {
-        // Build vision-format content if message has images
         if (m.images && m.images.length > 0) {
           const parts: ChatCompletionMessage['content'] = []
           if (m.content) parts.push({ type: 'text' as const, text: m.content })
@@ -94,15 +99,15 @@ export function useChat() {
         return { role: m.role, content: m.content }
       })
 
-    const assistantId = useChatStore.getState().addMessage({
+    const assistantId = store.getState().addMessage(threadId, {
       role: 'assistant',
       content: '',
       streaming: true,
     })
 
     const controller = new AbortController()
-    setAbortController(controller)
-    setStreaming(true)
+    setAbortController(threadId, controller)
+    setStreaming(threadId, true)
     setConnectionStatus('connected')
 
     try {
@@ -110,21 +115,19 @@ export function useChat() {
         getConfig(),
         apiMessages,
         {
-          onThinking: (token) => appendThinking(assistantId, token),
-          onThinkingDone: () => setThinkingDone(assistantId),
-          onToken: (token) => appendToMessage(assistantId, token),
+          onThinking: (token) => store.getState().appendThinking(threadId, assistantId, token),
+          onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
+          onToken: (token) => store.getState().appendToMessage(threadId, assistantId, token),
           onDone: () => {
-            finalizeMessage(assistantId)
-            setStreaming(false)
-            setAbortController(null)
+            store.getState().finalizeMessage(threadId, assistantId)
+            store.getState().setStreaming(threadId, false)
+            store.getState().setAbortController(threadId, null)
 
             // Auto-generate title at specific message counts
-            const currentMessages = useChatStore.getState().messages.filter(m => m.role !== 'system')
+            const currentMessages = store.getState().getThreadState(threadId).messages.filter(m => m.role !== 'system')
             const msgCount = currentMessages.length
             if (TITLE_GEN_AT.includes(msgCount) || (msgCount > 2 && msgCount % 10 === 0)) {
-              const activeThreadId = useThreadsStore.getState().activeThreadId
-              const activeThread = useThreadsStore.getState().threads.find(t => t.id === activeThreadId)
-              // Only generate if title is still default or on the 10-message interval
+              const activeThread = useThreadsStore.getState().threads.find(t => t.id === threadId)
               if (activeThread && (activeThread.title === 'New conversation' || msgCount >= 10)) {
                 const apiMsgs = currentMessages.map(m => ({
                   role: m.role as 'user' | 'assistant',
@@ -132,73 +135,69 @@ export function useChat() {
                 }))
                 generateTitle(getConfig(), apiMsgs).then(title => {
                   if (title) {
-                    useThreadsStore.getState().updateThreadTitle(activeThreadId, title)
+                    useThreadsStore.getState().updateThreadTitle(threadId, title)
                   }
                 })
               }
             }
           },
           onError: (error) => {
-            finalizeMessage(assistantId)
-            setStreaming(false)
-            setAbortController(null)
+            store.getState().finalizeMessage(threadId, assistantId)
+            store.getState().setStreaming(threadId, false)
+            store.getState().setAbortController(threadId, null)
             if (error.name !== 'AbortError') {
-              // Remove empty assistant message
-              const state = useChatStore.getState()
-              const msg = state.messages.find((m) => m.id === assistantId)
+              const ts = store.getState().getThreadState(threadId)
+              const msg = ts.messages.find((m) => m.id === assistantId)
               if (msg && !msg.content) {
-                useChatStore.setState({
-                  messages: state.messages.filter((m) => m.id !== assistantId),
-                })
+                store.getState().removeMessage(threadId, assistantId)
               }
-              addMessage({ role: 'system', content: `Error: ${error.message}` })
+              store.getState().addMessage(threadId, { role: 'system', content: `Error: ${error.message}` })
             }
           },
         },
         controller.signal,
       )
     } catch (error) {
-      finalizeMessage(assistantId)
-      setStreaming(false)
-      setAbortController(null)
+      store.getState().finalizeMessage(threadId, assistantId)
+      store.getState().setStreaming(threadId, false)
+      store.getState().setAbortController(threadId, null)
 
       if (error instanceof Error && error.name === 'AbortError') return
 
       // Remove empty assistant message
-      const state = useChatStore.getState()
-      const msg = state.messages.find((m) => m.id === assistantId)
+      const ts = store.getState().getThreadState(threadId)
+      const msg = ts.messages.find((m) => m.id === assistantId)
       if (msg && !msg.content) {
-        useChatStore.setState({
-          messages: state.messages.filter((m) => m.id !== assistantId),
-        })
+        store.getState().removeMessage(threadId, assistantId)
       }
 
       // Retry
       if (retryCount < MAX_RETRIES) {
         setConnectionStatus('reconnecting')
-        addMessage({ role: 'system', content: `Connection failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})` })
+        store.getState().addMessage(threadId, { role: 'system', content: `Connection failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})` })
         await delay(RETRY_DELAY)
-        return sendRef.current?.(content, images, retryCount + 1)
+        return sendRef.current?.(threadId, content, images, retryCount + 1)
       }
 
       setConnectionStatus('disconnected')
-      addMessage({
+      store.getState().addMessage(threadId, {
         role: 'system',
         content: `Error: ${error instanceof Error ? error.message : 'Connection failed'}`,
       })
     }
-  }, [addMessage, appendToMessage, appendThinking, setThinkingDone, finalizeMessage, setStreaming, setAbortController, setConnectionStatus])
+  }, [setConnectionStatus])
 
   // Keep ref updated for offline queue flush
   useEffect(() => {
     sendRef.current = send
   }, [send])
 
-  const abort = useCallback(() => {
-    abortController?.abort()
-    setStreaming(false)
-    setAbortController(null)
-  }, [abortController, setStreaming, setAbortController])
+  const abort = useCallback((threadId: string) => {
+    const ts = store.getState().getThreadState(threadId)
+    ts.abortController?.abort()
+    store.getState().setStreaming(threadId, false)
+    store.getState().setAbortController(threadId, null)
+  }, [])
 
-  return { messages, isStreaming, send, abort, clearMessages }
+  return { send, abort }
 }

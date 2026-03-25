@@ -12,30 +12,36 @@ export interface Message {
   images?: string[] // base64 data URLs
 }
 
-interface ChatState {
+export interface ThreadStreamState {
   messages: Message[]
   isStreaming: boolean
   abortController: AbortController | null
-
-  addMessage: (msg: Omit<Message, 'id' | 'timestamp'>) => string
-  updateMessage: (id: string, content: string) => void
-  appendToMessage: (id: string, token: string) => void
-  appendThinking: (id: string, token: string) => void
-  setThinkingDone: (id: string) => void
-  finalizeMessage: (id: string) => void
-  setStreaming: (streaming: boolean) => void
-  setAbortController: (controller: AbortController | null) => void
-  clearMessages: () => void
-  loadThread: (threadId: string) => void
 }
 
-function loadMessages(): Message[] {
-  const threadId = useThreadsStore.getState().activeThreadId
-  return loadThreadMessages(threadId)
+const EMPTY_THREAD_STATE: ThreadStreamState = {
+  messages: [],
+  isStreaming: false,
+  abortController: null,
 }
 
-function saveMessages(messages: Message[]) {
-  const threadId = useThreadsStore.getState().activeThreadId
+interface ChatState {
+  threadStates: Record<string, ThreadStreamState>
+
+  getThreadState: (threadId: string) => ThreadStreamState
+  ensureThread: (threadId: string) => void
+  addMessage: (threadId: string, msg: Omit<Message, 'id' | 'timestamp'>) => string
+  updateMessage: (threadId: string, id: string, content: string) => void
+  appendToMessage: (threadId: string, id: string, token: string) => void
+  appendThinking: (threadId: string, id: string, token: string) => void
+  setThinkingDone: (threadId: string, id: string) => void
+  finalizeMessage: (threadId: string, id: string) => void
+  setStreaming: (threadId: string, streaming: boolean) => void
+  setAbortController: (threadId: string, controller: AbortController | null) => void
+  clearMessages: (threadId: string) => void
+  removeMessage: (threadId: string, messageId: string) => void
+}
+
+function saveMessages(threadId: string, messages: Message[]) {
   saveThreadMessages(threadId, messages)
 
   // Update thread preview with last non-system message
@@ -47,23 +53,46 @@ function saveMessages(messages: Message[]) {
 
 let messageCounter = 0
 
-export const useChatStore = create<ChatState>((set) => ({
-  messages: loadMessages(),
-  isStreaming: false,
-  abortController: null,
+export const useChatStore = create<ChatState>((set, get) => ({
+  threadStates: {},
 
-  addMessage: (msg) => {
+  getThreadState: (threadId: string): ThreadStreamState => {
+    const state = get().threadStates[threadId]
+    if (state) return state
+    // Lazy-load from localStorage
+    const messages = loadThreadMessages(threadId)
+    const newState: ThreadStreamState = { messages, isStreaming: false, abortController: null }
+    set((s) => ({
+      threadStates: { ...s.threadStates, [threadId]: newState },
+    }))
+    return newState
+  },
+
+  ensureThread: (threadId: string) => {
+    if (get().threadStates[threadId]) return
+    const messages = loadThreadMessages(threadId)
+    set((s) => ({
+      threadStates: {
+        ...s.threadStates,
+        [threadId]: { messages, isStreaming: false, abortController: null },
+      },
+    }))
+  },
+
+  addMessage: (threadId, msg) => {
     const id = `msg-${Date.now()}-${messageCounter++}`
+    // Ensure thread is loaded
+    get().ensureThread(threadId)
+
     set((state) => {
-      const messages = [...state.messages, { ...msg, id, timestamp: Date.now() }]
-      if (!msg.streaming) saveMessages(messages)
+      const ts = state.threadStates[threadId] || EMPTY_THREAD_STATE
+      const messages = [...ts.messages, { ...msg, id, timestamp: Date.now() }]
+      if (!msg.streaming) saveMessages(threadId, messages)
 
       // Auto-set thread title from first user message
       if (msg.role === 'user') {
-        const threadId = useThreadsStore.getState().activeThreadId
         const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
         if (thread && thread.title === 'New conversation') {
-          // Trim to word boundary for cleaner titles
           let title = msg.content.replace(/\n/g, ' ').trim()
           if (title.length > 40) {
             title = title.slice(0, 40).replace(/\s+\S*$/, '') + '...'
@@ -72,62 +101,148 @@ export const useChatStore = create<ChatState>((set) => ({
         }
       }
 
-      return { messages }
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, messages },
+        },
+      }
     })
     return id
   },
 
-  updateMessage: (id, content) =>
+  updateMessage: (threadId, id, content) =>
     set((state) => {
-      const messages = state.messages.map((m) =>
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      const messages = ts.messages.map((m) =>
         m.id === id ? { ...m, content } : m,
       )
-      saveMessages(messages)
-      return { messages }
+      saveMessages(threadId, messages)
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, messages },
+        },
+      }
     }),
 
-  appendToMessage: (id, token) =>
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === id ? { ...m, content: m.content + token } : m,
-      ),
-    })),
-
-  appendThinking: (id, token) =>
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === id ? { ...m, thinking: (m.thinking || '') + token } : m,
-      ),
-    })),
-
-  setThinkingDone: (id) =>
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.id === id ? { ...m, thinkingDone: true } : m,
-      ),
-    })),
-
-  finalizeMessage: (id) =>
+  appendToMessage: (threadId, id, token) =>
     set((state) => {
-      const messages = state.messages.map((m) =>
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id ? { ...m, content: m.content + token } : m,
+            ),
+          },
+        },
+      }
+    }),
+
+  appendThinking: (threadId, id, token) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id ? { ...m, thinking: (m.thinking || '') + token } : m,
+            ),
+          },
+        },
+      }
+    }),
+
+  setThinkingDone: (threadId, id) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id ? { ...m, thinkingDone: true } : m,
+            ),
+          },
+        },
+      }
+    }),
+
+  finalizeMessage: (threadId, id) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      const messages = ts.messages.map((m) =>
         m.id === id ? { ...m, streaming: false } : m,
       )
-      saveMessages(messages)
-      return { messages }
+      saveMessages(threadId, messages)
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, messages },
+        },
+      }
     }),
 
-  setStreaming: (streaming) => set({ isStreaming: streaming }),
+  setStreaming: (threadId, streaming) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, isStreaming: streaming },
+        },
+      }
+    }),
 
-  setAbortController: (controller) => set({ abortController: controller }),
+  setAbortController: (threadId, controller) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, abortController: controller },
+        },
+      }
+    }),
 
-  clearMessages: () => {
+  clearMessages: (threadId) => {
     const messages: Message[] = []
-    saveMessages(messages)
-    set({ messages })
+    saveMessages(threadId, messages)
+    set((state) => ({
+      threadStates: {
+        ...state.threadStates,
+        [threadId]: {
+          ...(state.threadStates[threadId] || EMPTY_THREAD_STATE),
+          messages,
+        },
+      },
+    }))
   },
 
-  loadThread: (threadId: string) => {
-    const messages = loadThreadMessages(threadId)
-    set({ messages, isStreaming: false, abortController: null })
-  },
+  removeMessage: (threadId, messageId) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      const messages = ts.messages.filter((m) => m.id !== messageId)
+      saveMessages(threadId, messages)
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, messages },
+        },
+      }
+    }),
 }))

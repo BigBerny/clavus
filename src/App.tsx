@@ -55,18 +55,15 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
 }
 
 export function App() {
-  const { messages, isStreaming, send, abort } = useChat()
+  const { send, abort } = useChat()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
   const currentView = useUIStore((s) => s.currentView)
-  const setCurrentView = useUIStore((s) => s.setCurrentView)
   const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
   const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
   const threads = useThreadsStore((s) => s.threads)
-  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
   const switchThread = useThreadsStore((s) => s.switchThread)
-  const loadThread = useChatStore((s) => s.loadThread)
   const [needsToken, setNeedsToken] = useState(!hasToken())
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState('0:00')
@@ -84,10 +81,18 @@ export function App() {
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
 
+  // Per-thread isStreaming for the visible panel
+  const visibleThreadStreaming = useChatStore(
+    (s) => visiblePanel !== 'home' ? (s.threadStates[visiblePanel]?.isStreaming ?? false) : false
+  )
+
   // Sorted threads: oldest first (leftmost), newest last (rightmost, before home)
   const sortedThreads = useMemo(() =>
     [...threads]
       .filter(t => {
+        // Check if thread has messages in store or localStorage
+        const ts = useChatStore.getState().threadStates[t.id]
+        if (ts && ts.messages.length > 0) return true
         const msgs = loadThreadMessages(t.id)
         return msgs.length > 0
       })
@@ -265,7 +270,6 @@ export function App() {
     if (!container || !panel) {
       // Fallback: switch thread without scrolling
       switchThread(threadId)
-      loadThread(threadId)
       setVisiblePanel(threadId)
       return
     }
@@ -275,7 +279,6 @@ export function App() {
     // Update visible panel + switch thread
     setVisiblePanel(threadId)
     switchThread(threadId)
-    loadThread(threadId)
     // Use requestAnimationFrame to ensure state is settled before scrolling
     requestAnimationFrame(() => {
       const target = panelRefs.current.get(threadId)
@@ -288,7 +291,7 @@ export function App() {
         isProgrammaticScroll.current = false
       })
     })
-  }, [switchThread, loadThread])
+  }, [switchThread])
 
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
     setIsRecording(recording)
@@ -307,19 +310,16 @@ export function App() {
     return panelIndex >= sortedThreads.length
   }, [sortedThreads, visiblePanel])
 
-  // Handle sending from any panel
+  // Handle sending from any panel — now thread-scoped
   const handleSend = useCallback((text: string, images?: string[]) => {
     if (isHomeVisible()) {
-      // Create a NEW thread, switch to it, then send the message
+      // Create a NEW thread, send to it directly
       const createThread = useThreadsStore.getState().createThread
       const newThreadId = createThread()
-      // switchThread + loadThread so useChat sends to the new thread
       switchThread(newThreadId)
-      loadThread(newThreadId)
 
-      // Send immediately (same tick) so the thread has a message
-      // before React re-renders and creates the panel
-      send(text, images)
+      // Send immediately targeting the new thread
+      send(newThreadId, text, images)
       setVisiblePanel(newThreadId)
 
       // Scroll to the new thread panel once it renders
@@ -332,14 +332,20 @@ export function App() {
         })
       })
     } else {
-      // Ensure the active thread matches the visible panel before sending
+      // Send to the visible thread directly
       if (visiblePanel !== 'home') {
         switchThread(visiblePanel)
-        loadThread(visiblePanel)
+        send(visiblePanel, text, images)
       }
-      send(text, images)
     }
-  }, [isHomeVisible, visiblePanel, send, switchThread, loadThread])
+  }, [isHomeVisible, visiblePanel, send, switchThread])
+
+  // Abort scoped to visible thread
+  const handleAbort = useCallback(() => {
+    if (visiblePanel !== 'home') {
+      abort(visiblePanel)
+    }
+  }, [visiblePanel, abort])
 
   // Set panel ref callback
   const setPanelRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
@@ -444,8 +450,8 @@ export function App() {
           <div className="flex-shrink-0" style={{ touchAction: 'none' }}>
             <InputBar
               onSend={handleSend}
-              onAbort={abort}
-              isStreaming={isStreaming && visiblePanel === activeThreadId}
+              onAbort={handleAbort}
+              isStreaming={visibleThreadStreaming}
               onRecordingChange={handleRecordingChange}
               isHome={isHomeVisible()}
             />
@@ -470,22 +476,20 @@ export function App() {
 }
 
 /**
- * Wrapper for ChatView that loads its own messages from the thread store.
- * Each conversation panel independently manages its messages.
+ * Wrapper for ChatView that subscribes to its thread's messages from the store.
+ * Every panel is always live — no more snapshot vs live distinction.
  */
 function ChatViewPanel({ threadId, isVisible }: { threadId: string; isVisible: boolean }) {
-  const storeMessages = useChatStore((s) => s.messages)
-  const activeThreadId = useThreadsStore((s) => s.activeThreadId)
   const threads = useThreadsStore((s) => s.threads)
   const thread = threads.find(t => t.id === threadId)
 
-  // If this is the active thread, use live store messages; otherwise load from storage
-  const messages = useMemo(() => {
-    if (threadId === activeThreadId) {
-      return storeMessages
-    }
-    return loadThreadMessages(threadId)
-  }, [threadId, activeThreadId, storeMessages])
+  // Subscribe to this specific thread's messages — only re-renders when THIS thread changes
+  const messages = useChatStore((s) => s.threadStates[threadId]?.messages ?? [])
+
+  // Ensure thread is loaded in store on mount
+  useEffect(() => {
+    useChatStore.getState().ensureThread(threadId)
+  }, [threadId])
 
   return <ChatView messages={messages} title={thread?.title} />
 }
