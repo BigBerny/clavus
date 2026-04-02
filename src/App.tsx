@@ -1,12 +1,7 @@
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { FileBrowser } from './components/layout/FileBrowser.tsx'
+import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
-import { DebugOverlay } from './components/DebugOverlay.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
-import { RecipeList } from './components/recipes/RecipeList.tsx'
-// RecipeDetail is now rendered inside RecipeList as a slide-in panel
-import { CookMode } from './components/recipes/CookMode.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer, loadThreadMessages } from './state/threads.ts'
@@ -14,8 +9,15 @@ import { useChatStore } from './state/chat.ts'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 import { consumePendingThread } from './lib/pendingThread.ts'
-import { ComposeFlow } from './components/compose/ComposeFlow.tsx'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
+import { useVisualViewport } from './hooks/useVisualViewport.ts'
+
+// Lazy-loaded components (code splitting)
+const FileBrowser = lazy(() => import('./components/layout/FileBrowser.tsx').then(m => ({ default: m.FileBrowser })))
+const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
+const RecipeList = lazy(() => import('./components/recipes/RecipeList.tsx').then(m => ({ default: m.RecipeList })))
+const CookMode = lazy(() => import('./components/recipes/CookMode.tsx').then(m => ({ default: m.CookMode })))
+const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   const [token, setToken] = useState('')
@@ -57,6 +59,7 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
 }
 
 export function App() {
+  useVisualViewport()
   const { send, abort } = useChat()
   const { state: pushState, requestPermission } = usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
@@ -450,11 +453,13 @@ export function App() {
       {/* Recipe views as overlays */}
       {isRecipeView ? (
         <div className="flex-1 min-h-0 flex flex-col">
-          {currentView === 'recipes' || currentView === 'recipe-detail' ? (
-            <RecipeList />
-          ) : (
-            <CookMode />
-          )}
+          <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+            {currentView === 'recipes' || currentView === 'recipe-detail' ? (
+              <RecipeList />
+            ) : (
+              <CookMode />
+            )}
+          </Suspense>
         </div>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col">
@@ -520,17 +525,23 @@ export function App() {
         </div>
       )}
 
-      <DebugOverlay />
+      <Suspense fallback={null}>
+        <DebugOverlay />
+      </Suspense>
 
-      <FileBrowser
-        open={fileBrowserOpen}
-        onClose={() => setFileBrowserOpen(false)}
-      />
-      {composeChannel && (
-        <ComposeFlow
-          channel={composeChannel}
-          onClose={() => setComposeChannel(null)}
+      <Suspense fallback={null}>
+        <FileBrowser
+          open={fileBrowserOpen}
+          onClose={() => setFileBrowserOpen(false)}
         />
+      </Suspense>
+      {composeChannel && (
+        <Suspense fallback={null}>
+          <ComposeFlow
+            channel={composeChannel}
+            onClose={() => setComposeChannel(null)}
+          />
+        </Suspense>
       )}
     </div>
   )

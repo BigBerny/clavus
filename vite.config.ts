@@ -523,6 +523,16 @@ function pushApiPlugin() {
 }
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'scheduler'],
+          'markdown-vendor': ['react-markdown', 'remark-gfm', 'remark-parse', 'unified', 'micromark', 'rehype-highlight', 'highlight.js'],
+        },
+      },
+    },
+  },
   server: {
     host: '0.0.0.0',
     port: 5173,
@@ -530,7 +540,7 @@ export default defineConfig({
       cert: './mac-mini-von-janis.taild2ad59.ts.net.crt',
       key: './mac-mini-von-janis.taild2ad59.ts.net.key',
     },
-    allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net'],
+    allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost'],
     proxy: {
       '/v1': {
         target: 'http://127.0.0.1:18789',

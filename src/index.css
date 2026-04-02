@@ -20,6 +20,11 @@
   --color-border-light: #e5e7eb;
 }
 
+:root {
+  --vvh: 100dvh;
+  --vv-offset: 0px;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -27,6 +32,7 @@ html, body {
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
+  overscroll-behavior-y: none;
   -webkit-overflow-scrolling: auto;
   background-color: var(--color-surface-dark, #111318);
   /* Force-hide any page-level scrollbar (iOS keyboard can create phantom scrollbars) */
@@ -48,11 +54,14 @@ body {
   right: 0;
   width: 100%;
   height: 100vh;
-  height: 100dvh; /* Dynamic viewport height: shrinks when keyboard opens */
+  height: 100dvh;
+  height: var(--vvh, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
   background-color: var(--color-surface-dark, #111318);
   scrollbar-width: none;
+  /* Compensate for iOS visual viewport scroll offset */
+  transform: translateY(calc(var(--vv-offset, 0px) * -1));
 }
 #root::-webkit-scrollbar {
   display: none;
@@ -343,6 +352,11 @@ pre code.hljs {
 .prose th { font-weight: 600; background: rgba(0,0,0,0.03); }
 .dark .prose th { background: rgba(255,255,255,0.03); }
 .prose strong { font-weight: 600; }
+
+/* When keyboard is open, disable scroll-snap to prevent layout fighting */
+html[data-keyboard-open="true"] .snap-x {
+  scroll-snap-type: none;
+}
 
 /* Theme transition (no flash on load, smooth after) */
 html.theme-ready,

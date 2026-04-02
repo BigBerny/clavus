@@ -125,6 +125,29 @@ export function ChatView({ messages, title }: Props) {
     setAutoScroll(atBottom)
   }, [])
 
+  // Scroll to bottom when keyboard opens (data-keyboard-open changes)
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === 'data-keyboard-open') {
+          const isOpen = document.documentElement.getAttribute('data-keyboard-open') === 'true'
+          if (isOpen && autoScroll) {
+            // Double-rAF + timeout for iOS keyboard animation
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                setTimeout(() => {
+                  bottomRef.current?.scrollIntoView({ block: 'end' })
+                }, 120)
+              })
+            })
+          }
+        }
+      }
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-keyboard-open'] })
+    return () => observer.disconnect()
+  }, [autoScroll])
+
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
 

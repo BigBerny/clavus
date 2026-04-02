@@ -415,12 +415,18 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
+              onFocus={() => {
+                // Delay to let iOS keyboard animation finish (~300ms)
+                setTimeout(() => {
+                  textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+                }, 300)
+              }}
               placeholder={isHome ? "Start a new conversation..." : "Message..."}
               rows={1}
               disabled={isTranscribing}
               aria-label="Chat message input"
               maxLength={10000}
-              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2/80 dark:bg-surface-dark-2/80 border border-surface-light-3/30 dark:border-surface-dark-3/30 text-text-light dark:text-text-dark placeholder:text-text-light-muted/55 dark:placeholder:text-text-dark-muted/55 text-[15px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/15 focus:bg-surface-light-2 dark:focus:bg-surface-dark-2 disabled:opacity-50 transition-all overflow-hidden"
+              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2/80 dark:bg-surface-dark-2/80 border border-surface-light-3/30 dark:border-surface-dark-3/30 text-text-light dark:text-text-dark placeholder:text-text-light-muted/55 dark:placeholder:text-text-dark-muted/55 text-[16px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/15 focus:bg-surface-light-2 dark:focus:bg-surface-dark-2 disabled:opacity-50 transition-all overflow-hidden"
             />
           )}
 
