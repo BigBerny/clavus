@@ -514,6 +514,7 @@ export function App() {
               isStreaming={visibleThreadStreaming}
               onRecordingChange={handleRecordingChange}
               isHome={isHomeVisible()}
+              onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
             />
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 
 interface Props {
@@ -7,15 +7,32 @@ interface Props {
   isStreaming: boolean
   onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
   isHome?: boolean
+  onClear?: () => void
+}
+
+interface SlashCommand {
+  command: string
+  description: string
+  local?: boolean
 }
 
 const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 
-export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome }: Props) {
+const SLASH_COMMANDS: SlashCommand[] = [
+  { command: '/tasks', description: 'Show tasks' },
+  { command: '/tasks list', description: 'List all tasks' },
+  { command: '/status', description: 'Show status' },
+  { command: '/model', description: 'Show/change model' },
+  { command: '/clear', description: 'Clear chat', local: true },
+  { command: '/help', description: 'Show help' },
+]
+
+export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onClear }: Props) {
   const [value, setValue] = useState('')
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
+  const [slashIndex, setSlashIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -101,13 +118,57 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     }
   }, [pendingImages.length])
 
+  // Slash command filtering
+  const showSlashPalette = value.startsWith('/') && !isStreaming
+  const filteredCommands = useMemo(() => {
+    if (!showSlashPalette) return []
+    const query = value.toLowerCase()
+    return SLASH_COMMANDS.filter((cmd) => cmd.command.startsWith(query))
+  }, [showSlashPalette, value])
+
+  // Reset slash index when filtered list changes
+  useEffect(() => {
+    setSlashIndex(0)
+  }, [filteredCommands.length])
+
+  const selectSlashCommand = useCallback((cmd: SlashCommand) => {
+    if (cmd.local) {
+      // Execute locally
+      onClear?.()
+      setValue('')
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    } else {
+      // Put command in input for user to send
+      setValue(cmd.command)
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    }
+  }, [onClear])
+
   const handleSubmit = useCallback(() => {
     const trimmed = value.trim()
     if (!trimmed && pendingImages.length === 0) return
-    if (isStreaming) return
+
+    // Handle slash commands
+    if (showSlashPalette && filteredCommands.length > 0) {
+      const exact = filteredCommands.find((c) => c.command === trimmed)
+      if (exact) {
+        if (exact.local) {
+          onClear?.()
+          setValue('')
+          if (textareaRef.current) textareaRef.current.style.height = 'auto'
+          return
+        }
+        // Send as message to gateway
+      }
+    }
+
+    // If streaming, abort first then send
+    if (isStreaming) {
+      onAbort()
+    }
+
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
-    // Haptic feedback on send
     navigator.vibrate?.(10)
     onSend(trimmed.slice(0, 10000), pendingImages.length > 0 ? pendingImages : undefined)
     setValue('')
@@ -116,16 +177,38 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       textareaRef.current.style.height = 'auto'
     }
     setTimeout(() => textareaRef.current?.focus(), 50)
-  }, [value, isStreaming, onSend, pendingImages])
+  }, [value, isStreaming, onSend, onAbort, pendingImages, showSlashPalette, filteredCommands, onClear])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      if (showSlashPalette && filteredCommands.length > 0) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          setSlashIndex((i) => (i > 0 ? i - 1 : filteredCommands.length - 1))
+          return
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setSlashIndex((i) => (i < filteredCommands.length - 1 ? i + 1 : 0))
+          return
+        }
+        if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+          e.preventDefault()
+          selectSlashCommand(filteredCommands[slashIndex])
+          return
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          setValue('')
+          return
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         handleSubmit()
       }
     },
-    [handleSubmit],
+    [handleSubmit, showSlashPalette, filteredCommands, slashIndex, selectSlashCommand],
   )
 
   // Hold-to-record + tap-to-toggle hybrid
@@ -208,6 +291,45 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   return (
     <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom">
       <div className="max-w-[900px] mx-auto p-3">
+        {/* Thinking pill while streaming */}
+        {isStreaming && (
+          <div className="flex items-center justify-center mb-2 animate-[fadeSlideIn_0.2s_ease-out]">
+            <button
+              onClick={onAbort}
+              className="inline-btn flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 active:scale-95 transition-all group"
+            >
+              <div className="w-2 h-2 rounded-full bg-accent streaming-pulse" />
+              <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Jane is thinking…</span>
+              <span className="text-xs text-text-light-muted/60 dark:text-text-dark-muted/60 group-hover:text-red-400 transition-colors">Stop</span>
+            </button>
+          </div>
+        )}
+
+        {/* Slash command palette */}
+        {showSlashPalette && filteredCommands.length > 0 && (
+          <div className="mb-2 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox">
+            {filteredCommands.map((cmd, i) => (
+              <button
+                key={cmd.command}
+                role="option"
+                aria-selected={i === slashIndex}
+                onClick={() => selectSlashCommand(cmd)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
+                  i === slashIndex
+                    ? 'bg-accent/10 text-accent'
+                    : 'text-text-light dark:text-text-dark hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50'
+                }`}
+              >
+                <span className="text-sm font-mono font-medium">{cmd.command}</span>
+                <span className="text-xs text-text-light-muted dark:text-text-dark-muted">{cmd.description}</span>
+                {cmd.local && (
+                  <span className="ml-auto text-[10px] text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-wide">local</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Voice error */}
         {voice.error && (
           <div className="flex items-center justify-center gap-2 text-red-400 text-xs mb-2 animate-[fadeSlideIn_0.2s_ease-out] px-3 py-1.5 rounded-lg bg-red-500/8" role="alert">
@@ -333,11 +455,31 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               </button>
             </div>
           ) : (
-          <div className="relative flex-none w-11 h-11">
-            {isStreaming ? (
+          <div className="flex-none flex items-center gap-1.5">
+            {isStreaming && hasContent ? (
+              /* Streaming + user typed text: show stop + send */
+              <>
+                <button
+                  onClick={onAbort}
+                  className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
+                  aria-label="Stop generating"
+                  title="Stop"
+                >
+                  <StopIcon />
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
+                  aria-label="Send message"
+                  title="Send"
+                >
+                  <ArrowUpIcon />
+                </button>
+              </>
+            ) : isStreaming ? (
               <button
                 onClick={onAbort}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all shadow-lg shadow-red-500/25 animate-[btnFadeIn_0.15s_ease-out]"
+                className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all shadow-lg shadow-red-500/25 streaming-pulse animate-[btnFadeIn_0.15s_ease-out]"
                 aria-label="Stop generating"
                 title="Stop"
               >
@@ -346,7 +488,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             ) : isTranscribing ? (
               <button
                 disabled
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-surface-light-3 dark:bg-surface-dark-3 text-text-light-muted dark:text-text-dark-muted opacity-50 cursor-not-allowed"
+                className="w-11 h-11 flex items-center justify-center rounded-full bg-surface-light-3 dark:bg-surface-dark-3 text-text-light-muted dark:text-text-dark-muted opacity-50 cursor-not-allowed"
                 aria-label="Transcribing audio"
                 title="Transcribing"
               >
@@ -355,7 +497,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             ) : hasContent ? (
               <button
                 onClick={handleSubmit}
-                className={`absolute inset-0 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
+                className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
                 aria-label="Send message"
                 title="Send"
               >
@@ -367,7 +509,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                 onPointerDown={handleMicPointerDown}
                 onPointerUp={handleMicPointerUp}
                 onPointerLeave={handleMicPointerUp}
-                className="absolute inset-0 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] touch-none"
+                className="w-11 h-11 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] touch-none"
                 aria-label="Hold to record, tap to toggle"
                 title="Voice input (tap or hold)"
               >
