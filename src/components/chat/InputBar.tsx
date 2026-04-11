@@ -482,15 +482,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                   <ArrowUpIcon />
                 </button>
               </>
-            ) : isStreaming ? (
-              <button
-                onClick={onAbort}
-                className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all shadow-lg shadow-red-500/25 streaming-pulse animate-[btnFadeIn_0.15s_ease-out]"
-                aria-label="Stop generating"
-                title="Stop"
-              >
-                <StopIcon />
-              </button>
             ) : isTranscribing ? (
               <button
                 disabled

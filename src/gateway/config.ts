@@ -7,6 +7,7 @@ export interface GatewayConfig {
   user: string
   openaiApiKey: string
   elevenLabsApiKey: string
+  openrouterApiKey: string
 }
 
 export function getConfig(): GatewayConfig {
@@ -25,6 +26,7 @@ export function getConfig(): GatewayConfig {
     })(),
     openaiApiKey: params.get('openai_key') || import.meta.env.VITE_OPENAI_API_KEY || '',
     elevenLabsApiKey: localStorage.getItem('clavus-elevenlabs-key') || import.meta.env.VITE_ELEVENLABS_API_KEY || '',
+    openrouterApiKey: import.meta.env.VITE_OPENROUTER_API_KEY || '',
   }
 }
 

@@ -65,7 +65,6 @@ export function ComposeFlow({ channel, onClose }: Props) {
       setTranscription(text)
       setComposeState('composing')
     },
-    silenceAutoStop: true,
   })
 
   // Auto-start recording on mount (guarded against StrictMode double-mount)

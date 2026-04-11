@@ -3,10 +3,8 @@ import { getConfig } from '../gateway/config'
 
 export type RecordingState = 'idle' | 'recording' | 'transcribing'
 
-const MAX_DURATION_MS = 5 * 60 * 1000 // 5 minutes
-const WARNING_AT_MS = 4 * 60 * 1000 + 45 * 1000 // 4:45
-const SILENCE_THRESHOLD = 0.02 // Normalized amplitude threshold for "silence"
-const SILENCE_TIMEOUT_MS = 2500 // Auto-stop after 2.5s of silence
+const MAX_DURATION_MS = 10 * 60 * 1000 // 10 minutes
+const WARNING_AT_MS = 9 * 60 * 1000 + 45 * 1000 // 9:45
 
 function getSupportedMimeType(): string {
   if (typeof MediaRecorder === 'undefined') return 'audio/mp4'
@@ -42,10 +40,9 @@ function cleanTranscription(text: string): string {
 interface UseVoiceRecorderOptions {
   onTranscription: (text: string) => void
   onInsertTranscription?: (text: string) => void // Insert text without sending
-  silenceAutoStop?: boolean // Enable auto-stop on silence detection
 }
 
-export function useVoiceRecorder({ onTranscription, onInsertTranscription, silenceAutoStop = true }: UseVoiceRecorderOptions) {
+export function useVoiceRecorder({ onTranscription, onInsertTranscription }: UseVoiceRecorderOptions) {
   const [state, setState] = useState<RecordingState>('idle')
   const [duration, setDuration] = useState(0)
   const [warning, setWarning] = useState(false)
@@ -70,8 +67,6 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription, silen
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef(0)
   const cancelledRef = useRef(false)
-  const silenceStartRef = useRef<number | null>(null)
-  const hasSpokenRef = useRef(false) // Track if user has spoken at all
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -93,8 +88,6 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription, silen
     analyserRef.current = null
     mediaRecorderRef.current = null
     chunksRef.current = []
-    silenceStartRef.current = null
-    hasSpokenRef.current = false
     setDuration(0)
     setWarning(false)
     setLevels([])
@@ -108,8 +101,32 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription, silen
       try {
         const formData = new FormData()
         formData.append('file', blob, `recording.${fileExtForMime(blob.type)}`)
-        formData.append('model_id', 'scribe_v1')
+        formData.append('model_id', 'scribe_v2')
+        formData.append('language_code', 'deu')
         formData.append('tag_audio_events', 'false')
+        formData.append('additional_languages', JSON.stringify(['eng']))
+        formData.append('additional_formats', JSON.stringify([]))
+        formData.append('glossary', JSON.stringify([
+          // Familie
+          { term: 'Janis' },
+          { term: 'Janis Berneker' },
+          { term: 'Nadine' },
+          { term: 'Yuna' },
+          // Arbeit
+          { term: 'Typewise' },
+          { term: 'David Eberle' },
+          // Apps & Projekte
+          { term: 'Jane' },
+          { term: 'Clavus' },
+          { term: 'OpenClaw' },
+          { term: 'Marksense' },
+          // Orte
+          { term: 'Dennlerstrasse' },
+          { term: 'Buckhauserstrasse' },
+          { term: 'Wollishofen' },
+          { term: 'Rodersdorf' },
+          { term: 'Rütihof' },
+        ]))
 
         const res = await fetch('/elevenlabs/v1/speech-to-text', {
           method: 'POST',
@@ -171,32 +188,10 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription, silen
       }
       setLevels(bars)
 
-      // Voice activity detection for auto-stop
-      if (silenceAutoStop) {
-        const maxLevel = Math.max(...bars)
-        if (maxLevel > SILENCE_THRESHOLD) {
-          // User is speaking
-          hasSpokenRef.current = true
-          silenceStartRef.current = null
-        } else if (hasSpokenRef.current) {
-          // Silence detected after speech
-          if (silenceStartRef.current === null) {
-            silenceStartRef.current = Date.now()
-          } else if (Date.now() - silenceStartRef.current > SILENCE_TIMEOUT_MS) {
-            // Auto-stop after sustained silence
-            if (mediaRecorderRef.current?.state === 'recording') {
-              navigator.vibrate?.(15)
-              mediaRecorderRef.current.stop()
-            }
-            return // Stop the animation frame loop
-          }
-        }
-      }
-
       animFrameRef.current = requestAnimationFrame(update)
     }
     update()
-  }, [silenceAutoStop])
+  }, [])
 
   const start = useCallback(async () => {
     setError(null)

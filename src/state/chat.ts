@@ -89,18 +89,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const messages = [...ts.messages, { ...msg, id, timestamp: Date.now() }]
       if (!msg.streaming) saveMessages(threadId, messages)
 
-      // Auto-set thread title from first user message
-      if (msg.role === 'user') {
-        const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
-        if (thread && thread.title === 'New conversation') {
-          let title = msg.content.replace(/\n/g, ' ').trim()
-          if (title.length > 40) {
-            title = title.slice(0, 40).replace(/\s+\S*$/, '') + '...'
-          }
-          useThreadsStore.getState().updateThreadTitle(threadId, title || msg.content.slice(0, 30))
-        }
-      }
-
       return {
         threadStates: {
           ...state.threadStates,

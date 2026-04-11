@@ -36,6 +36,7 @@ export async function sendChatStream(
       model: `openclaw:${config.agentId}`,
       stream: true,
       stream_options: { include_reasoning: true },
+      includeReasoning: true,
       user: config.user,
       messages,
     }),
@@ -120,6 +121,46 @@ export async function generateTitle(
         user: config.user,
         messages: titleMessages,
         max_tokens: 20,
+      }),
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!res.ok) return null
+    const data = await res.json()
+    const title = data.choices?.[0]?.message?.content?.trim()
+    return title && title.length > 0 && title.length < 80 ? title : null
+  } catch {
+    return null
+  }
+}
+
+export async function generateTitleViaOpenRouter(
+  openrouterApiKey: string,
+  userMessages: string[],
+): Promise<string | null> {
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${openrouterApiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'mistralai/mistral-small-2603',
+        stream: false,
+        max_tokens: 20,
+        temperature: 0,
+        messages: [
+          {
+            role: 'system',
+            content: 'Generate a concise 3-6 word title summarizing what the user is talking about. Return ONLY the title, nothing else. No quotes, no punctuation at the end.',
+          },
+          ...userMessages.map(text => ({ role: 'user' as const, content: text })),
+          {
+            role: 'user',
+            content: 'Generate a short title for the messages above.',
+          },
+        ],
       }),
       signal: AbortSignal.timeout(10000),
     })

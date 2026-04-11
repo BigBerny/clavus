@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, checkGateway, generateTitle } from '../gateway/chat.ts'
+import { sendChatStream, checkGateway, generateTitleViaOpenRouter } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
-const TITLE_GEN_AT = [2, 10] // Generate title after 2 messages (first exchange) and 10 messages
+// Generate title after user message 1, 2, 4, 8, 16, 32... (powers of 2)
+function shouldGenerateTitle(userMsgCount: number): boolean {
+  return userMsgCount > 0 && (userMsgCount & (userMsgCount - 1)) === 0
+}
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -123,17 +126,15 @@ export function useChat() {
             store.getState().setStreaming(threadId, false)
             store.getState().setAbortController(threadId, null)
 
-            // Auto-generate title at specific message counts
+            // Auto-generate title at powers of 2 user message counts (1, 2, 4, 8, 16...)
             const currentMessages = store.getState().getThreadState(threadId).messages.filter(m => m.role !== 'system')
-            const msgCount = currentMessages.length
-            if (TITLE_GEN_AT.includes(msgCount) || (msgCount > 2 && msgCount % 10 === 0)) {
-              const activeThread = useThreadsStore.getState().threads.find(t => t.id === threadId)
-              if (activeThread && (activeThread.title === 'New conversation' || msgCount >= 10)) {
-                const apiMsgs = currentMessages.map(m => ({
-                  role: m.role as 'user' | 'assistant',
-                  content: m.content,
-                }))
-                generateTitle(getConfig(), apiMsgs).then(title => {
+            const userMessages = currentMessages.filter(m => m.role === 'user')
+            const userMsgCount = userMessages.length
+            if (shouldGenerateTitle(userMsgCount)) {
+              const config = getConfig()
+              if (config.openrouterApiKey) {
+                const userTexts = userMessages.map(m => m.content)
+                generateTitleViaOpenRouter(config.openrouterApiKey, userTexts).then(title => {
                   if (title) {
                     useThreadsStore.getState().updateThreadTitle(threadId, title)
                   }
