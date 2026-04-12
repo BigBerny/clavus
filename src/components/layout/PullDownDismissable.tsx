@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, type ReactNode } from 'react'
+import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react'
 
 interface PullDownDismissableProps {
   children: ReactNode
@@ -25,6 +25,8 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
   const startXRef = useRef(0)
   const currentTranslateRef = useRef(0)
   const animFrameRef = useRef(0)
+  const [pastThreshold, setPastThreshold] = useState(false)
+  const pastThresholdRef = useRef(false)
 
   const findScrollableAncestor = useCallback((target: EventTarget | null): HTMLElement | null => {
     let el = target as HTMLElement | null
@@ -86,6 +88,14 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
         const rawDy = Math.max(0, t.clientY - startYRef.current)
         const translated = rubberBand(rawDy)
         currentTranslateRef.current = translated
+        const isPast = translated > DISMISS_THRESHOLD
+        setPastThreshold(isPast)
+
+        // Haptic feedback when crossing threshold
+        if (isPast && !pastThresholdRef.current) {
+          navigator.vibrate?.(10)
+        }
+        pastThresholdRef.current = isPast
 
         // Apply transform directly to DOM for 60fps
         cancelAnimationFrame(animFrameRef.current)
@@ -137,6 +147,8 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
 
       phaseRef.current = 'idle'
       currentTranslateRef.current = 0
+      setPastThreshold(false)
+      pastThresholdRef.current = false
     }
 
     container.addEventListener('touchstart', onTouchStart, { passive: true })
@@ -155,7 +167,13 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
   }, [enabled, tabId, onDismiss, findScrollableAncestor])
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col min-h-0" style={{ willChange: 'transform' }}>
+    <div ref={containerRef} className="h-full flex flex-col min-h-0 relative" style={{ willChange: 'transform' }}>
+      {/* "Release to close" indicator */}
+      {pastThreshold && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded-full bg-red-500/80 text-white text-[11px] font-medium animate-[fadeSlideIn_0.15s_ease-out] pointer-events-none">
+          Release to close
+        </div>
+      )}
       {children}
     </div>
   )

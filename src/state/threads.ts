@@ -185,7 +185,16 @@ export async function syncFromServer(): Promise<boolean> {
       threads: mergedThreads,
       activeThreadId: mergedThreads.find(t => t.id === currentActiveId) ? currentActiveId : mergedThreads[0]?.id || '',
     })
-    
+
+    // Ensure tabs exist for all threads that have messages
+    const { ensureChatTab } = await import('./tabs')
+    for (const t of mergedThreads) {
+      const msgs = loadThreadMessages(t.id)
+      if (msgs.length > 0) {
+        ensureChatTab(t.id, t.title)
+      }
+    }
+
     return true
   } catch {
     return false
