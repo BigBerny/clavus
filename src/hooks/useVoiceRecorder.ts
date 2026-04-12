@@ -106,13 +106,14 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
         formData.append('tag_audio_events', 'false')
         formData.append('additional_languages', JSON.stringify(['eng']))
         formData.append('additional_formats', JSON.stringify([]))
-        formData.append('keyterms', JSON.stringify([
+        const keyterms = [
           'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
           'Typewise', 'David Eberle',
           'Jane', 'Clavus', 'OpenClaw', 'Marksense',
           'Dennlerstrasse', 'Buckhauserstrasse',
           'Wollishofen', 'Rodersdorf', 'Rütihof',
-        ]))
+        ]
+        for (const kt of keyterms) formData.append('keyterms', kt)
 
         console.log('[STT] Sending transcription request, blob size:', blob.size, 'type:', blob.type)
         // Call ElevenLabs directly (not through server proxy) to avoid

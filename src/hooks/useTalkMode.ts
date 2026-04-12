@@ -115,13 +115,14 @@ export function useTalkMode(
     formData.append('tag_audio_events', 'false')
     formData.append('additional_languages', JSON.stringify(['eng']))
     formData.append('additional_formats', JSON.stringify([]))
-    formData.append('keyterms', JSON.stringify([
+    const keyterms = [
       'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
       'Typewise', 'David Eberle',
       'Jane', 'Clavus', 'OpenClaw', 'Marksense',
       'Dennlerstrasse', 'Buckhauserstrasse',
       'Wollishofen', 'Rodersdorf', 'Rütihof',
-    ]))
+    ]
+    for (const kt of keyterms) formData.append('keyterms', kt)
 
     const key = getConfig().elevenLabsApiKey
     const sttUrl = key ? 'https://api.elevenlabs.io/v1/speech-to-text' : '/elevenlabs/v1/speech-to-text'
