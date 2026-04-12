@@ -59,6 +59,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
+      console.log('[ComposeFlow] onTranscription called, text:', text?.slice(0, 50), 'alreadyProcessed:', transcriptionProcessedRef.current)
       // Prevent duplicate processing from StrictMode double-mount
       if (transcriptionProcessedRef.current) return
       transcriptionProcessedRef.current = true
@@ -76,16 +77,33 @@ export function ComposeFlow({ channel, onClose }: Props) {
   }, [])
 
   // Track voice state
+  const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
+    console.log('[ComposeFlow] voice.state:', voice.state, 'composeState:', composeState, 'transcription:', !!transcription)
     if (voice.state === 'transcribing') {
       setComposeState('transcribing')
     }
-    // If transcription finished but no text was produced (empty/filler-only), show error
-    if (voice.state === 'idle' && composeState === 'transcribing' && !transcription) {
-      setError('No speech detected. Try again.')
-      setComposeState('error')
+    // If voice goes idle while we're still in transcribing state, wait a bit
+    // then check if transcription arrived (gives React time to batch updates)
+    if (voice.state === 'idle' && composeState === 'transcribing') {
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current)
+      stuckTimerRef.current = setTimeout(() => {
+        // Re-check: if still in transcribing state after 2s, something went wrong
+        if (!transcriptionProcessedRef.current) {
+          setError('No speech detected. Try again.')
+          setComposeState('error')
+        }
+      }, 2000)
     }
+    return () => { if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current) }
   }, [voice.state, composeState, transcription])
+  // Also clear stuck timer when we move past transcribing
+  useEffect(() => {
+    if (composeState !== 'transcribing' && stuckTimerRef.current) {
+      clearTimeout(stuckTimerRef.current)
+      stuckTimerRef.current = null
+    }
+  }, [composeState])
 
   // When transcription arrives, send to LLM for reformulation
   const reformulatingRef = useRef(false)
