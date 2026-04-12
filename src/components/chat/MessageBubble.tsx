@@ -115,20 +115,65 @@ function CopyableBlock({ children }: { children: string }) {
   )
 }
 
-// Parse :::copy blocks from markdown content
-function splitCopyBlocks(content: string): Array<{ type: 'text' | 'copy'; content: string }> {
-  const parts: Array<{ type: 'text' | 'copy'; content: string }> = []
+// ─── Embed Block ────────────────────────────────────────────────────────────
+// Renders [embed ref="url" ...] as sandboxed iframes
+
+function EmbedBlock({ src, title }: { src: string; title?: string }) {
+  return (
+    <div className="my-2 rounded-xl border border-surface-light-3/20 dark:border-surface-dark-3/20 overflow-hidden bg-white dark:bg-[#0d0f14]">
+      {title && (
+        <div className="px-3 py-1.5 border-b border-surface-light-3/15 dark:border-surface-dark-3/15 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/50 truncate">
+          {title}
+        </div>
+      )}
+      <iframe
+        src={src}
+        title={title || 'Embedded content'}
+        sandbox="allow-scripts allow-same-origin"
+        className="w-full border-0"
+        style={{ minHeight: 200, maxHeight: 400 }}
+      />
+    </div>
+  )
+}
+
+// ─── Reply Quote Block ──────────────────────────────────────────────────────
+
+function ReplyQuoteBlock({ content }: { content: string }) {
+  return (
+    <div className="mb-2 pl-3 border-l-2 border-accent/30 rounded-r-lg bg-accent/5 dark:bg-accent/8 px-3 py-1.5">
+      <div className="text-[10px] text-accent/60 font-medium mb-0.5">Reply to</div>
+      <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 line-clamp-2" style={{ overflowWrap: 'break-word' }}>
+        {content}
+      </p>
+    </div>
+  )
+}
+
+// ─── Content Block Parser ───────────────────────────────────────────────────
+
+type ContentBlock =
+  | { type: 'text'; content: string }
+  | { type: 'copy'; content: string }
+  | { type: 'embed'; src: string; title?: string }
+  | { type: 'reply'; content: string }
+
+// Parse custom blocks from markdown content
+function splitContentBlocks(content: string): ContentBlock[] {
+  const parts: ContentBlock[] = []
   const lines = content.split('\n')
   let current = ''
   let inCopy = false
   let copyContent = ''
 
   for (const line of lines) {
+    // :::copy block start
     if (line.trim() === ':::copy' && !inCopy) {
       if (current.trim()) parts.push({ type: 'text', content: current })
       current = ''
       inCopy = true
       copyContent = ''
+    // :::copy block end
     } else if (line.trim() === ':::' && inCopy) {
       parts.push({ type: 'copy', content: copyContent.trim() })
       copyContent = ''
@@ -136,7 +181,19 @@ function splitCopyBlocks(content: string): Array<{ type: 'text' | 'copy'; conten
     } else if (inCopy) {
       copyContent += line + '\n'
     } else {
-      current += line + '\n'
+      // Check for [embed ref="..." ...] pattern
+      const embedMatch = line.trim().match(/^\[embed\s+ref="([^"]+)"(?:\s+title="([^"]*)")?\s*\]$/)
+      if (embedMatch) {
+        if (current.trim()) parts.push({ type: 'text', content: current })
+        current = ''
+        parts.push({ type: 'embed', src: embedMatch[1], title: embedMatch[2] })
+      }
+      // Check for [[reply_to_current]] or [[reply_to:<id>]] patterns
+      else if (line.trim().startsWith('[[reply_to')) {
+        // Skip the directive itself, content follows
+      } else {
+        current += line + '\n'
+      }
     }
   }
 
@@ -149,6 +206,31 @@ function splitCopyBlocks(content: string): Array<{ type: 'text' | 'copy'; conten
   }
 
   return parts
+}
+
+// Extract reply quote from message content (> quoted text at start)
+function extractReplyQuote(content: string): { quote: string | null; rest: string } {
+  const lines = content.split('\n')
+  const quoteLines: string[] = []
+  let startIdx = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('> ')) {
+      quoteLines.push(lines[i].slice(2))
+      startIdx = i + 1
+    } else if (quoteLines.length > 0 && lines[i].trim() === '') {
+      startIdx = i + 1
+      break
+    } else {
+      break
+    }
+  }
+
+  if (quoteLines.length === 0) return { quote: null, rest: content }
+  return {
+    quote: quoteLines.join('\n'),
+    rest: lines.slice(startIdx).join('\n'),
+  }
 }
 
 interface Props {
@@ -187,8 +269,12 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   if (isAssistant && !message.content?.trim() && !message.streaming && !message.thinking) {
     return null
   }
-  const contentParts = useMemo(() => 
-    isAssistant ? splitCopyBlocks(message.content) : [],
+  const contentParts = useMemo(() =>
+    isAssistant ? splitContentBlocks(message.content) : [],
+    [isAssistant, message.content]
+  )
+  const replyQuote = useMemo(() =>
+    isAssistant ? extractReplyQuote(message.content) : null,
     [isAssistant, message.content]
   )
   const isError = isSystem && message.content.startsWith('Error:')
@@ -345,18 +431,20 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             {message.toolCalls && message.toolCalls.length > 0 && (
               <ToolCallCards toolCalls={message.toolCalls} />
             )}
+            {/* Reply quote block */}
+            {replyQuote?.quote && (
+              <ReplyQuoteBlock content={replyQuote.quote} />
+            )}
             <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:overflow-x-auto [&_table]:overflow-x-auto [&_code]:break-keep-all" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               <Suspense fallback={<p className="whitespace-pre-wrap">{message.content}</p>}>
-                {contentParts.length > 1 || contentParts.some(p => p.type === 'copy') ? (
-                  contentParts.map((part, i) =>
-                    part.type === 'copy' ? (
-                      <CopyableBlock key={i}>{part.content}</CopyableBlock>
-                    ) : (
-                      <RichMessageRenderer key={i} content={part.content} />
-                    )
-                  )
+                {contentParts.length > 1 || contentParts.some(p => p.type !== 'text') ? (
+                  contentParts.map((part, i) => {
+                    if (part.type === 'copy') return <CopyableBlock key={i}>{part.content}</CopyableBlock>
+                    if (part.type === 'embed') return <EmbedBlock key={i} src={part.src} title={part.title} />
+                    return <RichMessageRenderer key={i} content={part.content} />
+                  })
                 ) : (
-                  <RichMessageRenderer content={message.content || ' '} />
+                  <RichMessageRenderer content={replyQuote ? replyQuote.rest : (message.content || ' ')} />
                 )}
               </Suspense>
             </div>
