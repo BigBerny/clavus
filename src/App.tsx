@@ -232,6 +232,29 @@ export function App() {
       else if (state === 'disconnected') setConnectionStatus('disconnected')
     })
 
+    // Operational notifications via WebSocket events
+    const unsubApproval = gateway.on('exec.approval.requested', (payload) => {
+      if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
+        new Notification('Approval Required', {
+          body: `Jane needs approval: ${(payload as any).tool || 'action'}`,
+          icon: '/icons/icon-192.svg',
+          tag: 'approval',
+        })
+      }
+    })
+    const unsubHealth = gateway.on('health', (payload) => {
+      if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
+        const status = (payload as any).status
+        if (status === 'error' || status === 'degraded') {
+          new Notification('System Alert', {
+            body: `Gateway health: ${status}`,
+            icon: '/icons/icon-192.svg',
+            tag: 'health',
+          })
+        }
+      }
+    })
+
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate-thread' && event.data.threadId) {
         navigateToThread(event.data.threadId)
@@ -248,6 +271,8 @@ export function App() {
 
     return () => {
       unsubWs()
+      unsubApproval()
+      unsubHealth()
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
