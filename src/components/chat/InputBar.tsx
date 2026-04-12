@@ -8,6 +8,7 @@ interface Props {
   onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
   isHome?: boolean
   onClear?: () => void
+  talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void }
 }
 
 interface SlashCommand {
@@ -28,7 +29,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { command: '/help', description: 'Show help' },
 ]
 
-export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onClear }: Props) {
+export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onClear, talkMode }: Props) {
   const [value, setValue] = useState('')
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
@@ -288,6 +289,68 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0
 
+  // Talk Mode: full-width overlay when active
+  if (talkMode?.active) {
+    const phaseLabels: Record<string, string> = {
+      listening: 'Listening...',
+      transcribing: 'Transcribing...',
+      waiting: 'Jane is responding...',
+      speaking: 'Jane is speaking...',
+    }
+    const phaseColors: Record<string, string> = {
+      listening: 'bg-red-500',
+      transcribing: 'bg-amber-500',
+      waiting: 'bg-accent',
+      speaking: 'bg-emerald-500',
+    }
+    return (
+      <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom">
+        <div className="max-w-[900px] mx-auto p-3">
+          <div className="flex flex-col items-center gap-3 py-4">
+            {/* Pulsing indicator */}
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${phaseColors[talkMode.phase] || 'bg-accent'} ${talkMode.phase === 'listening' ? 'animate-pulse' : ''}`}>
+              {talkMode.phase === 'listening' && (
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              )}
+              {talkMode.phase === 'transcribing' && (
+                <div className="voice-spinner" style={{ width: 24, height: 24, borderWidth: 2, borderColor: 'white', borderTopColor: 'transparent' }} />
+              )}
+              {talkMode.phase === 'waiting' && (
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0s' }} />
+                  <span className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0.2s' }} />
+                  <span className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0.4s' }} />
+                </div>
+              )}
+              {talkMode.phase === 'speaking' && (
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              )}
+            </div>
+            <span className="text-sm text-text-light-muted dark:text-text-dark-muted">
+              {phaseLabels[talkMode.phase] || 'Talk Mode'}
+            </span>
+            <div className="flex gap-2">
+              {talkMode.phase === 'listening' && (
+                <button
+                  onClick={talkMode.endListening}
+                  className="inline-btn px-4 py-2 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-sm text-text-light dark:text-text-dark active:scale-95 transition-transform"
+                >
+                  Done speaking
+                </button>
+              )}
+              <button
+                onClick={talkMode.toggle}
+                className="inline-btn px-4 py-2 rounded-full bg-red-500/10 text-sm text-red-500 active:scale-95 transition-transform"
+              >
+                End Talk Mode
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom">
       <div className="max-w-[900px] mx-auto p-3">
@@ -502,17 +565,29 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                 <ArrowUpIcon />
               </button>
             ) : (
-              <button
-                onClick={handleMicClick}
-                onPointerDown={handleMicPointerDown}
-                onPointerUp={handleMicPointerUp}
-                onPointerLeave={handleMicPointerUp}
-                className="w-11 h-11 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] touch-none"
-                aria-label="Hold to record, tap to toggle"
-                title="Voice input (tap or hold)"
-              >
-                <MicIcon />
-              </button>
+              <div className="flex items-center gap-1">
+                {talkMode && !isHome && (
+                  <button
+                    onClick={talkMode.toggle}
+                    className="w-9 h-9 flex items-center justify-center rounded-full text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-accent active:scale-95 transition-all"
+                    aria-label="Start Talk Mode"
+                    title="Talk Mode (continuous voice conversation)"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 18.5a6 6 0 0 0 6-6v-2"/><path d="M12 18.5a6 6 0 0 1-6-6v-2"/><path d="M12 18.5V22"/><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M2 10h2"/><path d="M20 10h2"/></svg>
+                  </button>
+                )}
+                <button
+                  onClick={handleMicClick}
+                  onPointerDown={handleMicPointerDown}
+                  onPointerUp={handleMicPointerUp}
+                  onPointerLeave={handleMicPointerUp}
+                  className="w-11 h-11 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] touch-none"
+                  aria-label="Hold to record, tap to toggle"
+                  title="Voice input (tap or hold)"
+                >
+                  <MicIcon />
+                </button>
+              </div>
             )}
           </div>
           )}

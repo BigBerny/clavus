@@ -11,6 +11,7 @@ import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 import { gateway } from './gateway/ws.ts'
+import { useTalkMode } from './hooks/useTalkMode.ts'
 import { consumePendingThread } from './lib/pendingThread.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
@@ -80,7 +81,6 @@ export function App() {
   const cancelRecordingRef = useRef<(() => void) | null>(null)
   const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
 
-  // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Track which panel is visible (tab id or 'home')
   const [visiblePanel, setVisiblePanel] = useState<string>('home')
@@ -95,6 +95,10 @@ export function App() {
   const visibleThreadStreaming = useChatStore(
     (s) => visiblePanel !== 'home' ? (s.threadStates[visiblePanel]?.isStreaming ?? false) : false
   )
+
+  // Talk Mode — continuous voice conversation loop
+  const talkModeThreadId = visiblePanel !== 'home' ? visiblePanel : ''
+  const talkMode = useTalkMode(talkModeThreadId, send)
 
   // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home)
   const sortedTabs = useMemo(() =>
@@ -553,6 +557,7 @@ export function App() {
               onRecordingChange={handleRecordingChange}
               isHome={isHomeVisible()}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
+              talkMode={talkModeThreadId ? { active: talkMode.active, phase: talkMode.phase, toggle: talkMode.toggle, endListening: talkMode.endListening } : undefined}
             />
           </div>
         )}
