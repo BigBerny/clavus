@@ -12,6 +12,8 @@ import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 import { gateway } from './gateway/ws.ts'
 import { useTalkMode } from './hooks/useTalkMode.ts'
+import { DesktopSidebar } from './components/layout/DesktopSidebar.tsx'
+import { CanvasPanel } from './components/canvas/CanvasPanel.tsx'
 import { consumePendingThread } from './lib/pendingThread.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
@@ -99,6 +101,20 @@ export function App() {
   // Talk Mode — continuous voice conversation loop
   const talkModeThreadId = visiblePanel !== 'home' ? visiblePanel : ''
   const talkMode = useTalkMode(talkModeThreadId, send)
+
+  // Desktop detection (>= 768px)
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // Canvas state
+  const [canvasOpen, setCanvasOpen] = useState(false)
+  const [canvasContent, setCanvasContent] = useState('')
+  const [canvasTitle, setCanvasTitle] = useState('')
 
   // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home)
   const sortedTabs = useMemo(() =>
@@ -234,9 +250,23 @@ export function App() {
 
     // Operational notifications via WebSocket events
     const unsubApproval = gateway.on('exec.approval.requested', (payload) => {
+      const p = payload as any
+      const toolName = p.tool || 'action'
+      const approvalId = p.id || ''
+
+      // Inject approval as a system message with confirm block into active thread
+      const activeThread = visiblePanel !== 'home' ? visiblePanel : ''
+      if (activeThread) {
+        const confirmBlock = `:::confirm\nJane wants to execute: **${toolName}**. Allow this action?\nconfirmLabel: "Approve"\ncancelLabel: "Deny"\n:::`
+        useChatStore.getState().addMessage(activeThread, {
+          role: 'assistant',
+          content: confirmBlock,
+        })
+      }
+
       if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
         new Notification('Approval Required', {
-          body: `Jane needs approval: ${(payload as any).tool || 'action'}`,
+          body: `Jane needs approval: ${toolName}`,
           icon: '/icons/icon-192.svg',
           tag: 'approval',
         })
@@ -366,12 +396,14 @@ export function App() {
     requestAnimationFrame(() => {
       const target = panelRefs.current.get(tabId)
       if (target && container) {
-        container.scrollTo({ left: target.offsetLeft, behavior: 'instant' })
+        // Smooth scroll to give "swipe" feel when tapping tabs
+        container.scrollTo({ left: target.offsetLeft, behavior: 'smooth' })
       }
-      requestAnimationFrame(() => {
+      // Re-enable snap after smooth scroll completes (~300ms)
+      setTimeout(() => {
         container.style.scrollSnapType = ''
         isProgrammaticScroll.current = false
-      })
+      }, 350)
     })
   }, [switchThread, sortedTabs])
 
@@ -474,6 +506,36 @@ export function App() {
   const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
   const isVisibleChat = visiblePanel === 'home' || visibleTab?.type === 'chat'
 
+  // Desktop sidebar: select tab by setting visiblePanel directly
+  const handleDesktopSelectTab = useCallback((tabId: string) => {
+    setVisiblePanel(tabId)
+    const tab = sortedTabs.find(t => t.id === tabId)
+    if (tab?.type === 'chat') {
+      switchThread((tab as ChatTab).threadId)
+    }
+  }, [sortedTabs, switchThread])
+
+  const handleDesktopNewChat = useCallback(() => {
+    const createThread = useThreadsStore.getState().createThread
+    const newThreadId = createThread()
+    switchThread(newThreadId)
+    ensureChatTab(newThreadId, 'New conversation')
+    setVisiblePanel(newThreadId)
+  }, [switchThread])
+
+  const handleDesktopCloseTab = useCallback((tabId: string) => {
+    closeTab(tabId)
+    if (visiblePanel === tabId) {
+      // Navigate to most recent remaining tab or home
+      const remaining = sortedTabs.filter(t => t.id !== tabId)
+      if (remaining.length > 0) {
+        setVisiblePanel(remaining[remaining.length - 1].id)
+      } else {
+        setVisiblePanel('home')
+      }
+    }
+  }, [closeTab, visiblePanel, sortedTabs])
+
   if (needsToken) {
     return <TokenPrompt onSave={handleTokenSave} />
   }
@@ -505,56 +567,119 @@ export function App() {
       )}
 
       {/* Main content */}
-      <div className="flex-1 min-h-0 flex flex-col">
+      <div className="flex-1 min-h-0 flex flex-row">
 
-        {/* Horizontal scroll-snap container — full height, behind glass overlays */}
-        <div
-          ref={scrollContainerRef}
-          className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
-          style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            WebkitOverflowScrolling: 'touch',
-            touchAction: 'pan-x pan-y',
-          }}
-        >
-          {/* Tab panels: oldest first (leftmost) -> newest (rightmost, before home) */}
-          {sortedTabs.map((tab) => {
-            const isActive = visiblePanel === tab.id
-            return (
-              <div
-                key={tab.id}
-                ref={setPanelRef(tab.id)}
-                className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
-                style={{ touchAction: 'pan-x pan-y' }}
-                {...(!isActive ? { inert: true } : {})}
-              >
-                <PullDownDismissable tabId={tab.id} onDismiss={handleCloseTab}>
-                  <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
-                    {tab.type === 'chat' && (
-                      <ChatViewPanel
-                        threadId={(tab as ChatTab).threadId}
-                        isVisible={isActive}
-                      />
-                    )}
-                    {tab.type === 'recipe' && (
-                      <RecipePanel
-                        recipeId={(tab as any).recipeId}
-                        isVisible={isActive}
-                      />
-                    )}
-                    {tab.type === 'marksense' && (
-                      <MarksensePanel
-                        documentUrl={(tab as any).documentUrl}
-                        title={tab.title}
-                        isVisible={isActive}
-                      />
-                    )}
-                  </Suspense>
-                </PullDownDismissable>
+        {/* Desktop sidebar — only visible on md+ */}
+        {isDesktop && (
+          <DesktopSidebar
+            tabs={[...sortedTabs].reverse()}
+            activeTabId={visiblePanel}
+            onSelectTab={handleDesktopSelectTab}
+            onNewChat={handleDesktopNewChat}
+            onCloseTab={handleDesktopCloseTab}
+          />
+        )}
+
+        {/* Content area */}
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+
+        {/* Desktop: single panel view */}
+        {isDesktop ? (
+          <div className="flex-1 min-h-0 flex flex-row">
+            {/* Main panel */}
+            <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+              {visiblePanel === 'home' || !sortedTabs.find(t => t.id === visiblePanel) ? (
+                <HomeScreen
+                  onSend={handleSend}
+                  onCompose={(channel) => setComposeChannel(channel)}
+                  onSelectTab={handleDesktopSelectTab}
+                  pushState={pushState}
+                  onEnablePush={requestPermission}
+                />
+              ) : (
+                <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+                  {visibleTab?.type === 'chat' && (
+                    <ChatViewPanel
+                      threadId={(visibleTab as ChatTab).threadId}
+                      isVisible={true}
+                    />
+                  )}
+                  {visibleTab?.type === 'recipe' && (
+                    <RecipePanel
+                      recipeId={(visibleTab as any).recipeId}
+                      isVisible={true}
+                    />
+                  )}
+                  {visibleTab?.type === 'marksense' && (
+                    <MarksensePanel
+                      documentUrl={(visibleTab as any).documentUrl}
+                      title={visibleTab.title}
+                      isVisible={true}
+                    />
+                  )}
+                </Suspense>
+              )}
+            </div>
+            {/* Canvas side panel (desktop only) */}
+            {canvasOpen && (
+              <div className="w-[400px] xl:w-[480px] shrink-0 border-l border-surface-light-3/20 dark:border-surface-dark-3/20">
+                <CanvasPanel
+                  content={canvasContent}
+                  title={canvasTitle}
+                  onSave={(content) => setCanvasContent(content)}
+                  onClose={() => setCanvasOpen(false)}
+                />
               </div>
-            )
-          })}
+            )}
+          </div>
+        ) : (
+          /* Mobile: horizontal scroll-snap */
+          <div
+            ref={scrollContainerRef}
+            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
+            style={{
+              scrollbarWidth: 'none',
+              msOverflowStyle: 'none',
+              WebkitOverflowScrolling: 'touch',
+              touchAction: 'pan-x pan-y',
+            }}
+          >
+            {sortedTabs.map((tab) => {
+              const isActive = visiblePanel === tab.id
+              return (
+                <div
+                  key={tab.id}
+                  ref={setPanelRef(tab.id)}
+                  className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
+                  style={{ touchAction: 'pan-x pan-y' }}
+                  {...(!isActive ? { inert: true } : {})}
+                >
+                  <PullDownDismissable tabId={tab.id} onDismiss={handleCloseTab}>
+                    <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+                      {tab.type === 'chat' && (
+                        <ChatViewPanel
+                          threadId={(tab as ChatTab).threadId}
+                          isVisible={isActive}
+                        />
+                      )}
+                      {tab.type === 'recipe' && (
+                        <RecipePanel
+                          recipeId={(tab as any).recipeId}
+                          isVisible={isActive}
+                        />
+                      )}
+                      {tab.type === 'marksense' && (
+                        <MarksensePanel
+                          documentUrl={(tab as any).documentUrl}
+                          title={tab.title}
+                          isVisible={isActive}
+                        />
+                      )}
+                    </Suspense>
+                  </PullDownDismissable>
+                </div>
+              )
+            })}
 
           {/* Home panel (rightmost) */}
           <div
@@ -571,6 +696,7 @@ export function App() {
             />
           </div>
         </div>
+        )}
 
         {/* InputBar as flex child at bottom — only show for chat tabs and home */}
         {isVisibleChat && (
@@ -580,12 +706,13 @@ export function App() {
               onAbort={handleAbort}
               isStreaming={visibleThreadStreaming}
               onRecordingChange={handleRecordingChange}
-              isHome={isHomeVisible()}
+              isHome={!isDesktop && isHomeVisible()}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               talkMode={talkModeThreadId ? { active: talkMode.active, phase: talkMode.phase, toggle: talkMode.toggle, endListening: talkMode.endListening } : undefined}
             />
           </div>
         )}
+        </div>
       </div>
 
       <Suspense fallback={null}>

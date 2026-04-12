@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import type { Message } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
+import { ButtonGroup, SelectBlock, ConfirmBlock, parseButtonsLine, parseSelectLine, type ButtonAction, type SelectOption } from './InteractiveBlock.tsx'
 
 const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(m => ({ default: m.RichMessageRenderer })))
 
@@ -157,6 +158,9 @@ type ContentBlock =
   | { type: 'copy'; content: string }
   | { type: 'embed'; src: string; title?: string }
   | { type: 'reply'; content: string }
+  | { type: 'buttons'; buttons: ButtonAction[] }
+  | { type: 'select'; prompt: string; options: SelectOption[] }
+  | { type: 'confirm'; message: string; confirmLabel?: string; cancelLabel?: string }
 
 // Parse custom blocks from markdown content
 function splitContentBlocks(content: string): ContentBlock[] {
@@ -166,9 +170,36 @@ function splitContentBlocks(content: string): ContentBlock[] {
   let inCopy = false
   let copyContent = ''
 
+  let inConfirm = false
+  let confirmContent = ''
+
   for (const line of lines) {
+    // :::confirm block
+    if (line.trim() === ':::confirm' && !inCopy && !inConfirm) {
+      if (current.trim()) parts.push({ type: 'text', content: current })
+      current = ''
+      inConfirm = true
+      confirmContent = ''
+    } else if (line.trim() === ':::' && inConfirm) {
+      // Parse confirm block: first line is message, optional confirmLabel/cancelLabel
+      const cLines = confirmContent.trim().split('\n')
+      const msg = cLines[0] || ''
+      let confirmLabel: string | undefined
+      let cancelLabel: string | undefined
+      for (const cl of cLines.slice(1)) {
+        const cm = cl.match(/^confirmLabel:\s*"?([^"]*)"?$/)
+        if (cm) confirmLabel = cm[1]
+        const dm = cl.match(/^cancelLabel:\s*"?([^"]*)"?$/)
+        if (dm) cancelLabel = dm[1]
+      }
+      parts.push({ type: 'confirm', message: msg, confirmLabel, cancelLabel })
+      confirmContent = ''
+      inConfirm = false
+    } else if (inConfirm) {
+      confirmContent += line + '\n'
+    }
     // :::copy block start
-    if (line.trim() === ':::copy' && !inCopy) {
+    else if (line.trim() === ':::copy' && !inCopy) {
       if (current.trim()) parts.push({ type: 'text', content: current })
       current = ''
       inCopy = true
@@ -188,11 +219,29 @@ function splitContentBlocks(content: string): ContentBlock[] {
         current = ''
         parts.push({ type: 'embed', src: embedMatch[1], title: embedMatch[2] })
       }
-      // Check for [[reply_to_current]] or [[reply_to:<id>]] patterns
-      else if (line.trim().startsWith('[[reply_to')) {
-        // Skip the directive itself, content follows
-      } else {
-        current += line + '\n'
+      // Check for [buttons ...] pattern
+      else {
+        const buttons = parseButtonsLine(line)
+        if (buttons) {
+          if (current.trim()) parts.push({ type: 'text', content: current })
+          current = ''
+          parts.push({ type: 'buttons', buttons })
+        }
+        // Check for [select ...] pattern
+        else {
+          const select = parseSelectLine(line)
+          if (select) {
+            if (current.trim()) parts.push({ type: 'text', content: current })
+            current = ''
+            parts.push({ type: 'select', prompt: select.prompt, options: select.options })
+          }
+          // Check for [[reply_to_current]] or [[reply_to:<id>]] patterns
+          else if (line.trim().startsWith('[[reply_to')) {
+            // Skip the directive itself
+          } else {
+            current += line + '\n'
+          }
+        }
       }
     }
   }
@@ -442,6 +491,9 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                   contentParts.map((part, i) => {
                     if (part.type === 'copy') return <CopyableBlock key={i}>{part.content}</CopyableBlock>
                     if (part.type === 'embed') return <EmbedBlock key={i} src={part.src} title={part.title} />
+                    if (part.type === 'buttons') return <ButtonGroup key={i} buttons={part.buttons} />
+                    if (part.type === 'select') return <SelectBlock key={i} prompt={part.prompt} options={part.options} />
+                    if (part.type === 'confirm') return <ConfirmBlock key={i} message={part.message} confirmLabel={part.confirmLabel} cancelLabel={part.cancelLabel} />
                     return <RichMessageRenderer key={i} content={part.content} />
                   })
                 ) : (
