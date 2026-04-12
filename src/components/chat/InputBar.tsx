@@ -587,19 +587,20 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               >
                 <ArrowUpIcon />
               </button>
-            ) : isStreaming ? (
-              /* Streaming with no text: show stop button in place of mic */
-              <button
-                onClick={onAbort}
-                className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
-                aria-label="Stop generating"
-                title="Stop"
-              >
-                <StopIcon />
-              </button>
             ) : (
               <div className="flex items-center gap-1">
-                {talkMode && (
+                {/* Stop button next to mic during streaming */}
+                {isStreaming && (
+                  <button
+                    onClick={onAbort}
+                    className="w-9 h-9 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all"
+                    aria-label="Stop generating"
+                    title="Stop"
+                  >
+                    <StopIcon />
+                  </button>
+                )}
+                {!isStreaming && talkMode && (
                   <button
                     onClick={talkMode.toggle}
                     className="w-9 h-9 flex items-center justify-center rounded-full text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-accent active:scale-95 transition-all"
