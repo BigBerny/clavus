@@ -80,7 +80,12 @@ export function ComposeFlow({ channel, onClose }: Props) {
     if (voice.state === 'transcribing') {
       setComposeState('transcribing')
     }
-  }, [voice.state])
+    // If transcription finished but no text was produced (empty/filler-only), show error
+    if (voice.state === 'idle' && composeState === 'transcribing' && !transcription) {
+      setError('No speech detected. Try again.')
+      setComposeState('error')
+    }
+  }, [voice.state, composeState, transcription])
 
   // When transcription arrives, send to LLM for reformulation
   const reformulatingRef = useRef(false)

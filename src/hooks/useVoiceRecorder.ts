@@ -131,6 +131,7 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
         const res = await fetch('/elevenlabs/v1/speech-to-text', {
           method: 'POST',
           body: formData,
+          signal: AbortSignal.timeout(30000), // 30s timeout
         })
 
         if (!res.ok) {
