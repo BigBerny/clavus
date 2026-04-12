@@ -75,6 +75,12 @@ export function useTalkMode(
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
 
+  // Use refs so the async loop always sees the latest values
+  const threadIdRef = useRef(threadId)
+  threadIdRef.current = threadId
+  const sendRef = useRef(send)
+  sendRef.current = send
+
   const stopAll = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
@@ -208,14 +214,16 @@ export function useTalkMode(
 
       // 3. Send to chat and wait for response
       setPhase('waiting')
-      const msgCountBefore = useChatStore.getState().getThreadState(threadId).messages.length
-      await send(threadId, text)
+      const tid = threadIdRef.current
+      if (!tid) { console.warn('[TalkMode] No threadId'); break }
+      const msgCountBefore = useChatStore.getState().getThreadState(tid).messages.length
+      await sendRef.current(tid, text)
 
       // Wait for streaming to finish
       await new Promise<void>((resolve) => {
         const check = () => {
           if (signal.aborted) { resolve(); return }
-          const ts = useChatStore.getState().getThreadState(threadId)
+          const ts = useChatStore.getState().getThreadState(tid)
           if (!ts.isStreaming && ts.messages.length > msgCountBefore) {
             resolve()
           } else {
@@ -228,7 +236,7 @@ export function useTalkMode(
 
       // 4. Speak the last assistant message
       setPhase('speaking')
-      const messages = useChatStore.getState().getThreadState(threadId).messages
+      const messages = useChatStore.getState().getThreadState(tid).messages
       const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant')
       if (lastAssistant?.content) {
         try {
@@ -243,7 +251,7 @@ export function useTalkMode(
 
     setPhase('off')
     setActive(false)
-  }, [threadId, send, record, transcribe, speakResponse])
+  }, [record, transcribe, speakResponse])
 
   const toggle = useCallback(() => {
     if (active) {

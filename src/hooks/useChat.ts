@@ -93,6 +93,8 @@ export function useChat() {
 
     if (retryCount === 0) {
       addMessage(threadId, { role: 'user', content: content.trim(), images })
+      // Fire title generation immediately (async, non-blocking)
+      generateTitleIfNeeded(threadId)
     }
 
     const assistantId = store.getState().addMessage(threadId, {
@@ -130,7 +132,6 @@ export function useChat() {
               store.getState().finalizeMessage(threadId, assistantId)
               store.getState().setStreaming(threadId, false)
               activeRunsRef.current.delete(threadId)
-              generateTitleIfNeeded(threadId)
             },
             onError: (error) => {
               store.getState().finalizeMessage(threadId, assistantId)
@@ -187,7 +188,6 @@ export function useChat() {
             store.getState().finalizeMessage(threadId, assistantId)
             store.getState().setStreaming(threadId, false)
             store.getState().setAbortController(threadId, null)
-            generateTitleIfNeeded(threadId)
           },
           onError: (error) => {
             store.getState().finalizeMessage(threadId, assistantId)
