@@ -3,6 +3,20 @@ import { getConfig } from '../gateway/config'
 
 const VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb' // George
 
+function getTTSUrl(voiceId: string): { url: string; headers: Record<string, string> } {
+  const key = getConfig().elevenLabsApiKey
+  if (key) {
+    return {
+      url: `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?optimize_streaming_latency=3`,
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': key },
+    }
+  }
+  return {
+    url: `/elevenlabs/v1/text-to-speech/${voiceId}/stream?optimize_streaming_latency=3`,
+    headers: { 'Content-Type': 'application/json' },
+  }
+}
+
 // Split text into sentences for chunked playback
 function splitSentences(text: string): string[] {
   // Split on sentence-ending punctuation followed by space or end
@@ -34,11 +48,10 @@ function cleanForSpeech(text: string): string {
 }
 
 async function fetchTTSBlob(text: string, signal: AbortSignal): Promise<Blob> {
-  const res = await fetch(`/elevenlabs/v1/text-to-speech/${VOICE_ID}/stream?optimize_streaming_latency=3`, {
+  const { url, headers } = getTTSUrl(VOICE_ID)
+  const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       text,
       model_id: 'eleven_turbo_v2_5',

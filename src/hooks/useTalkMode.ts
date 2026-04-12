@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useChatStore } from '../state/chat.ts'
+import { getConfig } from '../gateway/config.ts'
 
 // TTS utilities (inline to avoid circular deps)
 const VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
@@ -34,9 +35,15 @@ function splitSentences(text: string): string[] {
 }
 
 async function fetchTTSBlob(text: string, signal: AbortSignal): Promise<Blob> {
-  const res = await fetch(`/elevenlabs/v1/text-to-speech/${VOICE_ID}/stream?optimize_streaming_latency=3`, {
+  const key = getConfig().elevenLabsApiKey
+  const url = key
+    ? `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}/stream?optimize_streaming_latency=3`
+    : `/elevenlabs/v1/text-to-speech/${VOICE_ID}/stream?optimize_streaming_latency=3`
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (key) headers['xi-api-key'] = key
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       text,
       model_id: 'eleven_turbo_v2_5',
@@ -116,7 +123,11 @@ export function useTalkMode(
       { term: 'Rodersdorf' }, { term: 'Rütihof' },
     ]))
 
-    const res = await fetch('/elevenlabs/v1/speech-to-text', { method: 'POST', body: formData, signal })
+    const key = getConfig().elevenLabsApiKey
+    const sttUrl = key ? 'https://api.elevenlabs.io/v1/speech-to-text' : '/elevenlabs/v1/speech-to-text'
+    const sttHeaders: Record<string, string> = {}
+    if (key) sttHeaders['xi-api-key'] = key
+    const res = await fetch(sttUrl, { method: 'POST', headers: sttHeaders, body: formData, signal })
     if (!res.ok) throw new Error(`Transcription failed (${res.status})`)
     const data = await res.json()
     return (data.text?.trim() || '')

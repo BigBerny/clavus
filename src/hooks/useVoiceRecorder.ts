@@ -128,20 +128,34 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
           { term: 'Rütihof' },
         ]))
 
-        const res = await fetch('/elevenlabs/v1/speech-to-text', {
+        console.log('[STT] Sending transcription request, blob size:', blob.size, 'type:', blob.type)
+        // Call ElevenLabs directly (not through server proxy) to avoid
+        // Cloudflare Access blocking the request
+        const elevenLabsKey = getConfig().elevenLabsApiKey
+        const sttUrl = elevenLabsKey
+          ? 'https://api.elevenlabs.io/v1/speech-to-text'
+          : '/elevenlabs/v1/speech-to-text'  // fallback to proxy
+        const headers: Record<string, string> = {}
+        if (elevenLabsKey) headers['xi-api-key'] = elevenLabsKey
+
+        const res = await fetch(sttUrl, {
           method: 'POST',
+          headers,
           body: formData,
-          signal: AbortSignal.timeout(30000), // 30s timeout
+          signal: AbortSignal.timeout(30000),
         })
 
+        console.log('[STT] Response status:', res.status)
         if (!res.ok) {
           const body = await res.text().catch(() => '')
           throw new Error(`Transcription failed (${res.status}): ${body}`)
         }
 
         const data = await res.json()
+        console.log('[STT] Response data:', JSON.stringify(data).slice(0, 200))
         const rawText = data.text?.trim()
         const text = rawText ? cleanTranscription(rawText) : ''
+        console.log('[STT] Cleaned text:', text || '(empty)')
         if (text) {
           if (insertModeRef.current && onInsertTranscription) {
             onInsertTranscription(text)
