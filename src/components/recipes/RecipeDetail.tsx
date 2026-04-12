@@ -197,7 +197,7 @@ function BringModal({ ingredients, servings, defaultServings, onClose }: {
   )
 }
 
-export function RecipeDetail({ onBack: onBackProp }: { onBack?: () => void } = {}) {
+export function RecipeDetail({ onBack: onBackProp, onStartCooking }: { onBack?: () => void; onStartCooking?: () => void } = {}) {
   const selectedRecipeId = useUIStore(s => s.selectedRecipeId)
   const setCurrentView = useUIStore(s => s.setCurrentView)
   const [recipe, setRecipe] = useState<Recipe | null>(null)
@@ -263,8 +263,12 @@ export function RecipeDetail({ onBack: onBackProp }: { onBack?: () => void } = {
   const startCooking = useCallback(async () => {
     if (!recipe) return
     await markCooked(recipe.id)
-    setCurrentView('cook-mode')
-  }, [recipe, setCurrentView])
+    if (onStartCooking) {
+      onStartCooking()
+    } else {
+      setCurrentView('cook-mode')
+    }
+  }, [recipe, setCurrentView, onStartCooking])
 
   if (loading) {
     return (

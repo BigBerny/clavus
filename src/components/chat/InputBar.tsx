@@ -291,16 +291,15 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   return (
     <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom">
       <div className="max-w-[900px] mx-auto p-3">
-        {/* Thinking pill while streaming */}
+        {/* Compact stop button while streaming */}
         {isStreaming && (
-          <div className="flex items-center justify-center mb-2 animate-[fadeSlideIn_0.2s_ease-out]">
+          <div className="flex items-center justify-center mb-1.5 animate-[fadeSlideIn_0.2s_ease-out]">
             <button
               onClick={onAbort}
-              className="inline-btn flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 active:scale-95 transition-all group"
+              className="inline-btn flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 hover:bg-red-500/10 hover:border-red-500/30 active:scale-95 transition-all"
             >
-              <div className="w-2 h-2 rounded-full bg-accent streaming-pulse" />
-              <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Jane is thinking…</span>
-              <span className="text-xs text-text-light-muted/60 dark:text-text-dark-muted/60 group-hover:text-red-400 transition-colors">Stop</span>
+              <div className="w-1.5 h-1.5 rounded-sm bg-red-400" />
+              <span className="text-[11px] text-text-light-muted dark:text-text-dark-muted">Stop</span>
             </button>
           </div>
         )}
@@ -416,10 +415,12 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onFocus={() => {
-                // Delay to let iOS keyboard animation finish (~300ms)
-                setTimeout(() => {
-                  textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-                }, 300)
+                // Only scroll into view when inside a chat panel, not on home
+                if (!isHome) {
+                  setTimeout(() => {
+                    textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+                  }, 300)
+                }
               }}
               placeholder={isHome ? "Start a new conversation..." : "Message..."}
               rows={1}

@@ -307,7 +307,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 defaultExpanded={!!message.streaming && !message.thinkingDone}
               />
             )}
-            <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:overflow-x-auto [&_table]:overflow-x-auto [&_code]:break-all" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+            <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:overflow-x-auto [&_table]:overflow-x-auto [&_code]:break-keep-all" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               <Suspense fallback={<p className="whitespace-pre-wrap">{message.content}</p>}>
                 {contentParts.length > 1 || contentParts.some(p => p.type === 'copy') ? (
                   contentParts.map((part, i) =>
@@ -332,27 +332,46 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             Copied
           </div>
         )}
-        {/* TTS button — next to bubble */}
-        {isAssistant && onSpeak && !message.streaming && message.content && isLastInGroup && (
-          <button
-            onClick={handleSpeak}
-            className={`inline-btn p-1.5 rounded-full flex-shrink-0 mb-0.5 active:scale-90 transition-all ${
-              isSpeaking
-                ? 'text-accent'
-                : ttsLoading
-                  ? 'text-text-light-muted/30 dark:text-text-dark-muted/30'
+        {/* Action buttons — next to bubble */}
+        {isAssistant && !message.streaming && message.content && isLastInGroup && (
+          <div className="flex flex-col gap-0.5 flex-shrink-0 mb-0.5">
+            <button
+              onClick={handleCopy}
+              className={`inline-btn p-1.5 rounded-full active:scale-90 transition-all ${
+                copied
+                  ? 'text-emerald-500'
                   : 'text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted'
-            }`}
-            aria-label={isSpeaking ? 'Stop speaking' : 'Listen to message'}
-          >
-            {ttsLoading ? (
-              <div className="voice-spinner" style={{ width: 16, height: 16, borderWidth: 1.5 }} />
-            ) : isSpeaking ? (
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-            ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+              }`}
+              aria-label={copied ? 'Copied' : 'Copy message'}
+            >
+              {copied ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              )}
+            </button>
+            {onSpeak && (
+              <button
+                onClick={handleSpeak}
+                className={`inline-btn p-1.5 rounded-full active:scale-90 transition-all ${
+                  isSpeaking
+                    ? 'text-accent'
+                    : ttsLoading
+                      ? 'text-text-light-muted/30 dark:text-text-dark-muted/30'
+                      : 'text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted'
+                }`}
+                aria-label={isSpeaking ? 'Stop speaking' : 'Listen to message'}
+              >
+                {ttsLoading ? (
+                  <div className="voice-spinner" style={{ width: 20, height: 20, borderWidth: 1.5 }} />
+                ) : isSpeaking ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                )}
+              </button>
             )}
-          </button>
+          </div>
         )}
       </div>
     </div>

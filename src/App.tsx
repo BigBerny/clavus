@@ -6,6 +6,8 @@ import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer, loadThreadMessages } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
+import { useTabsStore, ensureChatTab, type Tab, type ChatTab } from './state/tabs.ts'
+import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 import { consumePendingThread } from './lib/pendingThread.ts'
@@ -15,8 +17,8 @@ import { useVisualViewport } from './hooks/useVisualViewport.ts'
 // Lazy-loaded components (code splitting)
 const FileBrowser = lazy(() => import('./components/layout/FileBrowser.tsx').then(m => ({ default: m.FileBrowser })))
 const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
-const RecipeList = lazy(() => import('./components/recipes/RecipeList.tsx').then(m => ({ default: m.RecipeList })))
-const CookMode = lazy(() => import('./components/recipes/CookMode.tsx').then(m => ({ default: m.CookMode })))
+const RecipePanel = lazy(() => import('./components/recipes/RecipePanel.tsx').then(m => ({ default: m.RecipePanel })))
+const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
 const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
@@ -65,11 +67,12 @@ export function App() {
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
-  const currentView = useUIStore((s) => s.currentView)
   const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
   const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
   const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
+  const tabs = useTabsStore((s) => s.tabs)
+  const closeTab = useTabsStore((s) => s.closeTab)
   const [needsToken, setNeedsToken] = useState(!hasToken())
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState('0:00')
@@ -78,7 +81,7 @@ export function App() {
 
   // Scroll container ref
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  // Track which panel is visible (thread id or 'home')
+  // Track which panel is visible (tab id or 'home')
   const [visiblePanel, setVisiblePanel] = useState<string>('home')
   // Refs for each panel element
   const panelRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -87,23 +90,15 @@ export function App() {
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
 
-  // Per-thread isStreaming for the visible panel
+  // Per-thread isStreaming for the visible panel (only relevant for chat tabs)
   const visibleThreadStreaming = useChatStore(
     (s) => visiblePanel !== 'home' ? (s.threadStates[visiblePanel]?.isStreaming ?? false) : false
   )
 
-  // Sorted threads: oldest first (leftmost), newest last (rightmost, before home)
-  const sortedThreads = useMemo(() =>
-    [...threads]
-      .filter(t => {
-        // Check if thread has messages in store or localStorage
-        const ts = useChatStore.getState().threadStates[t.id]
-        if (ts && ts.messages.length > 0) return true
-        const msgs = loadThreadMessages(t.id)
-        return msgs.length > 0
-      })
-      .sort((a, b) => a.updatedAt - b.updatedAt), // oldest first
-    [threads]
+  // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home)
+  const sortedTabs = useMemo(() =>
+    [...tabs].sort((a, b) => a.updatedAt - b.updatedAt),
+    [tabs]
   )
 
   const handleTokenSave = useCallback((token: string) => {
@@ -131,9 +126,6 @@ export function App() {
   }, [setConnectionStatus, needsToken])
 
   // Prevent pull-to-refresh in standalone PWA (iOS)
-  // IMPORTANT: must NOT block horizontal swipes on our scroll-snap container.
-  // iOS Safari's gesture recognizer can get "stuck" if we preventDefault
-  // on a non-scrollable vertical gesture; subsequent horizontal pans may stop working.
   useEffect(() => {
     let startX = 0
     let startY = 0
@@ -150,12 +142,13 @@ export function App() {
     const onTouchMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return
       if (!e.cancelable) return
+      // Defer to PullDownDismissable when it's active
+      if ((window as any).__pullDownActive) return
 
       const t = e.touches[0]
       const dx = t.clientX - startX
       const dy = t.clientY - startY
 
-      // Decide direction once, with a small threshold.
       if (direction === 'unknown') {
         const ax = Math.abs(dx)
         const ay = Math.abs(dy)
@@ -163,17 +156,10 @@ export function App() {
         direction = ax > ay ? 'horizontal' : 'vertical'
       }
 
-      // Never block horizontal pans (needed for panel swiping).
       if (direction === 'horizontal') return
 
-      // Only block vertical pull-to-refresh when the page itself is at the top
-      // AND there is no scrollable ancestor (vertical OR horizontal) under the finger.
-      // This is critical for iOS: if we call preventDefault on a vertical gesture that
-      // starts inside the horizontal snap scroller (e.g. a short chat that can't scroll),
-      // Safari may wedge the scroll chain and stop delivering horizontal swipes.
       let el = e.target as HTMLElement | null
       while (el && el !== document.body) {
-        // Use a 1px buffer to avoid rounding issues.
         if (el.scrollHeight > el.clientHeight + 1) return
         if (el.scrollWidth > el.clientWidth + 1) return
         el = el.parentElement
@@ -192,36 +178,28 @@ export function App() {
     }
   }, [])
 
-  // iOS keyboard handling:
-  // We use `interactive-widget=resizes-content` in the viewport meta tag.
-  // This tells the browser to resize the layout viewport when the keyboard opens,
-  // so position:fixed elements naturally stay above the keyboard.
-  // No JavaScript viewport hacks needed.
-
   // Sync from server on startup + listen for SW navigation messages
-  // Ref to hold scrollToThread so we can use it in effects before it's defined
-  const scrollToThreadRef = useRef<(threadId: string) => void>(() => {})
+  const scrollToTabRef = useRef<(tabId: string) => void>(() => {})
 
   const navigateToThread = useCallback((threadId: string) => {
     syncFromServer().then(() => {
       const store = useThreadsStore.getState()
       const thread = store.threads.find(t => t.id === threadId)
       if (thread) {
-        scrollToThreadRef.current(threadId)
+        ensureChatTab(threadId, thread.title)
+        scrollToTabRef.current(threadId)
       }
     })
   }, [])
 
   // Check for pending thread from IndexedDB (iOS push) or URL params
   const checkPendingNavigation = useCallback(async () => {
-    // 1. Check IndexedDB (iOS-proof, set by service worker)
     const pendingThreadId = await consumePendingThread()
     if (pendingThreadId) {
       navigateToThread(pendingThreadId)
       return
     }
 
-    // 2. Check URL params (works on desktop/Android)
     const params = new URLSearchParams(window.location.search)
     const threadParam = params.get('thread')
     if (threadParam) {
@@ -234,7 +212,6 @@ export function App() {
     if (needsToken) return
     syncFromServer().then(() => checkPendingNavigation())
 
-    // Handle push notification clicks from service worker (warm app fast-path)
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate-thread' && event.data.threadId) {
         navigateToThread(event.data.threadId)
@@ -242,7 +219,6 @@ export function App() {
     }
     navigator.serviceWorker?.addEventListener('message', handleSWMessage)
 
-    // iOS: when app comes back from background after notification tap, check IDB
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         checkPendingNavigation()
@@ -256,7 +232,7 @@ export function App() {
     }
   }, [needsToken, navigateToThread, checkPendingNavigation])
 
-  // Initial scroll to home (rightmost panel) — retry until panels are rendered
+  // Initial scroll to home (rightmost panel)
   useEffect(() => {
     if (needsToken) return
     const container = scrollContainerRef.current
@@ -264,11 +240,9 @@ export function App() {
 
     const scrollToHome = () => {
       isProgrammaticScroll.current = true
-      // Home is always the rightmost panel → scroll to max
       container.scrollLeft = container.scrollWidth
       setVisiblePanel('home')
       requestAnimationFrame(() => {
-        // Double-check: if panels weren't rendered yet, scrollWidth might be 0
         if (container.scrollWidth > container.clientWidth) {
           container.scrollLeft = container.scrollWidth
           initialScrollDone.current = true
@@ -278,12 +252,11 @@ export function App() {
     }
 
     if (!initialScrollDone.current) {
-      // Try immediately and again after a short delay (panels may not be rendered yet)
       requestAnimationFrame(scrollToHome)
       const timer = setTimeout(scrollToHome, 100)
       return () => clearTimeout(timer)
     }
-  }, [needsToken, sortedThreads])
+  }, [needsToken, sortedTabs])
 
   // Detect which panel is visible using scroll position
   useEffect(() => {
@@ -294,24 +267,27 @@ export function App() {
 
     const handleScroll = () => {
       if (isProgrammaticScroll.current) return
+      // Don't change panels when keyboard opens (resize can shift scroll position)
+      if (document.documentElement.hasAttribute('data-keyboard-open')) return
 
       if (scrollTimeout) clearTimeout(scrollTimeout)
       scrollTimeout = setTimeout(() => {
+        if (document.documentElement.hasAttribute('data-keyboard-open')) return
         const containerWidth = container.clientWidth
         if (!containerWidth) return
         const scrollLeft = container.scrollLeft
         const panelIndex = Math.round(scrollLeft / containerWidth)
 
-        // Total panels: sortedThreads.length + 1 (home)
-        if (panelIndex >= sortedThreads.length) {
+        // Total panels: sortedTabs.length + 1 (home)
+        if (panelIndex >= sortedTabs.length) {
           setVisiblePanel('home')
         } else {
-          const thread = sortedThreads[panelIndex]
-          if (thread) {
-            setVisiblePanel(thread.id)
+          const tab = sortedTabs[panelIndex]
+          if (tab) {
+            setVisiblePanel(tab.id)
           }
         }
-      }, 150) // Wait for snap animation to settle
+      }, 150)
     }
 
     container.addEventListener('scroll', handleScroll, { passive: true })
@@ -319,40 +295,42 @@ export function App() {
       container.removeEventListener('scroll', handleScroll)
       if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [sortedThreads])
+  }, [sortedTabs])
 
-  // Scroll to a specific thread panel
-  const scrollToThread = useCallback((threadId: string) => {
+  // Scroll to a specific tab panel
+  const scrollToTab = useCallback((tabId: string) => {
     const container = scrollContainerRef.current
-    const panel = panelRefs.current.get(threadId)
+    const panel = panelRefs.current.get(tabId)
     if (!container || !panel) {
-      // Fallback: switch thread without scrolling
-      switchThread(threadId)
-      setVisiblePanel(threadId)
+      // Fallback: switch panel without scrolling
+      if (tabId !== 'home') {
+        const tab = sortedTabs.find(t => t.id === tabId)
+        if (tab?.type === 'chat') switchThread((tab as ChatTab).threadId)
+      }
+      setVisiblePanel(tabId)
       return
     }
-    // Disable snap temporarily to prevent it from fighting the scroll
     isProgrammaticScroll.current = true
     container.style.scrollSnapType = 'none'
-    // Update visible panel + switch thread
-    setVisiblePanel(threadId)
-    switchThread(threadId)
-    // Use requestAnimationFrame to ensure state is settled before scrolling
+    setVisiblePanel(tabId)
+    if (tabId !== 'home') {
+      const tab = sortedTabs.find(t => t.id === tabId)
+      if (tab?.type === 'chat') switchThread((tab as ChatTab).threadId)
+    }
     requestAnimationFrame(() => {
-      const target = panelRefs.current.get(threadId)
+      const target = panelRefs.current.get(tabId)
       if (target && container) {
         container.scrollTo({ left: target.offsetLeft, behavior: 'instant' })
       }
-      // Re-enable snap after scroll is done
       requestAnimationFrame(() => {
         container.style.scrollSnapType = ''
         isProgrammaticScroll.current = false
       })
     })
-  }, [switchThread])
+  }, [switchThread, sortedTabs])
 
-  // Wire up ref so navigateToThread can use scrollToThread
-  scrollToThreadRef.current = scrollToThread
+  // Wire up ref so navigateToThread can use scrollToTab
+  scrollToTabRef.current = scrollToTab
 
   const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
     setIsRecording(recording)
@@ -361,23 +339,25 @@ export function App() {
   }, [])
 
   // Check actual scroll position to determine if home panel is visible
-  // (avoids stale visiblePanel state from debounced scroll handler)
   const isHomeVisible = useCallback(() => {
     const container = scrollContainerRef.current
     if (!container) return visiblePanel === 'home'
     const containerWidth = container.clientWidth
     if (!containerWidth) return visiblePanel === 'home'
     const panelIndex = Math.round(container.scrollLeft / containerWidth)
-    return panelIndex >= sortedThreads.length
-  }, [sortedThreads, visiblePanel])
+    return panelIndex >= sortedTabs.length
+  }, [sortedTabs, visiblePanel])
 
-  // Handle sending from any panel — now thread-scoped
+  // Handle sending from any panel — thread-scoped
   const handleSend = useCallback((text: string, images?: string[]) => {
     if (isHomeVisible()) {
       // Create a NEW thread, send to it directly
       const createThread = useThreadsStore.getState().createThread
       const newThreadId = createThread()
       switchThread(newThreadId)
+
+      // Ensure a tab exists for the new thread
+      ensureChatTab(newThreadId, 'New conversation')
 
       // Send immediately targeting the new thread
       send(newThreadId, text, images)
@@ -393,13 +373,16 @@ export function App() {
         })
       })
     } else {
-      // Send to the visible thread directly
+      // Send to the visible thread directly (only for chat tabs)
       if (visiblePanel !== 'home') {
-        switchThread(visiblePanel)
-        send(visiblePanel, text, images)
+        const tab = sortedTabs.find(t => t.id === visiblePanel)
+        if (tab?.type === 'chat') {
+          switchThread(visiblePanel)
+          send(visiblePanel, text, images)
+        }
       }
     }
-  }, [isHomeVisible, visiblePanel, send, switchThread])
+  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs])
 
   // Abort scoped to visible thread
   const handleAbort = useCallback(() => {
@@ -417,8 +400,33 @@ export function App() {
     }
   }, [])
 
-  // Is the current view a recipe overlay?
-  const isRecipeView = currentView === 'recipes' || currentView === 'recipe-detail' || currentView === 'cook-mode'
+  // Handle closing a tab via pull-down gesture
+  const handleCloseTab = useCallback((tabId: string) => {
+    const neighbor = closeTab(tabId)
+    if (neighbor) {
+      // Scroll to the neighbor tab
+      requestAnimationFrame(() => {
+        scrollToTab(neighbor.id)
+      })
+    } else {
+      // No tabs left, go home
+      const container = scrollContainerRef.current
+      if (container) {
+        isProgrammaticScroll.current = true
+        container.style.scrollSnapType = 'none'
+        container.scrollLeft = container.scrollWidth
+        setVisiblePanel('home')
+        requestAnimationFrame(() => {
+          container.style.scrollSnapType = ''
+          isProgrammaticScroll.current = false
+        })
+      }
+    }
+  }, [closeTab, scrollToTab])
+
+  // Determine if the visible tab is a chat tab (to show InputBar)
+  const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
+  const isVisibleChat = visiblePanel === 'home' || visibleTab?.type === 'chat'
 
   if (needsToken) {
     return <TokenPrompt onSave={handleTokenSave} />
@@ -450,68 +458,76 @@ export function App() {
         </div>
       )}
 
-      {/* Recipe views as overlays */}
-      {isRecipeView ? (
-        <div className="flex-1 min-h-0 flex flex-col">
-          <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
-            {currentView === 'recipes' || currentView === 'recipe-detail' ? (
-              <RecipeList />
-            ) : (
-              <CookMode />
-            )}
-          </Suspense>
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0 flex flex-col">
+      {/* Main content */}
+      <div className="flex-1 min-h-0 flex flex-col">
 
-          {/* Horizontal scroll-snap container — full height, behind glass overlays */}
+        {/* Horizontal scroll-snap container — full height, behind glass overlays */}
+        <div
+          ref={scrollContainerRef}
+          className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
+            touchAction: 'pan-x pan-y',
+          }}
+        >
+          {/* Tab panels: oldest first (leftmost) -> newest (rightmost, before home) */}
+          {sortedTabs.map((tab) => {
+            const isActive = visiblePanel === tab.id
+            return (
+              <div
+                key={tab.id}
+                ref={setPanelRef(tab.id)}
+                className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
+                style={{ touchAction: 'pan-x pan-y' }}
+                {...(!isActive ? { inert: true } : {})}
+              >
+                <PullDownDismissable tabId={tab.id} onDismiss={handleCloseTab}>
+                  <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+                    {tab.type === 'chat' && (
+                      <ChatViewPanel
+                        threadId={(tab as ChatTab).threadId}
+                        isVisible={isActive}
+                      />
+                    )}
+                    {tab.type === 'recipe' && (
+                      <RecipePanel
+                        recipeId={(tab as any).recipeId}
+                        isVisible={isActive}
+                      />
+                    )}
+                    {tab.type === 'marksense' && (
+                      <MarksensePanel
+                        documentUrl={(tab as any).documentUrl}
+                        title={tab.title}
+                        isVisible={isActive}
+                      />
+                    )}
+                  </Suspense>
+                </PullDownDismissable>
+              </div>
+            )
+          })}
+
+          {/* Home panel (rightmost) */}
           <div
-            ref={scrollContainerRef}
-            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
-            style={{
-              scrollbarWidth: 'none',
-              msOverflowStyle: 'none',
-              WebkitOverflowScrolling: 'touch',
-              touchAction: 'pan-x pan-y', // iOS Safari: allow both so inner vertical catch doesn't block outer horizontal
-            }}
+            ref={setPanelRef('home')}
+            className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
+            {...(visiblePanel !== 'home' ? { inert: true } : {})}
           >
-            {/* Conversation panels: oldest first (leftmost) → newest (rightmost) */}
-            {sortedThreads.map((thread) => {
-              const isActive = visiblePanel === thread.id
-              return (
-                <div
-                  key={thread.id}
-                  ref={setPanelRef(thread.id)}
-                  className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
-                  style={{ touchAction: 'pan-x pan-y' }}
-                  // inert on off-screen panels prevents iOS from routing touch events to them
-                  {...(!isActive ? { inert: true } : {})}
-                >
-                  <ChatViewPanel
-                    threadId={thread.id}
-                    isVisible={isActive}
-                  />
-                </div>
-              )
-            })}
-
-            {/* Home panel (rightmost) */}
-            <div
-              ref={setPanelRef('home')}
-              className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
-              {...(visiblePanel !== 'home' ? { inert: true } : {})}
-            >
-              <HomeScreen
-                onSend={handleSend}
-                onCompose={(channel) => setComposeChannel(channel)}
-                onSelectThread={scrollToThread}
-                pushState={pushState}
-                onEnablePush={requestPermission}
-              />
-            </div>
+            <HomeScreen
+              onSend={handleSend}
+              onCompose={(channel) => setComposeChannel(channel)}
+              onSelectTab={scrollToTab}
+              pushState={pushState}
+              onEnablePush={requestPermission}
+            />
           </div>
+        </div>
 
-          {/* InputBar as flex child at bottom */}
+        {/* InputBar as flex child at bottom — only show for chat tabs and home */}
+        {isVisibleChat && (
           <div className="flex-shrink-0" style={{ touchAction: 'none' }}>
             <InputBar
               onSend={handleSend}
@@ -522,8 +538,8 @@ export function App() {
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <Suspense fallback={null}>
         <DebugOverlay />
@@ -549,16 +565,13 @@ export function App() {
 
 /**
  * Wrapper for ChatView that subscribes to its thread's messages from the store.
- * Every panel is always live — no more snapshot vs live distinction.
  */
 function ChatViewPanel({ threadId, isVisible }: { threadId: string; isVisible: boolean }) {
   const threads = useThreadsStore((s) => s.threads)
   const thread = threads.find(t => t.id === threadId)
 
-  // Subscribe to this specific thread's messages — only re-renders when THIS thread changes
   const messages = useChatStore((s) => s.threadStates[threadId]?.messages ?? [])
 
-  // Ensure thread is loaded in store on mount
   useEffect(() => {
     useChatStore.getState().ensureThread(threadId)
   }, [threadId])

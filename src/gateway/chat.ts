@@ -73,6 +73,8 @@ export async function sendChatStream(
         const parsed = JSON.parse(data)
         const choice = parsed.choices?.[0]
         const delta = choice?.delta
+        // DEBUG: log every delta to see what the gateway sends
+        if (delta) console.log('[SSE delta]', JSON.stringify(delta))
         // Reasoning/thinking tokens (Anthropic: reasoning_content, OpenAI: thinking)
         const thinking = delta?.reasoning_content || delta?.thinking
         if (thinking && callbacks.onThinking) {

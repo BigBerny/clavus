@@ -93,7 +93,7 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
   { value: 'added', label: 'Neu hinzugefügt' },
 ]
 
-export function RecipeList() {
+export function RecipeList({ onSelectRecipe, isInline }: { onSelectRecipe?: (id: number) => void; isInline?: boolean } = {}) {
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -176,11 +176,16 @@ export function RecipeList() {
   const [detailVisible, setDetailVisible] = useState(false)
 
   const openRecipe = useCallback((id: number) => {
+    if (onSelectRecipe) {
+      setSelectedRecipeId(id)
+      onSelectRecipe(id)
+      return
+    }
     setSelectedRecipeId(id)
     setDetailRecipeId(id)
     // Trigger slide-in after a frame so CSS transition fires
     requestAnimationFrame(() => setDetailVisible(true))
-  }, [setSelectedRecipeId])
+  }, [setSelectedRecipeId, onSelectRecipe])
 
   const closeDetail = useCallback(() => {
     setDetailVisible(false)
@@ -193,12 +198,14 @@ export function RecipeList() {
       {/* Header */}
       <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
       <div className="flex items-center gap-3 px-4 py-3">
-        <button
-          onClick={() => setCurrentView('home')}
-          className="inline-btn w-9 h-9 flex items-center justify-center rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light dark:text-text-dark"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
+        {!isInline && (
+          <button
+            onClick={() => setCurrentView('home')}
+            className="inline-btn w-9 h-9 flex items-center justify-center rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light dark:text-text-dark"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+        )}
         <h1 className="text-lg font-semibold text-text-light dark:text-text-dark">Rezepte</h1>
       </div>
 

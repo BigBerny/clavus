@@ -123,7 +123,7 @@ function IngredientsOverlay({ ingredients, servings, defaultServings, onClose }:
   )
 }
 
-export function CookMode() {
+export function CookMode({ onExit: onExitProp, isInline }: { onExit?: () => void; isInline?: boolean } = {}) {
   const selectedRecipeId = useUIStore(s => s.selectedRecipeId)
   const setCurrentView = useUIStore(s => s.setCurrentView)
   const [recipe, setRecipe] = useState<Recipe | null>(null)
@@ -190,8 +190,12 @@ export function CookMode() {
   }, [selectedRecipeId])
 
   const exitCookMode = useCallback(() => {
-    setCurrentView('recipe-detail')
-  }, [setCurrentView])
+    if (onExitProp) {
+      onExitProp()
+    } else {
+      setCurrentView('recipe-detail')
+    }
+  }, [setCurrentView, onExitProp])
 
   const toggleStepDone = useCallback((idx: number) => {
     setCompletedSteps(prev => {

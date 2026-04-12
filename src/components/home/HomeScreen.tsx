@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
-import { useUIStore } from '../../state/ui'
+import { useTabsStore, type Tab, type ChatTab, type RecipeTab, type MarksenseTab } from '../../state/tabs'
 import type { Thread } from '../../state/threads'
 
 function relativeTime(timestamp: number): string {
@@ -18,18 +18,44 @@ function relativeTime(timestamp: number): string {
 
 interface QuickActionsProps {
   onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
+  onOpenTab?: (tab: Tab) => void
 }
 
-function QuickActions({ onCompose }: QuickActionsProps) {
-  const setCurrentView = useUIStore((s) => s.setCurrentView)
+function QuickActions({ onCompose, onOpenTab }: QuickActionsProps) {
+  const openMarksense = useCallback(() => {
+    const tabId = 'marksense-home'
+    const tab: MarksenseTab = {
+      id: tabId,
+      type: 'marksense',
+      title: 'Marksense',
+      documentUrl: 'https://mac-mini-von-janis.taild2ad59.ts.net:3700/',
+      openedAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    useTabsStore.getState().openTab(tab)
+    onOpenTab?.(tab)
+  }, [onOpenTab])
+
+  const openRecipes = useCallback(() => {
+    const tabId = 'recipes-browser'
+    const tab: RecipeTab = {
+      id: tabId,
+      type: 'recipe',
+      title: 'Rezepte',
+      recipeId: 0, // 0 means show the list
+      openedAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    useTabsStore.getState().openTab(tab)
+    onOpenTab?.(tab)
+  }, [onOpenTab])
+
   return (
     <div className="px-5 pt-1 pb-1 space-y-2">
       {/* Full-width cards for Marksense and Recipes */}
-      <a
-        href="https://mac-mini-von-janis.taild2ad59.ts.net:3700/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.01] active:scale-[0.98] transition-all duration-200"
+      <button
+        onClick={openMarksense}
+        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.01] active:scale-[0.98] transition-all duration-200 text-left"
       >
         <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
@@ -38,10 +64,10 @@ function QuickActions({ onCompose }: QuickActionsProps) {
           <p className="text-[14px] font-semibold leading-tight">Marksense</p>
           <p className="text-[12px] text-white/70 leading-snug">Open knowledge base</p>
         </div>
-      </a>
+      </button>
 
       <button
-        onClick={() => setCurrentView('recipes')}
+        onClick={openRecipes}
         className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.01] active:scale-[0.98] transition-all duration-200 text-left"
       >
         <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
@@ -83,47 +109,74 @@ function QuickActions({ onCompose }: QuickActionsProps) {
 
 function stripMarkdown(text: string): string {
   return text
-    // Remove :::copy and ::: fences
     .replace(/^:::copy\s*$/gm, '')
     .replace(/^:::\s*$/gm, '')
-    // Remove headings markers
     .replace(/^#{1,6}\s+/gm, '')
-    // Remove bold/italic markers
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*([^*]+)\*/g, '$1')
     .replace(/__([^_]+)__/g, '$1')
     .replace(/_([^_]+)_/g, '$1')
-    // Remove links → show link text only
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    // Remove inline code backticks
     .replace(/`([^`]+)`/g, '$1')
-    // Remove code fences
     .replace(/```[\s\S]*?```/g, '')
-    // Remove strikethrough
     .replace(/~~([^~]+)~~/g, '$1')
-    // Collapse whitespace
     .replace(/\n+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
-function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: () => void; onDelete: () => void }) {
-  const messageCount = useMemo(() => {
-    const msgs = loadThreadMessages(thread.id)
-    return msgs.length
-  }, [thread.id])
+// Tab type icons
+function TabIcon({ type }: { type: Tab['type'] }) {
+  if (type === 'recipe') {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500">
+        <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/>
+      </svg>
+    )
+  }
+  if (type === 'marksense') {
+    return (
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet-500">
+        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/>
+      </svg>
+    )
+  }
+  // chat
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  )
+}
+
+function tabIconBgClass(type: Tab['type']): string {
+  if (type === 'recipe') return 'bg-amber-500/10 dark:bg-amber-500/15 group-hover:bg-amber-500/15'
+  if (type === 'marksense') return 'bg-violet-500/10 dark:bg-violet-500/15 group-hover:bg-violet-500/15'
+  return 'bg-surface-light-2 dark:bg-surface-dark-2 group-hover:bg-accent/10 dark:group-hover:bg-accent/15'
+}
+
+function getTabPreview(tab: Tab): string {
+  if (tab.type === 'chat') {
+    // Get last message preview from the thread
+    const threads = useThreadsStore.getState().threads
+    const thread = threads.find(t => t.id === (tab as ChatTab).threadId)
+    return thread?.lastMessagePreview ? stripMarkdown(thread.lastMessagePreview) : ''
+  }
+  if (tab.type === 'recipe') return 'Recipe'
+  if (tab.type === 'marksense') return 'Knowledge base'
+  return ''
+}
+
+function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; onDelete: () => void }) {
+  const preview = useMemo(() => getTabPreview(tab), [tab])
 
   const [offsetX, setOffsetX] = useState(0)
   const [swiping, setSwiping] = useState(false)
   const startX = useRef(0)
   const startY = useRef(0)
   const direction = useRef<'none' | 'h' | 'v'>('none')
-
-  if (messageCount === 0) return null
-
   const itemRef = useRef<HTMLDivElement>(null)
 
-  // Use native touch listeners so we can preventDefault to stop parent scroll-snap
   useEffect(() => {
     const el = itemRef.current
     if (!el) return
@@ -145,7 +198,7 @@ function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: ()
         direction.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
       }
       if (direction.current === 'h' && dx < 0) {
-        e.preventDefault() // stop parent scroll-snap from moving
+        e.preventDefault()
         e.stopPropagation()
         setOffsetX(dx)
       }
@@ -177,33 +230,34 @@ function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: ()
 
   return (
     <div ref={itemRef} className="relative overflow-hidden rounded-xl">
-      {/* Delete background */}
-      <div className="absolute inset-0 flex items-center justify-end px-5 bg-red-500/90 rounded-xl">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-      </div>
+      {offsetX < 0 && (
+        <div className="absolute top-0 bottom-0 right-0 flex items-center justify-end px-5 bg-red-500/90 rounded-r-xl" style={{ width: `${Math.abs(offsetX)}px` }}>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        </div>
+      )}
       <button
         onClick={onSelect}
-        className="w-full flex items-center gap-3 px-3 py-3 rounded-xl bg-surface-light dark:bg-surface-dark hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:scale-[0.98] transition-all duration-150 text-left group relative"
+        className={`w-full flex items-center gap-3 px-3 py-3 bg-surface-light dark:bg-surface-dark hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 transition-all duration-150 text-left group relative ${offsetX < 0 ? 'rounded-l-xl rounded-r-none' : 'rounded-xl'}`}
         style={{
           transform: `translateX(${offsetX}px)`,
           transition: swiping ? 'none' : 'transform 0.2s ease-out',
         }}
       >
-        <div className="w-9 h-9 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 flex items-center justify-center flex-shrink-0 group-hover:bg-accent/10 dark:group-hover:bg-accent/15 transition-colors duration-150">
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors duration-150 ${tabIconBgClass(tab.type)}`}>
+          <TabIcon type={tab.type} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
             <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate group-hover:text-accent transition-colors">
-              {thread.title}
+              {tab.title}
             </p>
             <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 flex-shrink-0 tabular-nums">
-              {relativeTime(thread.updatedAt)}
+              {relativeTime(tab.updatedAt)}
             </span>
           </div>
-          {thread.lastMessagePreview && (
+          {preview && (
             <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
-              {stripMarkdown(thread.lastMessagePreview)}
+              {preview}
             </p>
           )}
         </div>
@@ -213,59 +267,65 @@ function ChatItem({ thread, onSelect, onDelete }: { thread: Thread; onSelect: ()
   )
 }
 
-export function HomeScreen({ onSend, onCompose, onSelectThread, pushState, onEnablePush }: { onSend: (message: string) => void; onCompose?: (channel: 'messaging' | 'slack' | 'email') => void; onSelectThread?: (threadId: string) => void; pushState?: string; onEnablePush?: () => void }) {
-  const threads = useThreadsStore((s) => s.threads)
-  const switchThread = useThreadsStore((s) => s.switchThread)
-  const setCurrentView = useUIStore((s) => s.setCurrentView)
+export function HomeScreen({ onSend, onCompose, onSelectTab, pushState, onEnablePush }: {
+  onSend: (message: string) => void
+  onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
+  onSelectTab?: (tabId: string) => void
+  pushState?: string
+  onEnablePush?: () => void
+}) {
+  const tabs = useTabsStore((s) => s.tabs)
+  const closeTab = useTabsStore((s) => s.closeTab)
   const [showAll, setShowAll] = useState(false)
 
   const now = Date.now()
   const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000
 
-  const sortedThreads = useMemo(() =>
-    [...threads]
-      .filter(t => {
-        const msgs = loadThreadMessages(t.id)
-        return msgs.length > 0
-      })
-      .sort((a, b) => b.updatedAt - a.updatedAt),
-    [threads]
+  const sortedTabs = useMemo(() =>
+    [...tabs].sort((a, b) => b.updatedAt - a.updatedAt),
+    [tabs]
   )
 
-  const recentThreads = useMemo(() => {
-    if (showAll) return sortedThreads
-    const recent = sortedThreads.filter(t => t.updatedAt > twentyFourHoursAgo)
+  const recentTabs = useMemo(() => {
+    if (showAll) return sortedTabs
+    const recent = sortedTabs.filter(t => t.updatedAt > twentyFourHoursAgo)
     return recent.slice(0, 5)
-  }, [sortedThreads, showAll, twentyFourHoursAgo])
+  }, [sortedTabs, showAll, twentyFourHoursAgo])
 
-  const hasMore = sortedThreads.length > recentThreads.length
+  const hasMore = sortedTabs.length > recentTabs.length
 
-  const deleteThread = useThreadsStore((s) => s.deleteThread)
-  const handleDelete = useCallback((id: string) => {
-    // Abort streaming if this thread is streaming, then remove from store
-    const ts = useChatStore.getState().threadStates[id]
-    if (ts?.isStreaming) {
-      ts.abortController?.abort()
+  const handleDelete = useCallback((tabId: string) => {
+    // For chat tabs, also clean up thread data
+    const tab = tabs.find(t => t.id === tabId)
+    if (tab?.type === 'chat') {
+      const threadId = (tab as ChatTab).threadId
+      const ts = useChatStore.getState().threadStates[threadId]
+      if (ts?.isStreaming) {
+        ts.abortController?.abort()
+      }
+      const { [threadId]: _, ...rest } = useChatStore.getState().threadStates
+      useChatStore.setState({ threadStates: rest })
+      useThreadsStore.getState().deleteThread(threadId)
     }
-    // Remove thread state from chat store
-    const { [id]: _, ...rest } = useChatStore.getState().threadStates
-    useChatStore.setState({ threadStates: rest })
-    deleteThread(id)
-  }, [deleteThread])
+    closeTab(tabId)
+  }, [tabs, closeTab])
 
-  const handleSelectThread = useCallback((id: string) => {
-    if (onSelectThread) {
-      onSelectThread(id)
-    } else {
-      switchThread(id)
-      setCurrentView('chat')
+  const handleSelectTab = useCallback((tabId: string) => {
+    if (onSelectTab) {
+      onSelectTab(tabId)
     }
-  }, [switchThread, setCurrentView, onSelectThread])
+  }, [onSelectTab])
+
+  const handleOpenTab = useCallback((tab: Tab) => {
+    if (onSelectTab) {
+      onSelectTab(tab.id)
+    }
+  }, [onSelectTab])
 
   return (
     <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
       <div className="max-w-[900px] mx-auto pb-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}>
-        {/* Push notification prompt — iOS PWAs need user gesture */}
+        {/* Push notification prompt */}
         {pushState === 'prompt' && onEnablePush && (
           <div className="mx-5 mt-6 mb-2">
             <button
@@ -283,23 +343,23 @@ export function HomeScreen({ onSend, onCompose, onSelectThread, pushState, onEna
         )}
 
         <div className="pt-10">
-          <QuickActions onCompose={onCompose} />
+          <QuickActions onCompose={onCompose} onOpenTab={handleOpenTab} />
         </div>
 
-        {recentThreads.length > 0 && (
+        {recentTabs.length > 0 && (
           <div className="px-5 pt-6">
             <div className="flex items-center justify-between mb-1">
               <p className="text-[11px] font-semibold text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-widest">
-                Recent Chats
+                Recent Tabs
               </p>
             </div>
             <div className="space-y-0.5">
-              {recentThreads.map((thread) => (
-                <ChatItem
-                  key={thread.id}
-                  thread={thread}
-                  onSelect={() => handleSelectThread(thread.id)}
-                  onDelete={() => handleDelete(thread.id)}
+              {recentTabs.map((tab) => (
+                <TabItem
+                  key={tab.id}
+                  tab={tab}
+                  onSelect={() => handleSelectTab(tab.id)}
+                  onDelete={() => handleDelete(tab.id)}
                 />
               ))}
             </div>
