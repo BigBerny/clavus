@@ -508,7 +508,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                   }, 300)
                 }
               }}
-              placeholder={isHome ? "Start a new conversation..." : "Message..."}
+              placeholder={isHome ? "Start new conversation" : "Message..."}
               rows={1}
               disabled={isTranscribing}
               aria-label="Chat message input"
