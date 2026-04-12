@@ -117,6 +117,15 @@ export function useChat() {
             onThinking: (token) => store.getState().appendThinking(threadId, assistantId, token),
             onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
             onToken: (token) => store.getState().appendToMessage(threadId, assistantId, token),
+            onToolCall: (tc) => {
+              const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
+              const existing = msg?.toolCalls || []
+              const idx = existing.findIndex(t => t.id === tc.id)
+              const updated = idx >= 0
+                ? existing.map((t, i) => i === idx ? tc : t)
+                : [...existing, tc]
+              store.getState().updateToolCalls(threadId, assistantId, updated)
+            },
             onDone: () => {
               store.getState().finalizeMessage(threadId, assistantId)
               store.getState().setStreaming(threadId, false)

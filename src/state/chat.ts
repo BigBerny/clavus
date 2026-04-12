@@ -1,6 +1,21 @@
 import { create } from 'zustand'
 import { useThreadsStore, loadThreadMessages, saveThreadMessages } from './threads'
 
+export interface ToolCall {
+  id: string
+  name: string
+  args: Record<string, unknown>
+  result?: unknown
+  status: 'running' | 'completed' | 'error'
+}
+
+export interface MediaAttachment {
+  type: 'image' | 'audio' | 'video' | 'file'
+  url: string
+  title?: string
+  mimeType?: string
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -10,6 +25,9 @@ export interface Message {
   timestamp: number
   streaming?: boolean
   images?: string[] // base64 data URLs
+  toolCalls?: ToolCall[]
+  model?: string
+  media?: MediaAttachment[]
 }
 
 export interface ThreadStreamState {
@@ -37,6 +55,8 @@ interface ChatState {
   finalizeMessage: (threadId: string, id: string) => void
   setStreaming: (threadId: string, streaming: boolean) => void
   setAbortController: (threadId: string, controller: AbortController | null) => void
+  updateToolCalls: (threadId: string, id: string, toolCalls: ToolCall[]) => void
+  setMessageModel: (threadId: string, id: string, model: string) => void
   clearMessages: (threadId: string) => void
   removeMessage: (threadId: string, messageId: string) => void
 }
@@ -202,6 +222,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
         threadStates: {
           ...state.threadStates,
           [threadId]: { ...ts, abortController: controller },
+        },
+      }
+    }),
+
+  updateToolCalls: (threadId, id, toolCalls) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id ? { ...m, toolCalls } : m,
+            ),
+          },
+        },
+      }
+    }),
+
+  setMessageModel: (threadId, id, model) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id ? { ...m, model } : m,
+            ),
+          },
         },
       }
     }),

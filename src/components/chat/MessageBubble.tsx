@@ -1,5 +1,6 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import type { Message } from '../../state/chat'
+import { ToolCallCards } from './ToolCallCard.tsx'
 
 const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(m => ({ default: m.RichMessageRenderer })))
 
@@ -277,13 +278,46 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 }`
           }`}
         >
-          {/* Image attachments */}
+          {/* Image attachments (user-sent) */}
           {message.images && message.images.length > 0 && (
             <div className={`flex flex-wrap gap-1.5 ${message.content ? 'mb-2' : ''}`}>
               {message.images.map((img, i) => (
                 <a key={i} href={img} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden max-w-[200px]">
                   <img src={img} alt={`Image ${i + 1}`} className="max-w-full h-auto rounded-lg" loading="lazy" />
                 </a>
+              ))}
+            </div>
+          )}
+          {/* Media attachments (agent-sent) */}
+          {message.media && message.media.length > 0 && (
+            <div className={`space-y-1.5 ${message.content ? 'mb-2' : ''}`}>
+              {message.media.map((m, i) => (
+                <div key={i}>
+                  {m.type === 'image' && (
+                    <a href={m.url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden max-w-[300px]">
+                      <img src={m.url} alt={m.title || `Image ${i + 1}`} className="max-w-full h-auto rounded-lg" loading="lazy" />
+                    </a>
+                  )}
+                  {m.type === 'audio' && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-light-2/50 dark:bg-surface-dark-2/50">
+                      <span className="text-sm">🔊</span>
+                      <audio controls preload="metadata" className="h-8 flex-1 min-w-0">
+                        <source src={m.url} type={m.mimeType || 'audio/mpeg'} />
+                      </audio>
+                    </div>
+                  )}
+                  {m.type === 'video' && (
+                    <video controls preload="metadata" className="max-w-full rounded-lg max-h-[300px]">
+                      <source src={m.url} type={m.mimeType || 'video/mp4'} />
+                    </video>
+                  )}
+                  {m.type === 'file' && (
+                    <a href={m.url} download={m.title} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-light-2/50 dark:bg-surface-dark-2/50 hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50 transition-colors">
+                      <span className="text-sm">📎</span>
+                      <span className="text-[13px] text-text-light-muted dark:text-text-dark-muted truncate">{m.title || 'Download'}</span>
+                    </a>
+                  )}
+                </div>
               ))}
             </div>
           )}
@@ -307,6 +341,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 defaultExpanded={!!message.streaming && !message.thinkingDone}
               />
             )}
+            {/* Tool call cards */}
+            {message.toolCalls && message.toolCalls.length > 0 && (
+              <ToolCallCards toolCalls={message.toolCalls} />
+            )}
             <div className="prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_pre]:overflow-x-auto [&_table]:overflow-x-auto [&_code]:break-keep-all" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               <Suspense fallback={<p className="whitespace-pre-wrap">{message.content}</p>}>
                 {contentParts.length > 1 || contentParts.some(p => p.type === 'copy') ? (
@@ -325,6 +363,12 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           </>
           )}
           {/* Streaming cursor rendered via CSS ::after on .streaming-bubble .prose */}
+          {/* Model info */}
+          {isAssistant && !message.streaming && message.model && (
+            <div className="mt-1 text-[10px] text-text-light-muted/30 dark:text-text-dark-muted/30 truncate">
+              {message.model}
+            </div>
+          )}
         </div>
         {/* Copied toast */}
         {copied && (
