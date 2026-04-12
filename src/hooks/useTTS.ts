@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { getConfig } from '../gateway/config'
 
-const VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb' // George
+const VOICE_ID = 'ZF6FPAbjXT4488VcRRnw'
 
 function getTTSUrl(voiceId: string): { url: string; headers: Record<string, string> } {
   const key = getConfig().elevenLabsApiKey

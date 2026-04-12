@@ -6,7 +6,7 @@ import { useChatStore } from '../state/chat.ts'
 import { getConfig } from '../gateway/config.ts'
 
 // TTS utilities (inline to avoid circular deps)
-const VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
+const VOICE_ID = 'ZF6FPAbjXT4488VcRRnw'
 
 function cleanForSpeech(text: string): string {
   return text
