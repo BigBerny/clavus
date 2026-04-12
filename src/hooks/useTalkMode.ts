@@ -116,11 +116,11 @@ export function useTalkMode(
     formData.append('additional_languages', JSON.stringify(['eng']))
     formData.append('additional_formats', JSON.stringify([]))
     formData.append('keyterms', JSON.stringify([
-      { term: 'Janis' }, { term: 'Janis Berneker' }, { term: 'Nadine' }, { term: 'Yuna' },
-      { term: 'Typewise' }, { term: 'David Eberle' },
-      { term: 'Jane' }, { term: 'Clavus' }, { term: 'OpenClaw' }, { term: 'Marksense' },
-      { term: 'Dennlerstrasse' }, { term: 'Buckhauserstrasse' }, { term: 'Wollishofen' },
-      { term: 'Rodersdorf' }, { term: 'Rütihof' },
+      'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
+      'Typewise', 'David Eberle',
+      'Jane', 'Clavus', 'OpenClaw', 'Marksense',
+      'Dennlerstrasse', 'Buckhauserstrasse',
+      'Wollishofen', 'Rodersdorf', 'Rütihof',
     ]))
 
     const key = getConfig().elevenLabsApiKey

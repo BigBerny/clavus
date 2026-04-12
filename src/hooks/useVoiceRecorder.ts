@@ -107,25 +107,11 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
         formData.append('additional_languages', JSON.stringify(['eng']))
         formData.append('additional_formats', JSON.stringify([]))
         formData.append('keyterms', JSON.stringify([
-          // Familie
-          { term: 'Janis' },
-          { term: 'Janis Berneker' },
-          { term: 'Nadine' },
-          { term: 'Yuna' },
-          // Arbeit
-          { term: 'Typewise' },
-          { term: 'David Eberle' },
-          // Apps & Projekte
-          { term: 'Jane' },
-          { term: 'Clavus' },
-          { term: 'OpenClaw' },
-          { term: 'Marksense' },
-          // Orte
-          { term: 'Dennlerstrasse' },
-          { term: 'Buckhauserstrasse' },
-          { term: 'Wollishofen' },
-          { term: 'Rodersdorf' },
-          { term: 'Rütihof' },
+          'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
+          'Typewise', 'David Eberle',
+          'Jane', 'Clavus', 'OpenClaw', 'Marksense',
+          'Dennlerstrasse', 'Buckhauserstrasse',
+          'Wollishofen', 'Rodersdorf', 'Rütihof',
         ]))
 
         console.log('[STT] Sending transcription request, blob size:', blob.size, 'type:', blob.type)
