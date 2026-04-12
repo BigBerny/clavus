@@ -10,6 +10,7 @@ import { useTabsStore, ensureChatTab, type Tab, type ChatTab } from './state/tab
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
+import { gateway } from './gateway/ws.ts'
 import { consumePendingThread } from './lib/pendingThread.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
@@ -212,6 +213,21 @@ export function App() {
     if (needsToken) return
     syncFromServer().then(() => checkPendingNavigation())
 
+    // Initialize WebSocket connection to gateway
+    const config = getConfig()
+    if (config.url && config.token) {
+      gateway.connect(config.url, config.token).catch(e => {
+        console.warn('[App] WebSocket connection failed, using REST fallback:', e)
+      })
+    }
+
+    // Sync connection status from WebSocket
+    const unsubWs = gateway.onStateChange((state) => {
+      if (state === 'connected') setConnectionStatus('connected')
+      else if (state === 'reconnecting') setConnectionStatus('reconnecting')
+      else if (state === 'disconnected') setConnectionStatus('disconnected')
+    })
+
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate-thread' && event.data.threadId) {
         navigateToThread(event.data.threadId)
@@ -227,10 +243,11 @@ export function App() {
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
+      unsubWs()
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation])
+  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus])
 
   // Initial scroll to home (rightmost panel)
   useEffect(() => {
