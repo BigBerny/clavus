@@ -34,6 +34,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [slashIndex, setSlashIndex] = useState(0)
+  const [dragOver, setDragOver] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -351,8 +352,42 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     )
   }
 
+  // Drag & drop handlers
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }, [])
+  const handleDragLeave = useCallback(() => setDragOver(false), [])
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const files = e.dataTransfer.files
+    if (!files.length) return
+    const remaining = MAX_IMAGES - pendingImages.length
+    const toProcess = Array.from(files).slice(0, remaining)
+    for (const file of toProcess) {
+      if (!file.type.startsWith('image/')) continue
+      if (file.size > MAX_IMAGE_SIZE) continue
+      const reader = new FileReader()
+      reader.onload = () => {
+        setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
+      }
+      reader.readAsDataURL(file)
+    }
+  }, [pendingImages.length])
+
   return (
-    <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom">
+    <div
+      className={`bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom relative ${dragOver ? 'ring-2 ring-accent ring-inset' : ''}`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {dragOver && (
+        <div className="absolute inset-0 bg-accent/10 flex items-center justify-center z-10 pointer-events-none">
+          <span className="text-sm text-accent font-medium">Drop files here</span>
+        </div>
+      )}
       <div className="max-w-[900px] mx-auto p-3">
         {/* Compact stop button while streaming */}
         {isStreaming && (
@@ -439,7 +474,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,application/pdf,audio/*,video/*,.txt,.md,.json,.csv,.xml,.html"
             multiple
             onChange={handleFileChange}
             className="hidden"
