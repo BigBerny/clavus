@@ -117,9 +117,30 @@ function CopyableBlock({ children }: { children: string }) {
 }
 
 // ─── Embed Block ────────────────────────────────────────────────────────────
-// Renders [embed ref="url" ...] as sandboxed iframes
+// Renders [embed ref="url" ...] as sandboxed iframes or placeholders
 
 function EmbedBlock({ src, title }: { src: string; title?: string }) {
+  // If src is a valid URL, render as iframe
+  const isUrl = src.startsWith('http://') || src.startsWith('https://') || src.startsWith('/')
+
+  if (!isUrl) {
+    // Render as a styled placeholder card for non-URL refs
+    return (
+      <div className="my-2 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-accent/15">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent shrink-0"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          <span className="text-[13px] font-medium text-accent truncate">{title || src}</span>
+        </div>
+        <div className="px-4 py-6 flex flex-col items-center gap-2">
+          <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-accent/60"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+          </div>
+          <span className="text-[12px] text-text-light-muted/50 dark:text-text-dark-muted/50">Interactive widget: {src}</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="my-2 rounded-xl border border-surface-light-3/20 dark:border-surface-dark-3/20 overflow-hidden bg-white dark:bg-[#0d0f14]">
       {title && (
@@ -212,8 +233,8 @@ function splitContentBlocks(content: string): ContentBlock[] {
     } else if (inCopy) {
       copyContent += line + '\n'
     } else {
-      // Check for [embed ref="..." ...] pattern
-      const embedMatch = line.trim().match(/^\[embed\s+ref="([^"]+)"(?:\s+title="([^"]*)")?\s*\]$/)
+      // Check for [embed ref="..." ...] pattern (also matches self-closing /] and extra attrs like height)
+      const embedMatch = line.trim().match(/^\[embed\s+ref="([^"]+)"(?:\s+title="([^"]*)")?(?:\s+[a-z]+"[^"]*")*\s*\/?\]$/)
       if (embedMatch) {
         if (current.trim()) parts.push({ type: 'text', content: current })
         current = ''

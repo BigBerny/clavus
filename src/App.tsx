@@ -99,8 +99,32 @@ export function App() {
   )
 
   // Talk Mode — continuous voice conversation loop
-  const talkModeThreadId = visiblePanel !== 'home' ? visiblePanel : ''
+  const [talkModeThreadId, setTalkModeThreadId] = useState('')
+  // Keep talk mode thread in sync with visible panel (unless talk mode is active)
+  useEffect(() => {
+    if (visiblePanel !== 'home') setTalkModeThreadId(visiblePanel)
+  }, [visiblePanel])
   const talkMode = useTalkMode(talkModeThreadId, send)
+
+  // Wrap toggle to auto-create thread from Home
+  const handleTalkModeToggle = useCallback(() => {
+    if (talkMode.active) {
+      talkMode.toggle()
+      return
+    }
+    // If on Home or no thread, create one first
+    if (!talkModeThreadId || visiblePanel === 'home') {
+      const newId = useThreadsStore.getState().createThread()
+      switchThread(newId)
+      ensureChatTab(newId, 'Talk Mode')
+      setTalkModeThreadId(newId)
+      setVisiblePanel(newId)
+      // Start talk mode after state settles
+      setTimeout(() => talkMode.toggle(), 100)
+    } else {
+      talkMode.toggle()
+    }
+  }, [talkMode, talkModeThreadId, visiblePanel, switchThread])
 
   // Desktop detection (>= 768px)
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768)
@@ -550,7 +574,12 @@ export function App() {
           <button
             onClick={async () => {
               setConnectionStatus('reconnecting')
-              const ok = await checkGateway(getConfig())
+              const config = getConfig()
+              // Try WebSocket reconnect first
+              if (!gateway.connected && config.url && config.token) {
+                try { await gateway.connect(config.url, config.token) } catch {}
+              }
+              const ok = gateway.connected || await checkGateway(config)
               setConnectionStatus(ok ? 'connected' : 'disconnected')
             }}
             className="inline-btn text-[12px] text-amber-600 dark:text-amber-400 font-medium underline underline-offset-2 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
@@ -708,7 +737,7 @@ export function App() {
               onRecordingChange={handleRecordingChange}
               isHome={!isDesktop && isHomeVisible()}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
-              talkMode={talkModeThreadId ? { active: talkMode.active, phase: talkMode.phase, toggle: talkMode.toggle, endListening: talkMode.endListening } : undefined}
+              talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening }}
             />
           </div>
         )}

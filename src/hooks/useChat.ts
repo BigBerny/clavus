@@ -228,7 +228,7 @@ export function useChat() {
       setConnectionStatus('disconnected')
       store.getState().addMessage(threadId, {
         role: 'system',
-        content: `Error: ${error instanceof Error ? error.message : 'Connection failed'}`,
+        content: `Connection failed after ${MAX_RETRIES} retries. Pull down to refresh or resend your message.`,
       })
     }
   }, [setConnectionStatus])

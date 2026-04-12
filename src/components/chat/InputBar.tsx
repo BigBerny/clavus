@@ -287,6 +287,30 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   const isRecording = voice.state === 'recording'
   const isTranscribing = voice.state === 'transcribing'
+  // Drag & drop handlers (must be before any early returns to avoid hooks mismatch)
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(true)
+  }, [])
+  const handleDragLeave = useCallback(() => setDragOver(false), [])
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const files = e.dataTransfer.files
+    if (!files.length) return
+    const remaining = MAX_IMAGES - pendingImages.length
+    const toProcess = Array.from(files).slice(0, remaining)
+    for (const file of toProcess) {
+      if (!file.type.startsWith('image/')) continue
+      if (file.size > MAX_IMAGE_SIZE) continue
+      const reader = new FileReader()
+      reader.onload = () => {
+        setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
+      }
+      reader.readAsDataURL(file)
+    }
+  }, [pendingImages.length])
+
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0
 
@@ -352,30 +376,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     )
   }
 
-  // Drag & drop handlers
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(true)
-  }, [])
-  const handleDragLeave = useCallback(() => setDragOver(false), [])
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setDragOver(false)
-    const files = e.dataTransfer.files
-    if (!files.length) return
-    const remaining = MAX_IMAGES - pendingImages.length
-    const toProcess = Array.from(files).slice(0, remaining)
-    for (const file of toProcess) {
-      if (!file.type.startsWith('image/')) continue
-      if (file.size > MAX_IMAGE_SIZE) continue
-      const reader = new FileReader()
-      reader.onload = () => {
-        setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
-      }
-      reader.readAsDataURL(file)
-    }
-  }, [pendingImages.length])
-
   return (
     <div
       className={`bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom relative ${dragOver ? 'ring-2 ring-accent ring-inset' : ''}`}
@@ -389,18 +389,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         </div>
       )}
       <div className="max-w-[900px] mx-auto p-3">
-        {/* Compact stop button while streaming */}
-        {isStreaming && (
-          <div className="flex items-center justify-center mb-1.5 animate-[fadeSlideIn_0.2s_ease-out]">
-            <button
-              onClick={onAbort}
-              className="inline-btn flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 hover:bg-red-500/10 hover:border-red-500/30 active:scale-95 transition-all"
-            >
-              <div className="w-1.5 h-1.5 rounded-sm bg-red-400" />
-              <span className="text-[11px] text-text-light-muted dark:text-text-dark-muted">Stop</span>
-            </button>
-          </div>
-        )}
 
         {/* Slash command palette */}
         {showSlashPalette && filteredCommands.length > 0 && (
@@ -599,9 +587,19 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               >
                 <ArrowUpIcon />
               </button>
+            ) : isStreaming ? (
+              /* Streaming with no text: show stop button in place of mic */
+              <button
+                onClick={onAbort}
+                className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
+                aria-label="Stop generating"
+                title="Stop"
+              >
+                <StopIcon />
+              </button>
             ) : (
               <div className="flex items-center gap-1">
-                {talkMode && !isHome && (
+                {talkMode && (
                   <button
                     onClick={talkMode.toggle}
                     className="w-9 h-9 flex items-center justify-center rounded-full text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-accent active:scale-95 transition-all"
