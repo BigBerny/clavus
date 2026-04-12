@@ -323,14 +323,50 @@ export function App() {
     }
     document.addEventListener('visibilitychange', handleVisibility)
 
+    // Handle inline Marksense doc opening from chat
+    const handleOpenMarksense = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { url: string; title: string }
+      if (!detail?.url) return
+      // Append ?sidebar=collapsed to hide Marksense sidebar
+      const docUrl = detail.url.includes('?')
+        ? detail.url + '&sidebar=collapsed'
+        : detail.url + '?sidebar=collapsed'
+      const docTitle = detail.title || 'Document'
+
+      if (isDesktop) {
+        // Desktop: open as Canvas side panel
+        setCanvasContent('')
+        setCanvasTitle(docTitle)
+        setCanvasOpen(true)
+        // The CanvasPanel will load via iframe
+      }
+      // Both mobile & desktop: open/update as a Marksense tab
+      const tabId = `marksense-${docUrl}`
+      useTabsStore.getState().openTab({
+        id: tabId,
+        type: 'marksense',
+        title: docTitle,
+        documentUrl: docUrl,
+        openedAt: Date.now(),
+        updatedAt: Date.now(),
+      } as any)
+      if (!isDesktop) {
+        setVisiblePanel(tabId)
+        scrollToTabRef.current(tabId)
+      }
+    }
+    window.addEventListener('clavus:open-marksense', handleOpenMarksense)
+
     return () => {
       unsubWs()
       unsubApproval()
       unsubHealth()
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('clavus:open-marksense', handleOpenMarksense)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop])
 
   // Initial scroll to home (rightmost panel)
   useEffect(() => {

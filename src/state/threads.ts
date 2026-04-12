@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Message } from './chat'
+import { useTabsStore } from './tabs'
 
 export interface Thread {
   id: string
@@ -280,6 +281,8 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       saveThreads(threads)
       return { threads }
     })
+    // Also update the corresponding tab title
+    useTabsStore.getState().updateTab(id, { title })
   },
 
   updateThreadPreview: (id, preview) => {

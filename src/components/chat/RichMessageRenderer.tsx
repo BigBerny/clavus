@@ -47,6 +47,12 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
 
 const MARKSENSE_PATTERN = /mac-mini-von-janis\.taild2ad59\.ts\.net\/file\//
 
+function openMarksenseInline(href: string, title: string) {
+  window.dispatchEvent(new CustomEvent('clavus:open-marksense', {
+    detail: { url: href, title },
+  }))
+}
+
 function ExternalLink({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
   if (href && MARKSENSE_PATTERN.test(href)) {
     return <MarksenseCard href={href} />
@@ -86,7 +92,7 @@ function MarksenseCard({ href }: { href: string }) {
 
   if (failed) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 px-4 py-3 my-2 rounded-xl bg-accent/10 dark:bg-accent/15 border border-accent/20 hover:bg-accent/20 dark:hover:bg-accent/25 transition-colors no-underline">
+      <button onClick={() => openMarksenseInline(href, filename)} className="inline-btn w-full flex items-center gap-3 px-4 py-3 my-2 rounded-xl bg-accent/10 dark:bg-accent/15 border border-accent/20 hover:bg-accent/20 dark:hover:bg-accent/25 transition-colors text-left">
         <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
@@ -95,7 +101,7 @@ function MarksenseCard({ href }: { href: string }) {
           <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Open in Marksense</p>
         </div>
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted flex-shrink-0"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </a>
+      </button>
     )
   }
 
@@ -110,10 +116,24 @@ function MarksenseCard({ href }: { href: string }) {
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
           <span className="text-[13px] font-medium text-accent truncate">{filename}</span>
         </div>
-        <a href={href} target="_blank" rel="noopener noreferrer" className="inline-btn flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-colors no-underline whitespace-nowrap">
-          Open
-          <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-        </a>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => {
+              const path = href.split('/file/').pop() || ''
+              navigator.clipboard.writeText(path)
+            }}
+            className="inline-btn px-1.5 py-1 rounded-md text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
+            title="Copy file path"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          </button>
+          <button
+            onClick={() => openMarksenseInline(href, filename)}
+            className="inline-btn flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-colors whitespace-nowrap"
+          >
+            Open
+          </button>
+        </div>
       </div>
       <div className="px-4 py-3">
         {loading ? (
