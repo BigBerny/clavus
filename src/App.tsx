@@ -773,7 +773,7 @@ export function App() {
               onRecordingChange={handleRecordingChange}
               isHome={!isDesktop && isHomeVisible()}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
-              talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening }}
+              talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening, interrupt: talkMode.interrupt }}
             />
           </div>
         )}

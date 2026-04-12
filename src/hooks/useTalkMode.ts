@@ -81,6 +81,7 @@ export function useTalkMode(
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const ttsAbortRef = useRef<AbortController | null>(null)
 
   // Use refs so the async loop always sees the latest values
   const threadIdRef = useRef(threadId)
@@ -246,58 +247,27 @@ export function useTalkMode(
       })
       if (signal.aborted) break
 
-      // 4. Speak the last assistant message (interruptible by user speech)
+      // 4. Speak the last assistant message (interruptible via button)
       setPhase('speaking')
       const messages = useChatStore.getState().getThreadState(tid).messages
       const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant')
       if (lastAssistant?.content) {
         const ttsController = new AbortController()
-        // Combine main abort + TTS-specific abort
+        ttsAbortRef.current = ttsController
         const onMainAbort = () => ttsController.abort()
         signal.addEventListener('abort', onMainAbort, { once: true })
 
-        // Listen for mic input to interrupt TTS
-        let interrupted = false
-        let interruptStream: MediaStream | null = null
         try {
-          interruptStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-          const audioCtx = new AudioContext()
-          const source = audioCtx.createMediaStreamSource(interruptStream)
-          const analyser = audioCtx.createAnalyser()
-          analyser.fftSize = 256
-          source.connect(analyser)
-          const buf = new Uint8Array(analyser.frequencyBinCount)
+          await speakResponse(lastAssistant.content, ttsController.signal)
+        } catch { /* TTS aborted or failed */ }
 
-          // Poll for voice activity during TTS playback
-          const detectInterval = setInterval(() => {
-            if (ttsController.signal.aborted) { clearInterval(detectInterval); return }
-            analyser.getByteFrequencyData(buf)
-            const avg = buf.reduce((a, b) => a + b, 0) / buf.length
-            if (avg > 15) { // Voice detected
-              interrupted = true
-              ttsController.abort()
-              clearInterval(detectInterval)
-            }
-          }, 100)
-
-          try {
-            await speakResponse(lastAssistant.content, ttsController.signal)
-          } catch { /* TTS aborted or failed */ }
-
-          clearInterval(detectInterval)
-          audioCtx.close().catch(() => {})
-        } catch {
-          // Mic not available for interrupt detection, just play normally
-          try { await speakResponse(lastAssistant.content, ttsController.signal) } catch {}
-        } finally {
-          interruptStream?.getTracks().forEach(t => t.stop())
-          signal.removeEventListener('abort', onMainAbort)
-        }
+        const wasInterrupted = ttsController.signal.aborted && !signal.aborted
+        signal.removeEventListener('abort', onMainAbort)
+        ttsAbortRef.current = null
 
         if (signal.aborted) break
-        if (interrupted) {
-          console.log('[TalkMode] User interrupted TTS, restarting listening')
-          // Skip straight to next listen cycle
+        if (wasInterrupted) {
+          // User tapped interrupt, skip to next listen cycle
           continue
         }
       }
@@ -325,5 +295,10 @@ export function useTalkMode(
     }
   }, [])
 
-  return { active, phase, toggle, endListening, stop: stopAll }
+  // Interrupt TTS playback (user tapped interrupt button)
+  const interrupt = useCallback(() => {
+    ttsAbortRef.current?.abort()
+  }, [])
+
+  return { active, phase, toggle, endListening, interrupt, stop: stopAll }
 }

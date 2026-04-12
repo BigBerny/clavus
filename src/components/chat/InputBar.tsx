@@ -8,7 +8,7 @@ interface Props {
   onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
   isHome?: boolean
   onClear?: () => void
-  talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void }
+  talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void; interrupt: () => void }
 }
 
 interface SlashCommand {
@@ -361,6 +361,14 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                   className="inline-btn px-4 py-2 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-sm text-text-light dark:text-text-dark active:scale-95 transition-transform"
                 >
                   Done speaking
+                </button>
+              )}
+              {talkMode.phase === 'speaking' && (
+                <button
+                  onClick={talkMode.interrupt}
+                  className="inline-btn px-4 py-2 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-sm text-text-light dark:text-text-dark active:scale-95 transition-transform"
+                >
+                  Interrupt
                 </button>
               )}
               <button
