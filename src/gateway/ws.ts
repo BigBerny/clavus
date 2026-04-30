@@ -68,13 +68,9 @@ export class GatewayClient {
     this.disposed = false
     this.reconnectAttempt = 0
 
-    try {
-      this.device = await getDeviceIdentity()
-    } catch (e) {
-      console.error('[WS] Failed to get device identity:', e)
-      // Fall back to connecting without device identity
-      this.device = null
-    }
+    // Skip device identity — token auth is sufficient and device signatures
+    // expire too quickly when routed through Cloudflare tunnel
+    this.device = null
 
     this.doConnect()
   }
@@ -95,7 +91,14 @@ export class GatewayClient {
   private doConnect(): void {
     if (this.disposed) return
 
-    const wsUrl = this.url.replace(/^http/, 'ws')
+    let wsUrl: string
+    if (this.url) {
+      wsUrl = this.url.replace(/^http/, 'ws')
+    } else {
+      // No explicit gateway URL — use the Vite WS proxy at /gateway-ws
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
+      wsUrl = `${proto}//${location.host}/gateway-ws`
+    }
     this.setState('connecting')
 
     try {
@@ -186,6 +189,7 @@ export class GatewayClient {
   }
 
   private async handleChallenge(payload: Record<string, unknown>): Promise<void> {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     const nonce = payload.nonce as string
 
     const params: Record<string, unknown> = {
@@ -194,6 +198,13 @@ export class GatewayClient {
       role: 'operator',
       scopes: ['operator.read', 'operator.write'],
       auth: { token: this.token },
+      client: {
+        id: 'webchat-ui',
+        version: 'clavus-1.0',
+        platform: typeof navigator !== 'undefined' ? navigator.platform || 'web' : 'web',
+        mode: 'webchat',
+      },
+      caps: ['tool-events'],
     }
 
     if (this.device) {

@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { useTabsStore } from '../../state/tabs.ts'
 
 interface FileEntry {
   name: string
@@ -11,11 +10,6 @@ interface FileEntry {
 interface DirResponse {
   path: string
   entries: FileEntry[]
-}
-
-interface FileResponse {
-  path: string
-  content: string
 }
 
 // Categorize top-level paths as agent or user files
@@ -57,15 +51,12 @@ interface Props {
 export function FileBrowser({ open, onClose }: Props) {
   const [currentPath, setCurrentPath] = useState('/')
   const [entries, setEntries] = useState<FileEntry[]>([])
-  const [fileContent, setFileContent] = useState<string | null>(null)
-  const [fileName, setFileName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   const fetchDir = useCallback(async (dirPath: string) => {
     setLoading(true)
     setError('')
-    setFileContent(null)
     try {
       const res = await fetch(`/api/workspace${dirPath === '/' ? '' : dirPath}`)
       if (!res.ok) throw new Error('Failed to load')
@@ -78,20 +69,19 @@ export function FileBrowser({ open, onClose }: Props) {
     setLoading(false)
   }, [])
 
-  const fetchFile = useCallback(async (filePath: string, name: string) => {
-    setLoading(true)
-    setError('')
-    try {
-      const res = await fetch(`/api/workspace${filePath}`)
-      if (!res.ok) throw new Error('Failed to load')
-      const data: FileResponse = await res.json()
-      setFileContent(data.content)
-      setFileName(name)
-    } catch {
-      setError('Could not load file')
-    }
-    setLoading(false)
-  }, [])
+  const openFile = useCallback((filePath: string, name: string) => {
+    const tabId = `file-${filePath}`
+    useTabsStore.getState().openTab({
+      id: tabId,
+      type: 'file',
+      title: name,
+      path: filePath,
+      openedAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+    window.dispatchEvent(new CustomEvent('clavus:open-file-tab', { detail: { tabId } }))
+    onClose()
+  }, [onClose])
 
   useEffect(() => {
     if (open) fetchDir('/')
@@ -111,25 +101,20 @@ export function FileBrowser({ open, onClose }: Props) {
     if (entry.type === 'dir') {
       fetchDir(newPath)
     } else {
-      fetchFile(newPath, entry.name)
+      openFile(newPath, entry.name)
     }
-  }, [currentPath, fetchDir, fetchFile])
+  }, [currentPath, fetchDir, openFile])
 
   const navigateUp = useCallback(() => {
-    if (fileContent !== null) {
-      setFileContent(null)
-      setFileName('')
-      return
-    }
     if (currentPath === '/') return
     const parent = currentPath.split('/').slice(0, -1).join('/') || '/'
     fetchDir(parent)
-  }, [currentPath, fileContent, fetchDir])
+  }, [currentPath, fetchDir])
 
   if (!open) return null
 
   // Split entries into agent and user groups (only at root level)
-  const isRoot = currentPath === '/' && fileContent === null
+  const isRoot = currentPath === '/'
   const agentEntries = isRoot ? entries.filter(e => isAgentFile(e.name)) : []
   const userEntries = isRoot ? entries.filter(e => !isAgentFile(e.name)) : entries
 
@@ -152,7 +137,7 @@ export function FileBrowser({ open, onClose }: Props) {
         <div className="safe-area-top">
           <div className="flex items-center justify-between px-4 h-12 border-b border-surface-light-3/50 dark:border-surface-dark-3/50">
             <div className="flex items-center gap-2 min-w-0">
-              {(currentPath !== '/' || fileContent !== null) && (
+              {currentPath !== '/' && (
                 <button
                   onClick={navigateUp}
                   className="inline-btn p-1.5 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors flex-shrink-0"
@@ -162,7 +147,7 @@ export function FileBrowser({ open, onClose }: Props) {
                 </button>
               )}
               <h2 className="text-base font-semibold text-text-light dark:text-text-dark truncate">
-                {fileContent !== null ? fileName : 'Files'}
+                Files
               </h2>
             </div>
             <button
@@ -176,7 +161,7 @@ export function FileBrowser({ open, onClose }: Props) {
         </div>
 
         {/* Breadcrumb */}
-        {!fileContent && currentPath !== '/' && (
+        {currentPath !== '/' && (
           <div className="px-4 py-1.5 border-b border-surface-light-3/30 dark:border-surface-dark-3/30">
             <div className="flex items-center gap-1 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 overflow-x-auto">
               {breadcrumbs.map((crumb, i) => {
@@ -216,15 +201,7 @@ export function FileBrowser({ open, onClose }: Props) {
             </div>
           )}
 
-          {!loading && !error && fileContent !== null && (
-            <div className="p-4">
-              <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed [&>*:first-child]:mt-0">
-                <Markdown remarkPlugins={[remarkGfm]}>{fileContent}</Markdown>
-              </div>
-            </div>
-          )}
-
-          {!loading && !error && fileContent === null && (
+          {!loading && !error && (
             <>
               {isRoot && agentEntries.length > 0 && (
                 <div>

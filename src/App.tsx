@@ -6,7 +6,7 @@ import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer, loadThreadMessages } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
-import { useTabsStore, ensureChatTab, type Tab, type ChatTab } from './state/tabs.ts'
+import { useTabsStore, ensureChatTab, type Tab, type ChatTab, type FileTab } from './state/tabs.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
@@ -23,6 +23,7 @@ const FileBrowser = lazy(() => import('./components/layout/FileBrowser.tsx').the
 const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
 const RecipePanel = lazy(() => import('./components/recipes/RecipePanel.tsx').then(m => ({ default: m.RecipePanel })))
 const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
+const FileViewerPanel = lazy(() => import('./components/files/FileViewerPanel.tsx').then(m => ({ default: m.FileViewerPanel })))
 const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
@@ -357,6 +358,14 @@ export function App() {
     }
     window.addEventListener('clavus:open-marksense', handleOpenMarksense)
 
+    const handleOpenFileTab = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { tabId: string }
+      if (!detail?.tabId) return
+      setVisiblePanel(detail.tabId)
+      requestAnimationFrame(() => scrollToTabRef.current(detail.tabId))
+    }
+    window.addEventListener('clavus:open-file-tab', handleOpenFileTab)
+
     return () => {
       unsubWs()
       unsubApproval()
@@ -364,6 +373,7 @@ export function App() {
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('clavus:open-marksense', handleOpenMarksense)
+      window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop])
@@ -682,6 +692,13 @@ export function App() {
                       isVisible={true}
                     />
                   )}
+                  {visibleTab?.type === 'file' && (
+                    <FileViewerPanel
+                      path={(visibleTab as FileTab).path}
+                      title={visibleTab.title}
+                      isVisible={true}
+                    />
+                  )}
                 </Suspense>
               )}
             </div>
@@ -736,6 +753,13 @@ export function App() {
                       {tab.type === 'marksense' && (
                         <MarksensePanel
                           documentUrl={(tab as any).documentUrl}
+                          title={tab.title}
+                          isVisible={isActive}
+                        />
+                      )}
+                      {tab.type === 'file' && (
+                        <FileViewerPanel
+                          path={(tab as FileTab).path}
                           title={tab.title}
                           isVisible={isActive}
                         />

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useThreadsStore, loadThreadMessages, saveThreadMessages } from './threads'
+import { getConfig } from '../gateway/config.ts'
 
 export interface ToolCall {
   id: string
@@ -57,6 +58,7 @@ interface ChatState {
   setAbortController: (threadId: string, controller: AbortController | null) => void
   updateToolCalls: (threadId: string, id: string, toolCalls: ToolCall[]) => void
   setMessageModel: (threadId: string, id: string, model: string) => void
+  addMedia: (threadId: string, id: string, media: MediaAttachment[]) => void
   clearMessages: (threadId: string) => void
   removeMessage: (threadId: string, messageId: string) => void
 }
@@ -69,6 +71,23 @@ function saveMessages(threadId: string, messages: Message[]) {
   if (lastMsg) {
     useThreadsStore.getState().updateThreadPreview(threadId, lastMsg.content)
   }
+}
+
+const MEDIA_RE = /^MEDIA:\s*(.+)$/gm
+
+function extractMedia(content: string): { text: string; media: MediaAttachment[] } {
+  const media: MediaAttachment[] = []
+  const text = content.replace(MEDIA_RE, (_match, path: string) => {
+    const trimmed = path.trim().replace(/^`|`$/g, '')
+    if (!trimmed) return ''
+    const config = getConfig()
+    const url = `${config.url || ''}/__openclaw__/assistant-media?source=${encodeURIComponent(trimmed)}&token=${encodeURIComponent(config.token)}`
+    const ext = trimmed.split('.').pop()?.toLowerCase() || ''
+    const type = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext) ? 'image' as const : 'file' as const
+    media.push({ type, url, title: trimmed.split('/').pop() })
+    return ''
+  }).replace(/\n{3,}/g, '\n\n').trim()
+  return { text, media }
 }
 
 let messageCounter = 0
@@ -190,9 +209,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const ts = state.threadStates[threadId]
       if (!ts) return state
-      const messages = ts.messages.map((m) =>
-        m.id === id ? { ...m, streaming: false } : m,
-      )
+      const messages = ts.messages.map((m) => {
+        if (m.id !== id) return m
+        const { text, media } = extractMedia(m.content)
+        return {
+          ...m,
+          streaming: false,
+          content: text,
+          ...(media.length > 0 ? { media: [...(m.media || []), ...media] } : {}),
+        }
+      })
       saveMessages(threadId, messages)
       return {
         threadStates: {
@@ -256,6 +282,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
               m.id === id ? { ...m, model } : m,
             ),
           },
+        },
+      }
+    }),
+
+  addMedia: (threadId, id, media) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      const messages = ts.messages.map((m) =>
+        m.id === id ? { ...m, media: [...(m.media || []), ...media] } : m,
+      )
+      saveMessages(threadId, messages)
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, messages },
         },
       }
     }),

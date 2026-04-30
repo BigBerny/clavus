@@ -10,6 +10,25 @@ import type { ChatCompletionMessage } from '../gateway/chat.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
+const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/g
+
+function buildMediaUrl(filePath: string): string {
+  const config = getConfig()
+  return `${config.url || ''}/__openclaw__/assistant-media?source=${encodeURIComponent(filePath)}&token=${encodeURIComponent(config.token)}`
+}
+
+function extractMediaFromToolResult(result: unknown): import('../state/chat.ts').MediaAttachment[] {
+  const media: import('../state/chat.ts').MediaAttachment[] = []
+  const text = typeof result === 'string' ? result : JSON.stringify(result ?? '')
+  for (const match of text.matchAll(MEDIA_RE)) {
+    const path = match[1].trim()
+    if (!path) continue
+    const ext = path.split('.').pop()?.toLowerCase() || ''
+    const type = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext) ? 'image' as const : 'file' as const
+    media.push({ type, url: buildMediaUrl(path), title: path.split('/').pop() })
+  }
+  return media
+}
 
 function shouldGenerateTitle(userMsgCount: number): boolean {
   return userMsgCount > 0 && (userMsgCount & (userMsgCount - 1)) === 0
@@ -127,6 +146,13 @@ export function useChat() {
                 ? existing.map((t, i) => i === idx ? tc : t)
                 : [...existing, tc]
               store.getState().updateToolCalls(threadId, assistantId, updated)
+              // Extract media from completed tool results
+              if (tc.status === 'completed' && tc.result) {
+                const media = extractMediaFromToolResult(tc.result)
+                if (media.length > 0) {
+                  store.getState().addMedia(threadId, assistantId, media)
+                }
+              }
             },
             onDone: () => {
               store.getState().finalizeMessage(threadId, assistantId)

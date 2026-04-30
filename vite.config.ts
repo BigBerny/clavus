@@ -204,7 +204,9 @@ function workspacePlugin() {
       server.middlewares.use((req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/workspace')) return next()
 
-        const relPath = decodeURIComponent(req.url.replace('/api/workspace', '') || '/')
+        const rawRequest = req.url.replace('/api/workspace', '') || '/'
+        const rawMode = rawRequest.startsWith('/raw/')
+        const relPath = decodeURIComponent(rawMode ? rawRequest.replace('/raw', '') : rawRequest)
         const absPath = nodePath.join(WORKSPACE_ROOT, relPath)
 
         if (!absPath.startsWith(WORKSPACE_ROOT)) {
@@ -230,9 +232,23 @@ function workspacePlugin() {
             res.setHeader('Content-Type', 'application/json')
             res.end(JSON.stringify({ path: relPath, entries }))
           } else {
-            const content = fs.readFileSync(absPath, 'utf-8')
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ path: relPath, content }))
+            if (rawMode) {
+              const ext = nodePath.extname(absPath).slice(1).toLowerCase()
+              const mimeTypes: Record<string, string> = {
+                png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
+                pdf: 'application/pdf', csv: 'text/csv; charset=utf-8', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
+                json: 'application/json; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+              }
+              res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
+              res.setHeader('Content-Disposition', `inline; filename="${nodePath.basename(absPath).replace(/"/g, '')}"`)
+              fs.createReadStream(absPath).pipe(res)
+            } else {
+              const content = fs.readFileSync(absPath, 'utf-8')
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ path: relPath, content, encoding: 'utf-8', size: stat.size }))
+            }
           }
         } catch {
           res.statusCode = 404
@@ -545,6 +561,16 @@ export default defineConfig({
       '/v1': {
         target: 'http://127.0.0.1:18789',
         changeOrigin: true,
+      },
+      '/__openclaw__': {
+        target: 'http://127.0.0.1:18789',
+        changeOrigin: true,
+      },
+      '/gateway-ws': {
+        target: 'http://127.0.0.1:18789',
+        changeOrigin: true,
+        ws: true,
+        rewrite: (path) => path.replace(/^\/gateway-ws/, ''),
       },
       '/marksense': {
         target: 'http://127.0.0.1:3700',

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type TabType = 'chat' | 'recipe' | 'marksense'
+export type TabType = 'chat' | 'recipe' | 'marksense' | 'file'
 
 interface TabBase {
   id: string
@@ -25,7 +25,12 @@ export interface MarksenseTab extends TabBase {
   documentUrl: string
 }
 
-export type Tab = ChatTab | RecipeTab | MarksenseTab
+export interface FileTab extends TabBase {
+  type: 'file'
+  path: string
+}
+
+export type Tab = ChatTab | RecipeTab | MarksenseTab | FileTab
 
 interface TabsState {
   tabs: Tab[]
