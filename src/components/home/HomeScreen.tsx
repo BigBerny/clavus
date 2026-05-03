@@ -1,8 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { useThreadsStore, loadThreadMessages } from '../../state/threads'
+import { useThreadsStore } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
 import { useTabsStore, type Tab, type ChatTab, type RecipeTab, type MarksenseTab } from '../../state/tabs'
-import type { Thread } from '../../state/threads'
 
 function relativeTime(timestamp: number): string {
   const diff = Math.floor((Date.now() - timestamp) / 1000)
@@ -14,6 +13,18 @@ function relativeTime(timestamp: number): string {
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days}d ago`
   return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function formatBuildTime(value: string): string {
+  if (!value || value === 'dev') return 'local dev'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 interface QuickActionsProps {
@@ -267,8 +278,7 @@ function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; 
   )
 }
 
-export function HomeScreen({ onSend, onCompose, onSelectTab, pushState, onEnablePush }: {
-  onSend: (message: string) => void
+export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush }: {
   onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
   onSelectTab?: (tabId: string) => void
   pushState?: string
@@ -277,9 +287,7 @@ export function HomeScreen({ onSend, onCompose, onSelectTab, pushState, onEnable
   const tabs = useTabsStore((s) => s.tabs)
   const closeTab = useTabsStore((s) => s.closeTab)
   const [showAll, setShowAll] = useState(false)
-
-  const now = Date.now()
-  const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000
+  const [twentyFourHoursAgo] = useState(() => Date.now() - 24 * 60 * 60 * 1000)
 
   const sortedTabs = useMemo(() =>
     [...tabs].sort((a, b) => b.updatedAt - a.updatedAt),
@@ -293,6 +301,8 @@ export function HomeScreen({ onSend, onCompose, onSelectTab, pushState, onEnable
   }, [sortedTabs, showAll, twentyFourHoursAgo])
 
   const hasMore = sortedTabs.length > recentTabs.length
+  const buildTime = formatBuildTime(__CLAVUS_BUILD_TIME__)
+  const buildSha = __CLAVUS_GIT_SHA__ && __CLAVUS_GIT_SHA__ !== 'dev' ? __CLAVUS_GIT_SHA__ : ''
 
   const handleDelete = useCallback((tabId: string) => {
     // For chat tabs, also clean up thread data
@@ -303,7 +313,8 @@ export function HomeScreen({ onSend, onCompose, onSelectTab, pushState, onEnable
       if (ts?.isStreaming) {
         ts.abortController?.abort()
       }
-      const { [threadId]: _, ...rest } = useChatStore.getState().threadStates
+      const rest = { ...useChatStore.getState().threadStates }
+      delete rest[threadId]
       useChatStore.setState({ threadStates: rest })
       useThreadsStore.getState().deleteThread(threadId)
     }
@@ -373,6 +384,14 @@ export function HomeScreen({ onSend, onCompose, onSelectTab, pushState, onEnable
             )}
           </div>
         )}
+
+        <div className="px-5 pt-6">
+          <div className="inline-flex items-center gap-2 rounded-full border border-surface-light-3/20 dark:border-surface-dark-3/20 bg-surface-light-2/40 dark:bg-surface-dark-2/40 px-3 py-1.5 text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55">
+            <span className="w-1.5 h-1.5 rounded-full bg-accent/60" />
+            <span>Build {buildTime}</span>
+            {buildSha && <span className="text-text-light-muted/35 dark:text-text-dark-muted/35">{buildSha}</span>}
+          </div>
+        </div>
       </div>
     </div>
   )

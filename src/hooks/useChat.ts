@@ -1,20 +1,18 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, sendChatViaWs, abortChat, generateTitleViaOpenRouter } from '../gateway/chat.ts'
+import { sendChatStream, generateTitleViaOpenRouter } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
-import { useSessionsStore, makeSessionKey } from '../state/sessions.ts'
-import { gateway } from '../gateway/ws.ts'
 import { getConfig } from '../gateway/config.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
+import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
 const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/g
 
 function buildMediaUrl(filePath: string): string {
-  const config = getConfig()
-  return `${config.url || ''}/__openclaw__/assistant-media?source=${encodeURIComponent(filePath)}&token=${encodeURIComponent(config.token)}`
+  return buildWorkspaceMediaUrl(filePath)
 }
 
 function extractMediaFromToolResult(result: unknown): import('../state/chat.ts').MediaAttachment[] {
@@ -23,15 +21,10 @@ function extractMediaFromToolResult(result: unknown): import('../state/chat.ts')
   for (const match of text.matchAll(MEDIA_RE)) {
     const path = match[1].trim()
     if (!path) continue
-    const ext = path.split('.').pop()?.toLowerCase() || ''
-    const type = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext) ? 'image' as const : 'file' as const
+    const type = mediaTypeFromPath(path)
     media.push({ type, url: buildMediaUrl(path), title: path.split('/').pop() })
   }
   return media
-}
-
-function shouldGenerateTitle(userMsgCount: number): boolean {
-  return userMsgCount > 0 && (userMsgCount & (userMsgCount - 1)) === 0
 }
 
 function delay(ms: number) {
@@ -43,7 +36,6 @@ export function useChat() {
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[] }[]>([])
   const sendRef = useRef<((threadId: string, content: string, images?: string[], retryCount?: number) => Promise<void>) | undefined>(undefined)
-  const activeRunsRef = useRef<Map<string, { runId: string; cleanup: () => void }>>(new Map())
 
   // Online/offline detection + reconnect
   useEffect(() => {
@@ -51,14 +43,7 @@ export function useChat() {
       setConnectionStatus('reconnecting')
       const config = getConfig()
 
-      // Try WebSocket first
-      if (!gateway.connected) {
-        try {
-          await gateway.connect(config.url, config.token)
-        } catch { /* ignore */ }
-      }
-
-      const ok = gateway.connected || await import('../gateway/chat.ts').then(m => m.checkGateway(config))
+      const ok = await import('../gateway/chat.ts').then(m => m.checkGateway(config))
       setConnectionStatus(ok ? 'connected' : 'disconnected')
 
       if (ok && offlineQueueRef.current.length > 0) {
@@ -88,13 +73,8 @@ export function useChat() {
       getThreadState,
       ensureThread,
       addMessage,
-      appendToMessage,
-      appendThinking,
-      setThinkingDone,
-      finalizeMessage,
       setStreaming,
       setAbortController,
-      removeMessage,
     } = store.getState()
 
     const threadState = getThreadState(threadId)
@@ -125,68 +105,11 @@ export function useChat() {
     setStreaming(threadId, true)
     setConnectionStatus('connected')
 
-    // Try WebSocket first, fall back to REST
-    if (gateway.connected) {
-      try {
-        const config = getConfig()
-        const sessionKey = makeSessionKey(config.agentId, threadId)
-
-        const { runId, cleanup } = await sendChatViaWs(
-          sessionKey,
-          content.trim(),
-          {
-            onThinking: (token) => store.getState().appendThinking(threadId, assistantId, token),
-            onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
-            onToken: (token) => store.getState().appendToMessage(threadId, assistantId, token),
-            onToolCall: (tc) => {
-              const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
-              const existing = msg?.toolCalls || []
-              const idx = existing.findIndex(t => t.id === tc.id)
-              const updated = idx >= 0
-                ? existing.map((t, i) => i === idx ? tc : t)
-                : [...existing, tc]
-              store.getState().updateToolCalls(threadId, assistantId, updated)
-              // Extract media from completed tool results
-              if (tc.status === 'completed' && tc.result) {
-                const media = extractMediaFromToolResult(tc.result)
-                if (media.length > 0) {
-                  store.getState().addMedia(threadId, assistantId, media)
-                }
-              }
-            },
-            onDone: () => {
-              store.getState().finalizeMessage(threadId, assistantId)
-              store.getState().setStreaming(threadId, false)
-              activeRunsRef.current.delete(threadId)
-            },
-            onError: (error) => {
-              store.getState().finalizeMessage(threadId, assistantId)
-              store.getState().setStreaming(threadId, false)
-              activeRunsRef.current.delete(threadId)
-              const ts = store.getState().getThreadState(threadId)
-              const msg = ts.messages.find((m) => m.id === assistantId)
-              if (msg && !msg.content) {
-                store.getState().removeMessage(threadId, assistantId)
-              }
-              store.getState().addMessage(threadId, { role: 'system', content: `Error: ${error.message}` })
-            },
-          },
-        )
-
-        activeRunsRef.current.set(threadId, { runId, cleanup })
-        return
-      } catch (e) {
-        console.warn('[Chat] WebSocket send failed, falling back to REST:', e)
-        // Fall through to REST
-      }
-    }
-
-    // REST fallback
     const config = getConfig()
     const apiMessages: ChatCompletionMessage[] = store
       .getState()
       .getThreadState(threadId)
-      .messages.filter((m) => m.role !== 'system')
+      .messages.filter((m) => m.role !== 'system' && !(m.role === 'assistant' && m.streaming && !m.content))
       .map((m) => {
         if (m.images && m.images.length > 0) {
           const parts: ChatCompletionMessage['content'] = []
@@ -202,6 +125,22 @@ export function useChat() {
     const controller = new AbortController()
     setAbortController(threadId, controller)
 
+    const handleToolCall = (tc: import('../gateway/chat.ts').ToolCallEvent) => {
+      const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
+      const existing = msg?.toolCalls || []
+      const idx = existing.findIndex(t => t.id === tc.id)
+      const updated = idx >= 0
+        ? existing.map((t, i) => i === idx ? tc : t)
+        : [...existing, tc]
+      store.getState().updateToolCalls(threadId, assistantId, updated)
+      if (tc.status === 'completed' && tc.result) {
+        const media = extractMediaFromToolResult(tc.result)
+        if (media.length > 0) {
+          store.getState().addMedia(threadId, assistantId, media)
+        }
+      }
+    }
+
     try {
       await sendChatStream(
         config,
@@ -210,6 +149,7 @@ export function useChat() {
           onThinking: (token) => store.getState().appendThinking(threadId, assistantId, token),
           onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
           onToken: (token) => store.getState().appendToMessage(threadId, assistantId, token),
+          onToolCall: handleToolCall,
           onDone: () => {
             store.getState().finalizeMessage(threadId, assistantId)
             store.getState().setStreaming(threadId, false)
@@ -230,6 +170,7 @@ export function useChat() {
           },
         },
         controller.signal,
+        { conversationId: threadId },
       )
     } catch (error) {
       store.getState().finalizeMessage(threadId, assistantId)
@@ -257,31 +198,18 @@ export function useChat() {
         content: `Connection failed after ${MAX_RETRIES} retries. Pull down to refresh or resend your message.`,
       })
     }
-  }, [setConnectionStatus])
+  }, [setConnectionStatus, store])
 
   useEffect(() => {
     sendRef.current = send
   }, [send])
 
   const abort = useCallback((threadId: string) => {
-    // Try WebSocket abort first
-    const activeRun = activeRunsRef.current.get(threadId)
-    if (activeRun) {
-      activeRun.cleanup()
-      activeRunsRef.current.delete(threadId)
-      const config = getConfig()
-      const sessionKey = makeSessionKey(config.agentId, threadId)
-      abortChat(sessionKey, activeRun.runId).catch(() => {})
-      store.getState().setStreaming(threadId, false)
-      return
-    }
-
-    // REST fallback
     const ts = store.getState().getThreadState(threadId)
     ts.abortController?.abort()
     store.getState().setStreaming(threadId, false)
     store.getState().setAbortController(threadId, null)
-  }, [])
+  }, [store])
 
   return { send, abort }
 }

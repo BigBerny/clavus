@@ -4,13 +4,12 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
-import { useThreadsStore, syncFromServer, loadThreadMessages } from './state/threads.ts'
+import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
-import { useTabsStore, ensureChatTab, type Tab, type ChatTab, type FileTab } from './state/tabs.ts'
+import { useTabsStore, ensureChatTab, type ChatTab, type FileTab, type RecipeTab, type MarksenseTab } from './state/tabs.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
-import { gateway } from './gateway/ws.ts'
 import { useTalkMode } from './hooks/useTalkMode.ts'
 import { DesktopSidebar } from './components/layout/DesktopSidebar.tsx'
 import { CanvasPanel } from './components/canvas/CanvasPanel.tsx'
@@ -38,7 +37,7 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
           </div>
           <h1 className="text-xl font-semibold text-text-light dark:text-text-dark mb-1">Welcome to Clavus</h1>
           <p className="text-sm text-text-light-muted dark:text-text-dark-muted">
-            Enter your OpenClaw gateway token to get started.
+            Enter your Hermes API token to get started.
           </p>
         </div>
         <div className="space-y-3">
@@ -47,9 +46,9 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && token.trim() && onSave(token.trim())}
-            placeholder="Gateway token..."
+            placeholder="Hermes API token..."
             autoFocus
-            aria-label="Gateway token"
+            aria-label="Hermes API token"
             className="w-full px-4 py-3 text-sm rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted dark:placeholder:text-text-dark-muted border border-surface-light-3 dark:border-surface-dark-3 focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
           <button
@@ -74,13 +73,10 @@ export function App() {
   const connectionStatus = useUIStore((s) => s.connectionStatus)
   const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
   const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
-  const threads = useThreadsStore((s) => s.threads)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const tabs = useTabsStore((s) => s.tabs)
   const closeTab = useTabsStore((s) => s.closeTab)
   const [needsToken, setNeedsToken] = useState(!hasToken())
-  const [isRecording, setIsRecording] = useState(false)
-  const [recordingDuration, setRecordingDuration] = useState('0:00')
   const cancelRecordingRef = useRef<(() => void) | null>(null)
   const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
 
@@ -103,6 +99,7 @@ export function App() {
   const [talkModeThreadId, setTalkModeThreadId] = useState('')
   // Keep talk mode thread in sync with visible panel (unless talk mode is active)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (visiblePanel !== 'home') setTalkModeThreadId(visiblePanel)
   }, [visiblePanel])
   const talkMode = useTalkMode(talkModeThreadId, send)
@@ -189,7 +186,7 @@ export function App() {
       if (e.touches.length !== 1) return
       if (!e.cancelable) return
       // Defer to PullDownDismissable when it's active
-      if ((window as any).__pullDownActive) return
+      if ((window as Window & { __pullDownActive?: boolean }).__pullDownActive) return
 
       const t = e.touches[0]
       const dx = t.clientX - startX
@@ -258,58 +255,6 @@ export function App() {
     if (needsToken) return
     syncFromServer().then(() => checkPendingNavigation())
 
-    // Initialize WebSocket connection to gateway
-    const config = getConfig()
-    if (config.url && config.token) {
-      gateway.connect(config.url, config.token).catch(e => {
-        console.warn('[App] WebSocket connection failed, using REST fallback:', e)
-      })
-    }
-
-    // Sync connection status from WebSocket
-    const unsubWs = gateway.onStateChange((state) => {
-      if (state === 'connected') setConnectionStatus('connected')
-      else if (state === 'reconnecting') setConnectionStatus('reconnecting')
-      else if (state === 'disconnected') setConnectionStatus('disconnected')
-    })
-
-    // Operational notifications via WebSocket events
-    const unsubApproval = gateway.on('exec.approval.requested', (payload) => {
-      const p = payload as any
-      const toolName = p.tool || 'action'
-      const approvalId = p.id || ''
-
-      // Inject approval as a system message with confirm block into active thread
-      const activeThread = visiblePanel !== 'home' ? visiblePanel : ''
-      if (activeThread) {
-        const confirmBlock = `:::confirm\nJane wants to execute: **${toolName}**. Allow this action?\nconfirmLabel: "Approve"\ncancelLabel: "Deny"\n:::`
-        useChatStore.getState().addMessage(activeThread, {
-          role: 'assistant',
-          content: confirmBlock,
-        })
-      }
-
-      if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
-        new Notification('Approval Required', {
-          body: `Jane needs approval: ${toolName}`,
-          icon: '/icons/icon-192.svg',
-          tag: 'approval',
-        })
-      }
-    })
-    const unsubHealth = gateway.on('health', (payload) => {
-      if (document.visibilityState === 'hidden' && Notification.permission === 'granted') {
-        const status = (payload as any).status
-        if (status === 'error' || status === 'degraded') {
-          new Notification('System Alert', {
-            body: `Gateway health: ${status}`,
-            icon: '/icons/icon-192.svg',
-            tag: 'health',
-          })
-        }
-      }
-    })
-
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate-thread' && event.data.threadId) {
         navigateToThread(event.data.threadId)
@@ -350,7 +295,7 @@ export function App() {
         documentUrl: docUrl,
         openedAt: Date.now(),
         updatedAt: Date.now(),
-      } as any)
+      } satisfies MarksenseTab)
       if (!isDesktop) {
         setVisiblePanel(tabId)
         scrollToTabRef.current(tabId)
@@ -367,15 +312,11 @@ export function App() {
     window.addEventListener('clavus:open-file-tab', handleOpenFileTab)
 
     return () => {
-      unsubWs()
-      unsubApproval()
-      unsubHealth()
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('clavus:open-marksense', handleOpenMarksense)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop])
 
   // Initial scroll to home (rightmost panel)
@@ -478,12 +419,12 @@ export function App() {
   }, [switchThread, sortedTabs])
 
   // Wire up ref so navigateToThread can use scrollToTab
-  scrollToTabRef.current = scrollToTab
+  useEffect(() => {
+    scrollToTabRef.current = scrollToTab
+  }, [scrollToTab])
 
-  const handleRecordingChange = useCallback((recording: boolean, duration: string, cancel: () => void) => {
-    setIsRecording(recording)
-    setRecordingDuration(duration)
-    cancelRecordingRef.current = cancel
+  const handleRecordingChange = useCallback((...args: [boolean, string, () => void]) => {
+    cancelRecordingRef.current = args[2]
   }, [])
 
   // Check actual scroll position to determine if home panel is visible
@@ -531,6 +472,16 @@ export function App() {
       }
     }
   }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs])
+
+  useEffect(() => {
+    const handleInteractiveSend = (event: Event) => {
+      const detail = (event as CustomEvent<{ content?: string }>).detail
+      const content = detail?.content?.trim()
+      if (content) handleSend(content)
+    }
+    window.addEventListener('clavus:interactive-send', handleInteractiveSend)
+    return () => window.removeEventListener('clavus:interactive-send', handleInteractiveSend)
+  }, [handleSend])
 
   // Abort scoped to visible thread
   const handleAbort = useCallback(() => {
@@ -621,11 +572,7 @@ export function App() {
             onClick={async () => {
               setConnectionStatus('reconnecting')
               const config = getConfig()
-              // Try WebSocket reconnect first
-              if (!gateway.connected && config.url && config.token) {
-                try { await gateway.connect(config.url, config.token) } catch {}
-              }
-              const ok = gateway.connected || await checkGateway(config)
+              const ok = await checkGateway(config)
               setConnectionStatus(ok ? 'connected' : 'disconnected')
             }}
             className="inline-btn text-[12px] text-amber-600 dark:text-amber-400 font-medium underline underline-offset-2 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
@@ -665,7 +612,6 @@ export function App() {
             <div className="flex-1 min-h-0 min-w-0 flex flex-col">
               {visiblePanel === 'home' || !sortedTabs.find(t => t.id === visiblePanel) ? (
                 <HomeScreen
-                  onSend={handleSend}
                   onCompose={(channel) => setComposeChannel(channel)}
                   onSelectTab={handleDesktopSelectTab}
                   pushState={pushState}
@@ -676,18 +622,17 @@ export function App() {
                   {visibleTab?.type === 'chat' && (
                     <ChatViewPanel
                       threadId={(visibleTab as ChatTab).threadId}
-                      isVisible={true}
                     />
                   )}
                   {visibleTab?.type === 'recipe' && (
                     <RecipePanel
-                      recipeId={(visibleTab as any).recipeId}
+                      recipeId={(visibleTab as RecipeTab).recipeId}
                       isVisible={true}
                     />
                   )}
                   {visibleTab?.type === 'marksense' && (
                     <MarksensePanel
-                      documentUrl={(visibleTab as any).documentUrl}
+                      documentUrl={(visibleTab as MarksenseTab).documentUrl}
                       title={visibleTab.title}
                       isVisible={true}
                     />
@@ -741,18 +686,17 @@ export function App() {
                       {tab.type === 'chat' && (
                         <ChatViewPanel
                           threadId={(tab as ChatTab).threadId}
-                          isVisible={isActive}
                         />
                       )}
                       {tab.type === 'recipe' && (
                         <RecipePanel
-                          recipeId={(tab as any).recipeId}
+                          recipeId={(tab as RecipeTab).recipeId}
                           isVisible={isActive}
                         />
                       )}
                       {tab.type === 'marksense' && (
                         <MarksensePanel
-                          documentUrl={(tab as any).documentUrl}
+                          documentUrl={(tab as MarksenseTab).documentUrl}
                           title={tab.title}
                           isVisible={isActive}
                         />
@@ -776,8 +720,7 @@ export function App() {
             className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
             {...(visiblePanel !== 'home' ? { inert: true } : {})}
           >
-            <HomeScreen
-              onSend={handleSend}
+          <HomeScreen
               onCompose={(channel) => setComposeChannel(channel)}
               onSelectTab={scrollToTab}
               pushState={pushState}
@@ -795,7 +738,7 @@ export function App() {
               onAbort={handleAbort}
               isStreaming={visibleThreadStreaming}
               onRecordingChange={handleRecordingChange}
-              isHome={!isDesktop && isHomeVisible()}
+              isHome={!isDesktop && visiblePanel === 'home'}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening, interrupt: talkMode.interrupt }}
             />
@@ -829,7 +772,7 @@ export function App() {
 /**
  * Wrapper for ChatView that subscribes to its thread's messages from the store.
  */
-function ChatViewPanel({ threadId, isVisible }: { threadId: string; isVisible: boolean }) {
+function ChatViewPanel({ threadId }: { threadId: string }) {
   const threads = useThreadsStore((s) => s.threads)
   const thread = threads.find(t => t.id === threadId)
 

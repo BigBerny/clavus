@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { useThreadsStore, loadThreadMessages, saveThreadMessages } from './threads'
-import { getConfig } from '../gateway/config.ts'
+import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 
 export interface ToolCall {
   id: string
@@ -80,10 +80,8 @@ function extractMedia(content: string): { text: string; media: MediaAttachment[]
   const text = content.replace(MEDIA_RE, (_match, path: string) => {
     const trimmed = path.trim().replace(/^`|`$/g, '')
     if (!trimmed) return ''
-    const config = getConfig()
-    const url = `${config.url || ''}/__openclaw__/assistant-media?source=${encodeURIComponent(trimmed)}&token=${encodeURIComponent(config.token)}`
-    const ext = trimmed.split('.').pop()?.toLowerCase() || ''
-    const type = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext) ? 'image' as const : 'file' as const
+    const url = buildWorkspaceMediaUrl(trimmed)
+    const type = mediaTypeFromPath(trimmed)
     media.push({ type, url, title: trimmed.split('/').pop() })
     return ''
   }).replace(/\n{3,}/g, '\n\n').trim()

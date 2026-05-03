@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
 import nodePath from 'path'
+import { execSync } from 'node:child_process'
 import webpush from 'web-push'
 import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, markOpened, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
 
@@ -13,6 +14,21 @@ const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513
 const THREADS_DATA_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus-data')
 const VAPID_FILE = nodePath.join(THREADS_DATA_DIR, 'vapid.json')
 const PUSH_SUBS_FILE = nodePath.join(THREADS_DATA_DIR, 'push-subscriptions.json')
+const HERMES_API_TARGET = process.env.HERMES_API_URL || 'http://127.0.0.1:8642'
+const BUILD_TIME = new Date().toISOString()
+const GIT_SHA = (() => {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim()
+  } catch {
+    return 'dev'
+  }
+})()
+
+function stripBrowserOrigin(proxy: any) {
+  proxy.on('proxyReq', (proxyReq: any) => {
+    proxyReq.removeHeader('origin')
+  })
+}
 
 // Auto-generate VAPID keys on first run
 function getVapidKeys(): { publicKey: string; privateKey: string } {
@@ -539,6 +555,10 @@ function pushApiPlugin() {
 }
 
 export default defineConfig({
+  define: {
+    __CLAVUS_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+    __CLAVUS_GIT_SHA__: JSON.stringify(GIT_SHA),
+  },
   build: {
     rollupOptions: {
       output: {
@@ -559,18 +579,14 @@ export default defineConfig({
     allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost'],
     proxy: {
       '/v1': {
-        target: 'http://127.0.0.1:18789',
+        target: HERMES_API_TARGET,
         changeOrigin: true,
+        configure: stripBrowserOrigin,
       },
-      '/__openclaw__': {
-        target: 'http://127.0.0.1:18789',
+      '/health': {
+        target: HERMES_API_TARGET,
         changeOrigin: true,
-      },
-      '/gateway-ws': {
-        target: 'http://127.0.0.1:18789',
-        changeOrigin: true,
-        ws: true,
-        rewrite: (path) => path.replace(/^\/gateway-ws/, ''),
+        configure: stripBrowserOrigin,
       },
       '/marksense': {
         target: 'http://127.0.0.1:3700',
@@ -594,9 +610,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: 'auto',
       manifest: {
-        name: 'Clavus — OpenClaw Chat',
+        name: 'Clavus — Hermes Chat',
         short_name: 'Clavus',
-        description: 'Mobile-first chat client for OpenClaw',
+        description: 'Mobile-first chat client for Hermes',
         theme_color: '#111318',
         background_color: '#111318',
         display: 'standalone',

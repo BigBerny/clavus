@@ -1,5 +1,11 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useState, useCallback } from 'react'
-import { gateway } from '../../gateway/ws.ts'
+
+function sendInteractiveMessage(content: string) {
+  window.dispatchEvent(new CustomEvent('clavus:interactive-send', {
+    detail: { content },
+  }))
+}
 
 // ─── Button Group ───────────────────────────────────────────────────────────
 // Renders a row of action buttons sent by the agent
@@ -12,7 +18,7 @@ export interface ButtonAction {
   variant?: 'primary' | 'danger' | 'secondary'
 }
 
-export function ButtonGroup({ buttons, sessionKey }: { buttons: ButtonAction[]; sessionKey?: string }) {
+export function ButtonGroup({ buttons }: { buttons: ButtonAction[]; sessionKey?: string }) {
   const [clicked, setClicked] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -20,19 +26,13 @@ export function ButtonGroup({ buttons, sessionKey }: { buttons: ButtonAction[]; 
     setClicked(btn.action)
     setLoading(true)
     try {
-      if (sessionKey && gateway.connected) {
-        await gateway.rpc('chat.send', {
-          sessionKey,
-          content: btn.action,
-          idempotencyKey: crypto.randomUUID(),
-        })
-      }
+      sendInteractiveMessage(btn.action)
     } catch (e) {
       console.error('[InteractiveBlock] Button action failed:', e)
     } finally {
       setLoading(false)
     }
-  }, [sessionKey])
+  }, [])
 
   const variantClasses: Record<string, string> = {
     primary: 'bg-accent text-white hover:bg-accent/90',
@@ -77,7 +77,7 @@ export interface SelectOption {
   value: string
 }
 
-export function SelectBlock({ prompt, options, sessionKey }: { prompt: string; options: SelectOption[]; sessionKey?: string }) {
+export function SelectBlock({ prompt, options }: { prompt: string; options: SelectOption[]; sessionKey?: string }) {
   const [selected, setSelected] = useState<string>('')
   const [submitted, setSubmitted] = useState(false)
 
@@ -85,17 +85,11 @@ export function SelectBlock({ prompt, options, sessionKey }: { prompt: string; o
     if (!selected) return
     setSubmitted(true)
     try {
-      if (sessionKey && gateway.connected) {
-        await gateway.rpc('chat.send', {
-          sessionKey,
-          content: selected,
-          idempotencyKey: crypto.randomUUID(),
-        })
-      }
+      sendInteractiveMessage(selected)
     } catch (e) {
       console.error('[InteractiveBlock] Select action failed:', e)
     }
-  }, [selected, sessionKey])
+  }, [selected])
 
   return (
     <div className="my-2 space-y-2">
@@ -127,7 +121,7 @@ export function SelectBlock({ prompt, options, sessionKey }: { prompt: string; o
 // ─── Confirm/Cancel Block ───────────────────────────────────────────────────
 // Format: :::confirm ... :::
 
-export function ConfirmBlock({ message, confirmLabel, cancelLabel, approvalId, sessionKey }: {
+export function ConfirmBlock({ message, confirmLabel, cancelLabel }: {
   message: string
   confirmLabel?: string
   cancelLabel?: string
@@ -140,25 +134,14 @@ export function ConfirmBlock({ message, confirmLabel, cancelLabel, approvalId, s
   const handleResolve = useCallback(async (approved: boolean) => {
     setLoading(true)
     try {
-      if (approvalId && gateway.connected) {
-        await gateway.rpc('exec.approval.respond', {
-          id: approvalId,
-          approved,
-        })
-      } else if (sessionKey && gateway.connected) {
-        await gateway.rpc('chat.send', {
-          sessionKey,
-          content: approved ? (confirmLabel || 'Yes') : (cancelLabel || 'No'),
-          idempotencyKey: crypto.randomUUID(),
-        })
-      }
+      sendInteractiveMessage(approved ? (confirmLabel || 'Yes') : (cancelLabel || 'No'))
       setResolved(approved ? 'approved' : 'denied')
     } catch (e) {
       console.error('[InteractiveBlock] Confirm action failed:', e)
     } finally {
       setLoading(false)
     }
-  }, [approvalId, sessionKey, confirmLabel, cancelLabel])
+  }, [confirmLabel, cancelLabel])
 
   return (
     <div className="my-2 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-500/8 p-3 space-y-2.5">

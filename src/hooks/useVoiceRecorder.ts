@@ -109,7 +109,7 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
         const keyterms = [
           'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
           'Typewise', 'David Eberle',
-          'Jane', 'Clavus', 'OpenClaw', 'Marksense',
+          'Jane', 'Clavus', 'Hermes', 'Marksense',
           'Dennlerstrasse', 'Buckhauserstrasse',
           'Wollishofen', 'Rodersdorf', 'Rütihof',
         ]

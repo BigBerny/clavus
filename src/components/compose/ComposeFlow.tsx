@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { getConfig } from '../../gateway/config'
+import { sendChatCompletion } from '../../gateway/chat'
 
 type ComposeChannel = 'messaging' | 'slack' | 'email'
 
@@ -117,28 +118,14 @@ export function ComposeFlow({ channel, onClose }: Props) {
     async function reformulate() {
       try {
         const gwConfig = getConfig()
-        const res = await fetch(`${gwConfig.url}/v1/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${gwConfig.token}`,
-            'x-openclaw-agent-id': gwConfig.agentId,
-          },
-          body: JSON.stringify({
-            model: `openclaw:${gwConfig.agentId}`,
-            stream: false,
-            messages: [
-              { role: 'system', content: config.prompt },
-              { role: 'user', content: transcription },
-            ],
-            max_tokens: 2000,
-          }),
-          signal: abortController.signal,
-        })
-
-        if (!res.ok) throw new Error(`Failed: ${res.status}`)
-        const data = await res.json()
-        const text = data.choices?.[0]?.message?.content?.trim()
+        const text = await sendChatCompletion(
+          gwConfig,
+          [
+            { role: 'system', content: config.prompt },
+            { role: 'user', content: transcription },
+          ],
+          abortController.signal,
+        )
         if (text) {
           setComposedText(text)
           // Auto-copy to clipboard
