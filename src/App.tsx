@@ -149,6 +149,25 @@ export function App() {
     [tabs]
   )
 
+  const logKeyboardScroll = useCallback((event: string, details: Record<string, unknown> = {}) => {
+    const container = scrollContainerRef.current
+    const active = document.activeElement as HTMLElement | null
+    console.log('[CLAVUS-KB-SCROLL]', event, {
+      visiblePanel,
+      tabCount: sortedTabs.length,
+      keyboardOpen: document.documentElement.hasAttribute('data-keyboard-open'),
+      guardMsRemaining: Math.max(0, keyboardScrollGuardUntil.current - Date.now()),
+      isProgrammaticScroll: isProgrammaticScroll.current,
+      isUserHorizontalGesture: isUserHorizontalGesture.current,
+      activeTag: active?.tagName ?? null,
+      activeLabel: active?.getAttribute('aria-label') ?? active?.getAttribute('placeholder') ?? null,
+      scrollLeft: container?.scrollLeft ?? null,
+      clientWidth: container?.clientWidth ?? null,
+      scrollWidth: container?.scrollWidth ?? null,
+      ...details,
+    })
+  }, [sortedTabs.length, visiblePanel])
+
   const handleTokenSave = useCallback((token: string) => {
     setGatewayToken(token)
     setNeedsToken(false)
@@ -358,16 +377,33 @@ export function App() {
     const preserveVisiblePanel = () => {
       keyboardScrollGuardUntil.current = Date.now() + 700
 
-      if (isUserHorizontalGesture.current) return
+      if (isUserHorizontalGesture.current) {
+        logKeyboardScroll('preserve-skip-user-gesture')
+        return
+      }
 
       const container = scrollContainerRef.current
       const panel = panelRefs.current.get(visiblePanel)
-      if (!container || !panel) return
+      if (!container || !panel) {
+        logKeyboardScroll('preserve-missing-target', {
+          hasContainer: Boolean(container),
+          hasPanel: Boolean(panel),
+        })
+        return
+      }
 
       isProgrammaticScroll.current = true
+      logKeyboardScroll('preserve-current-panel', {
+        targetPanel: visiblePanel,
+        targetOffsetLeft: panel.offsetLeft,
+        beforeScrollLeft: container.scrollLeft,
+      })
       container.scrollLeft = panel.offsetLeft
       requestAnimationFrame(() => {
         isProgrammaticScroll.current = false
+        logKeyboardScroll('preserve-current-panel-done', {
+          afterScrollLeft: container.scrollLeft,
+        })
       })
     }
 
@@ -375,12 +411,17 @@ export function App() {
       const target = event.target as HTMLElement | null
       if (!target) return
       if (target.matches('input, textarea, [contenteditable="true"]')) {
+        logKeyboardScroll('focusin', {
+          targetTag: target.tagName,
+          targetLabel: target.getAttribute('aria-label') ?? target.getAttribute('placeholder') ?? null,
+        })
         preserveVisiblePanel()
       }
     }
 
     const observer = new MutationObserver((mutations) => {
       if (!mutations.some((m) => m.attributeName === 'data-keyboard-open')) return
+      logKeyboardScroll('keyboard-attr-change')
       preserveVisiblePanel()
     })
 
@@ -390,7 +431,7 @@ export function App() {
       observer.disconnect()
       document.removeEventListener('focusin', handleFocusIn)
     }
-  }, [visiblePanel])
+  }, [logKeyboardScroll, visiblePanel])
 
   // Detect which panel is visible using scroll position
   useEffect(() => {
@@ -400,30 +441,55 @@ export function App() {
     let scrollTimeout: ReturnType<typeof setTimeout> | null = null
 
     const handleScroll = () => {
-      if (isProgrammaticScroll.current) return
+      if (isProgrammaticScroll.current) {
+        logKeyboardScroll('scroll-ignore-programmatic')
+        return
+      }
       const active = document.activeElement as HTMLElement | null
       const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
-      if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) return
-      if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) return
+      if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) {
+        logKeyboardScroll('scroll-ignore-focused-input')
+        return
+      }
+      if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) {
+        logKeyboardScroll('scroll-ignore-guard-window')
+        return
+      }
 
       if (scrollTimeout) clearTimeout(scrollTimeout)
+      logKeyboardScroll('scroll-schedule')
       scrollTimeout = setTimeout(() => {
         const active = document.activeElement as HTMLElement | null
         const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
-        if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) return
-        if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) return
+        if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) {
+          logKeyboardScroll('scroll-debounce-ignore-focused-input')
+          return
+        }
+        if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) {
+          logKeyboardScroll('scroll-debounce-ignore-guard-window')
+          return
+        }
         const containerWidth = container.clientWidth
-        if (!containerWidth) return
+        if (!containerWidth) {
+          logKeyboardScroll('scroll-debounce-ignore-no-width')
+          return
+        }
         const scrollLeft = container.scrollLeft
         const panelIndex = Math.round(scrollLeft / containerWidth)
+        const rawPanelIndex = scrollLeft / containerWidth
+        const nextPanel = panelIndex >= sortedTabs.length ? 'home' : sortedTabs[panelIndex]?.id
 
         // Total panels: sortedTabs.length + 1 (home)
         if (panelIndex >= sortedTabs.length) {
+          logKeyboardScroll('scroll-accept-home', { panelIndex, rawPanelIndex })
           setVisiblePanel('home')
         } else {
           const tab = sortedTabs[panelIndex]
           if (tab) {
+            logKeyboardScroll('scroll-accept-tab', { panelIndex, rawPanelIndex, nextPanel })
             setVisiblePanel(tab.id)
+          } else {
+            logKeyboardScroll('scroll-debounce-ignore-missing-tab', { panelIndex, rawPanelIndex })
           }
         }
       }, 150)
@@ -434,7 +500,7 @@ export function App() {
       container.removeEventListener('scroll', handleScroll)
       if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [sortedTabs])
+  }, [logKeyboardScroll, sortedTabs])
 
   // Scroll to a specific tab panel
   const scrollToTab = useCallback((tabId: string) => {
@@ -615,16 +681,19 @@ export function App() {
       userGestureEndTimer.current = null
     }
     isUserHorizontalGesture.current = true
-  }, [])
+    logKeyboardScroll('gesture-start')
+  }, [logKeyboardScroll])
 
   const markHorizontalGestureEnd = useCallback(() => {
     if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
+    logKeyboardScroll('gesture-end-schedule-clear')
     // Keep accepting inertial/snap scroll events after the finger leaves.
     userGestureEndTimer.current = setTimeout(() => {
       isUserHorizontalGesture.current = false
       userGestureEndTimer.current = null
+      logKeyboardScroll('gesture-end-cleared')
     }, 400)
-  }, [])
+  }, [logKeyboardScroll])
 
   useEffect(() => {
     return () => {
