@@ -370,11 +370,6 @@ pre code.hljs {
   transition: transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1), opacity 0.35s ease, border-radius 0.35s ease;
 }
 
-/* When keyboard is open, disable scroll-snap to prevent layout fighting */
-html[data-keyboard-open="true"] .snap-x {
-  scroll-snap-type: none;
-}
-
 /* Theme transition (no flash on load, smooth after) */
 html.theme-ready,
 html.theme-ready *,
