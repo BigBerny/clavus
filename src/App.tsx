@@ -204,6 +204,41 @@ export function App() {
     })
   }, [logKeyboardScroll, visiblePanel])
 
+  const pinVisiblePanelIfNeeded = useCallback((reason: string) => {
+    if (isUserHorizontalGesture.current) return false
+
+    const container = scrollContainerRef.current
+    const panel = panelRefs.current.get(visiblePanel)
+    if (!container || !panel) {
+      logKeyboardScroll('pin-missing-target', {
+        reason,
+        hasContainer: Boolean(container),
+        hasPanel: Boolean(panel),
+      })
+      return false
+    }
+
+    const targetLeft = panel.offsetLeft
+    if (Math.abs(container.scrollLeft - targetLeft) < 2) return false
+
+    isProgrammaticScroll.current = true
+    logKeyboardScroll('pin-visible-panel', {
+      reason,
+      targetPanel: visiblePanel,
+      targetOffsetLeft: targetLeft,
+      beforeScrollLeft: container.scrollLeft,
+    })
+    container.scrollLeft = targetLeft
+    requestAnimationFrame(() => {
+      isProgrammaticScroll.current = false
+      logKeyboardScroll('pin-visible-panel-done', {
+        reason,
+        afterScrollLeft: container.scrollLeft,
+      })
+    })
+    return true
+  }, [logKeyboardScroll, visiblePanel])
+
   useEffect(() => {
     logKeyboardScroll('visible-panel-change')
   }, [logKeyboardScroll])
@@ -455,6 +490,7 @@ export function App() {
       const isNativeShell = document.documentElement.hasAttribute('data-native')
       if (isNativeShell && !isUserHorizontalGesture.current) {
         logKeyboardScroll('scroll-ignore-native-no-gesture')
+        pinVisiblePanelIfNeeded('native-no-gesture-scroll')
         return
       }
       const active = document.activeElement as HTMLElement | null
@@ -474,6 +510,7 @@ export function App() {
         const isNativeShell = document.documentElement.hasAttribute('data-native')
         if (isNativeShell && !isUserHorizontalGesture.current) {
           logKeyboardScroll('scroll-debounce-ignore-native-no-gesture')
+          pinVisiblePanelIfNeeded('native-no-gesture-scroll-debounce')
           return
         }
         const active = document.activeElement as HTMLElement | null
@@ -517,7 +554,7 @@ export function App() {
       container.removeEventListener('scroll', handleScroll)
       if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [logKeyboardScroll, sortedTabs])
+  }, [logKeyboardScroll, pinVisiblePanelIfNeeded, sortedTabs])
 
   // When tabs load/sync after startup, Home moves further to the right. Keep
   // the currently selected panel pinned to its DOM position unless the user is
@@ -531,24 +568,9 @@ export function App() {
 
     requestAnimationFrame(() => {
       if (isUserHorizontalGesture.current) return
-      const targetLeft = panel.offsetLeft
-      if (Math.abs(container.scrollLeft - targetLeft) < 2) return
-
-      isProgrammaticScroll.current = true
-      logKeyboardScroll('layout-pin-visible-panel', {
-        targetPanel: visiblePanel,
-        targetOffsetLeft: targetLeft,
-        beforeScrollLeft: container.scrollLeft,
-      })
-      container.scrollLeft = targetLeft
-      requestAnimationFrame(() => {
-        isProgrammaticScroll.current = false
-        logKeyboardScroll('layout-pin-visible-panel-done', {
-          afterScrollLeft: container.scrollLeft,
-        })
-      })
+      pinVisiblePanelIfNeeded('layout-effect')
     })
-  }, [logKeyboardScroll, sortedTabs.length, visiblePanel])
+  }, [pinVisiblePanelIfNeeded, sortedTabs.length, visiblePanel])
 
   // Scroll to a specific tab panel
   const scrollToTab = useCallback((tabId: string) => {
