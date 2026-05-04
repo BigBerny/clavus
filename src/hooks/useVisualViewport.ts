@@ -31,17 +31,38 @@ export function useVisualViewport() {
   useEffect(() => {
     const root = document.documentElement
 
-    // ---- Native (Capacitor): keyboard events only, zero layout JS ----
+    // ---- Native (Capacitor with Keyboard.resize: 'none') ----
+    //
+    // `keyboardWillShow` fires BEFORE iOS begins the keyboard animation
+    // and provides the final keyboard height. We set `--kb-height` in the
+    // same frame so the CSS rule in index.css (see `html[data-native]`)
+    // shrinks #root instantly. A short CSS transition on #root height
+    // keeps the motion smooth without adding perceivable delay.
     if (isNative) {
+      root.style.setProperty('--kb-height', '0px')
       let unsub: (() => void) | null = null
       subscribeKeyboard({
-        onWillShow: () => root.setAttribute('data-keyboard-open', 'true'),
-        onWillHide: () => root.removeAttribute('data-keyboard-open'),
+        onWillShow: (h) => {
+          root.style.setProperty('--kb-height', `${h}px`)
+          root.setAttribute('data-keyboard-open', 'true')
+        },
+        onDidShow: (h) => {
+          root.style.setProperty('--kb-height', `${h}px`)
+        },
+        onWillHide: () => {
+          root.style.setProperty('--kb-height', '0px')
+          root.removeAttribute('data-keyboard-open')
+        },
+        onDidHide: () => {
+          root.style.setProperty('--kb-height', '0px')
+          root.removeAttribute('data-keyboard-open')
+        },
       }).then((u) => {
         unsub = u
       })
       return () => {
         unsub?.()
+        root.style.removeProperty('--kb-height')
         root.removeAttribute('data-keyboard-open')
       }
     }

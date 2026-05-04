@@ -68,17 +68,24 @@ body {
 }
 
 /*
- * Capacitor (iOS WKWebView) with `Keyboard.resize: 'native'`:
- * The WebView shrinks itself when the keyboard opens, so `100dvh` already
- * reflects the visible area — no JS layout compensation needed.
+ * Capacitor (iOS WKWebView) with `Keyboard.resize: 'none'`:
  *
- * We only neutralize the `translateY(--vv-offset)` trick that the PWA path
- * uses to counteract iOS Safari scrolling focused inputs into view. Inside
- * WKWebView that doesn't happen, but useVisualViewport doesn't set
- * `--vv-offset` on native at all. This rule is a belt-and-braces safeguard
- * against any stray transform being applied during the keyboard animation.
+ * The WebView stays full-height. Our JS handler (useVisualViewport.ts)
+ * sets `--kb-height` on the `keyboardWillShow` event, which fires BEFORE
+ * iOS begins its keyboard animation. The CSS transition on #root height
+ * then runs in lockstep with the iOS keyboard rising, so the composer
+ * slides up together with the keyboard rather than popping up at the end.
+ *
+ * Duration and curve are tuned to match iOS' own keyboard animation
+ * (~250ms, ease-in-out-ish). If they drift apart the composer either
+ * pulls ahead of the keyboard or trails behind it.
+ *
+ * Transform is neutralized because the PWA-only `--vv-offset` translateY
+ * trick doesn't apply inside WKWebView (no focus scroll-into-view).
  */
 html[data-native="true"] #root {
+  height: calc(var(--vvh, 100dvh) - var(--kb-height, 0px));
+  transition: height 250ms cubic-bezier(0.17, 0.59, 0.4, 0.77);
   transform: none;
 }
 
