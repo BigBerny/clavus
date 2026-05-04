@@ -519,6 +519,37 @@ export function App() {
     }
   }, [logKeyboardScroll, sortedTabs])
 
+  // When tabs load/sync after startup, Home moves further to the right. Keep
+  // the currently selected panel pinned to its DOM position unless the user is
+  // actively swiping. Without this, the viewport can visually land on the last
+  // conversation while state still says `visiblePanel === 'home'`.
+  useEffect(() => {
+    if (isUserHorizontalGesture.current) return
+    const container = scrollContainerRef.current
+    const panel = panelRefs.current.get(visiblePanel)
+    if (!container || !panel) return
+
+    requestAnimationFrame(() => {
+      if (isUserHorizontalGesture.current) return
+      const targetLeft = panel.offsetLeft
+      if (Math.abs(container.scrollLeft - targetLeft) < 2) return
+
+      isProgrammaticScroll.current = true
+      logKeyboardScroll('layout-pin-visible-panel', {
+        targetPanel: visiblePanel,
+        targetOffsetLeft: targetLeft,
+        beforeScrollLeft: container.scrollLeft,
+      })
+      container.scrollLeft = targetLeft
+      requestAnimationFrame(() => {
+        isProgrammaticScroll.current = false
+        logKeyboardScroll('layout-pin-visible-panel-done', {
+          afterScrollLeft: container.scrollLeft,
+        })
+      })
+    })
+  }, [logKeyboardScroll, sortedTabs.length, visiblePanel])
+
   // Scroll to a specific tab panel
   const scrollToTab = useCallback((tabId: string) => {
     const container = scrollContainerRef.current
