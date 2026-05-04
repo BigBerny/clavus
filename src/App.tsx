@@ -87,6 +87,11 @@ export function App() {
   const panelRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   // Flag to prevent scroll handler from firing during programmatic scrolls
   const isProgrammaticScroll = useRef(false)
+  // Keyboard focus can emit a horizontal scroll without a user swipe. Ignore
+  // those during the short keyboard transition, but still allow real gestures.
+  const keyboardScrollGuardUntil = useRef(0)
+  const isUserHorizontalGesture = useRef(false)
+  const userGestureEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
 
@@ -345,6 +350,32 @@ export function App() {
     }
   }, [needsToken, sortedTabs])
 
+  // Keep Home/current panel stable while iOS focuses the input and starts the
+  // keyboard animation. The horizontal snap container can briefly emit a
+  // scrollLeft that looks like "one panel left"; without this guard, that fake
+  // scroll changes visiblePanel to the previous conversation.
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      if (!mutations.some((m) => m.attributeName === 'data-keyboard-open')) return
+
+      keyboardScrollGuardUntil.current = Date.now() + 550
+      if (isUserHorizontalGesture.current) return
+
+      const container = scrollContainerRef.current
+      const panel = panelRefs.current.get(visiblePanel)
+      if (!container || !panel) return
+
+      isProgrammaticScroll.current = true
+      container.scrollLeft = panel.offsetLeft
+      requestAnimationFrame(() => {
+        isProgrammaticScroll.current = false
+      })
+    })
+
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-keyboard-open'] })
+    return () => observer.disconnect()
+  }, [visiblePanel])
+
   // Detect which panel is visible using scroll position
   useEffect(() => {
     const container = scrollContainerRef.current
@@ -354,9 +385,11 @@ export function App() {
 
     const handleScroll = () => {
       if (isProgrammaticScroll.current) return
+      if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) return
 
       if (scrollTimeout) clearTimeout(scrollTimeout)
       scrollTimeout = setTimeout(() => {
+        if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) return
         const containerWidth = container.clientWidth
         if (!containerWidth) return
         const scrollLeft = container.scrollLeft
@@ -554,6 +587,29 @@ export function App() {
     }
   }, [closeTab, visiblePanel, sortedTabs])
 
+  const markHorizontalGestureStart = useCallback(() => {
+    if (userGestureEndTimer.current) {
+      clearTimeout(userGestureEndTimer.current)
+      userGestureEndTimer.current = null
+    }
+    isUserHorizontalGesture.current = true
+  }, [])
+
+  const markHorizontalGestureEnd = useCallback(() => {
+    if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
+    // Keep accepting inertial/snap scroll events after the finger leaves.
+    userGestureEndTimer.current = setTimeout(() => {
+      isUserHorizontalGesture.current = false
+      userGestureEndTimer.current = null
+    }, 400)
+  }, [])
+
+  useEffect(() => {
+    return () => {
+      if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
+    }
+  }, [])
+
   if (needsToken) {
     return <TokenPrompt onSave={handleTokenSave} />
   }
@@ -661,6 +717,12 @@ export function App() {
           <div
             ref={scrollContainerRef}
             className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
+            onPointerDown={markHorizontalGestureStart}
+            onPointerUp={markHorizontalGestureEnd}
+            onPointerCancel={markHorizontalGestureEnd}
+            onTouchStart={markHorizontalGestureStart}
+            onTouchEnd={markHorizontalGestureEnd}
+            onTouchCancel={markHorizontalGestureEnd}
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
