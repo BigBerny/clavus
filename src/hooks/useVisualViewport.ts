@@ -7,13 +7,11 @@ import { isNative, subscribeKeyboard } from '../lib/native'
  * Two very different implementations depending on the runtime:
  *
  * - Capacitor / iOS WKWebView (`isNative`):
- *     The WebView shrinks itself when the keyboard opens (Capacitor
- *     `Keyboard.resize: 'native'`), so `100dvh` / `100vh` already reflect
- *     the visible area. We do NOT touch any CSS variables or scroll
- *     positions — the native resize does the layout work. The hook's
- *     sole responsibility is toggling `data-keyboard-open` via the
- *     deterministic `keyboardWillShow` / `keyboardWillHide` events so
- *     the app (chat auto-scroll, etc.) can react.
+ *     The WebView is resized by the Capacitor keyboard plugin
+ *     (`Keyboard.resize: 'native'`), so `100dvh` / `100vh` already reflect
+ *     the visible area after the native resize. This hook deliberately does
+ *     not set layout CSS variables or scroll the page on native; it only
+ *     toggles `data-keyboard-open` for app logic such as chat auto-scroll.
  *
  * - iOS Safari PWA / web:
  *     The browser scrolls focused inputs into view, shifts
@@ -31,30 +29,15 @@ export function useVisualViewport() {
   useEffect(() => {
     const root = document.documentElement
 
-    // ---- Native (Capacitor with Keyboard.resize: 'none') ----
-    //
-    // `keyboardWillShow` fires BEFORE iOS begins the keyboard animation
-    // and provides the final keyboard height. We set `--kb-height` in the
-    // same frame so the CSS rule in index.css (see `html[data-native]`)
-    // shrinks #root instantly. A short CSS transition on #root height
-    // keeps the motion smooth without adding perceivable delay.
+    // ---- Native (Capacitor): keyboard state only, zero layout JS ----
     if (isNative) {
-      root.style.setProperty('--kb-height', '0px')
       let unsub: (() => void) | null = null
       subscribeKeyboard({
-        onWillShow: (h) => {
-          root.style.setProperty('--kb-height', `${h}px`)
-          root.setAttribute('data-keyboard-open', 'true')
-        },
-        onDidShow: (h) => {
-          root.style.setProperty('--kb-height', `${h}px`)
-        },
+        onWillShow: () => root.setAttribute('data-keyboard-open', 'true'),
         onWillHide: () => {
-          root.style.setProperty('--kb-height', '0px')
           root.removeAttribute('data-keyboard-open')
         },
         onDidHide: () => {
-          root.style.setProperty('--kb-height', '0px')
           root.removeAttribute('data-keyboard-open')
         },
       }).then((u) => {
@@ -62,7 +45,6 @@ export function useVisualViewport() {
       })
       return () => {
         unsub?.()
-        root.style.removeProperty('--kb-height')
         root.removeAttribute('data-keyboard-open')
       }
     }

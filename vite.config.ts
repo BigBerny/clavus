@@ -45,6 +45,33 @@ const vapidKeys = getVapidKeys()
 // Apple Push requires origin URL as subject (not mailto:) for web.push.apple.com
 webpush.setVapidDetails('https://mac-mini-von-janis.taild2ad59.ts.net:5173', vapidKeys.publicKey, vapidKeys.privateKey)
 
+const phoneServerOptions = {
+  host: '0.0.0.0',
+  port: 5173,
+  https: {
+    cert: './mac-mini-von-janis.taild2ad59.ts.net.crt',
+    key: './mac-mini-von-janis.taild2ad59.ts.net.key',
+  },
+  allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost', 'openclaw.random-hamster.win'],
+  proxy: {
+    '/v1': {
+      target: HERMES_API_TARGET,
+      changeOrigin: true,
+      configure: stripBrowserOrigin,
+    },
+    '/health': {
+      target: HERMES_API_TARGET,
+      changeOrigin: true,
+      configure: stripBrowserOrigin,
+    },
+    '/marksense': {
+      target: 'http://127.0.0.1:3700',
+      changeOrigin: true,
+      rewrite: (path: string) => path.replace(/^\/marksense/, ''),
+    },
+  },
+}
+
 function loadPushSubscriptions(): webpush.PushSubscription[] {
   if (!fs.existsSync(PUSH_SUBS_FILE)) return []
   try { return JSON.parse(fs.readFileSync(PUSH_SUBS_FILE, 'utf-8')) } catch { return [] }
@@ -84,16 +111,14 @@ function threadsApiPlugin() {
     fs.mkdirSync(messagesDir, { recursive: true })
   }
 
-  return {
-    name: 'threads-api',
-    configureServer(server: any) {
-      async function readBody(req: any): Promise<string> {
-        const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(Buffer.from(chunk))
-        return Buffer.concat(chunks).toString('utf-8')
-      }
+  async function readBody(req: any): Promise<string> {
+    const chunks: Buffer[] = []
+    for await (const chunk of req) chunks.push(Buffer.from(chunk))
+    return Buffer.concat(chunks).toString('utf-8')
+  }
 
-      server.middlewares.use(async (req: any, res: any, next: any) => {
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/threads')) return next()
 
         res.setHeader('Content-Type', 'application/json')
@@ -208,157 +233,166 @@ function threadsApiPlugin() {
           res.statusCode = 500
           res.end(JSON.stringify({ error: err.message }))
         }
-      })
-    },
+    })
+  }
+
+  return {
+    name: 'threads-api',
+    configureServer: attach,
+    configurePreviewServer: attach,
   }
 }
 
 function workspacePlugin() {
+  const attach = (server: any) => {
+    server.middlewares.use((req: any, res: any, next: any) => {
+      if (!req.url?.startsWith('/api/workspace')) return next()
+
+      const rawRequest = req.url.replace('/api/workspace', '') || '/'
+      const rawMode = rawRequest.startsWith('/raw/')
+      const relPath = decodeURIComponent(rawMode ? rawRequest.replace('/raw', '') : rawRequest)
+      const absPath = nodePath.join(WORKSPACE_ROOT, relPath)
+
+      if (!absPath.startsWith(WORKSPACE_ROOT)) {
+        res.statusCode = 403
+        res.end(JSON.stringify({ error: 'Forbidden' }))
+        return
+      }
+
+      try {
+        const stat = fs.statSync(absPath)
+        if (stat.isDirectory()) {
+          const entries = fs.readdirSync(absPath, { withFileTypes: true })
+            .filter(e => !e.name.startsWith('.'))
+            .map(e => ({
+              name: e.name,
+              type: e.isDirectory() ? 'dir' : 'file',
+              size: e.isFile() ? fs.statSync(nodePath.join(absPath, e.name)).size : undefined,
+            }))
+            .sort((a, b) => {
+              if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+              return a.name.localeCompare(b.name)
+            })
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ path: relPath, entries }))
+        } else {
+          if (rawMode) {
+            const ext = nodePath.extname(absPath).slice(1).toLowerCase()
+            const mimeTypes: Record<string, string> = {
+              png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
+              pdf: 'application/pdf', csv: 'text/csv; charset=utf-8', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
+              json: 'application/json; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            }
+            res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
+            res.setHeader('Content-Disposition', `inline; filename="${nodePath.basename(absPath).replace(/"/g, '')}"`)
+            fs.createReadStream(absPath).pipe(res)
+          } else {
+            const content = fs.readFileSync(absPath, 'utf-8')
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ path: relPath, content, encoding: 'utf-8', size: stat.size }))
+          }
+        }
+      } catch {
+        res.statusCode = 404
+        res.end(JSON.stringify({ error: 'Not found' }))
+      }
+    })
+  }
+
   return {
     name: 'workspace-api',
-    configureServer(server: any) {
-      server.middlewares.use((req: any, res: any, next: any) => {
-        if (!req.url?.startsWith('/api/workspace')) return next()
-
-        const rawRequest = req.url.replace('/api/workspace', '') || '/'
-        const rawMode = rawRequest.startsWith('/raw/')
-        const relPath = decodeURIComponent(rawMode ? rawRequest.replace('/raw', '') : rawRequest)
-        const absPath = nodePath.join(WORKSPACE_ROOT, relPath)
-
-        if (!absPath.startsWith(WORKSPACE_ROOT)) {
-          res.statusCode = 403
-          res.end(JSON.stringify({ error: 'Forbidden' }))
-          return
-        }
-
-        try {
-          const stat = fs.statSync(absPath)
-          if (stat.isDirectory()) {
-            const entries = fs.readdirSync(absPath, { withFileTypes: true })
-              .filter(e => !e.name.startsWith('.'))
-              .map(e => ({
-                name: e.name,
-                type: e.isDirectory() ? 'dir' : 'file',
-                size: e.isFile() ? fs.statSync(nodePath.join(absPath, e.name)).size : undefined,
-              }))
-              .sort((a, b) => {
-                if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
-                return a.name.localeCompare(b.name)
-              })
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ path: relPath, entries }))
-          } else {
-            if (rawMode) {
-              const ext = nodePath.extname(absPath).slice(1).toLowerCase()
-              const mimeTypes: Record<string, string> = {
-                png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
-                pdf: 'application/pdf', csv: 'text/csv; charset=utf-8', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
-                json: 'application/json; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-              }
-              res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
-              res.setHeader('Content-Disposition', `inline; filename="${nodePath.basename(absPath).replace(/"/g, '')}"`)
-              fs.createReadStream(absPath).pipe(res)
-            } else {
-              const content = fs.readFileSync(absPath, 'utf-8')
-              res.setHeader('Content-Type', 'application/json')
-              res.end(JSON.stringify({ path: relPath, content, encoding: 'utf-8', size: stat.size }))
-            }
-          }
-        } catch {
-          res.statusCode = 404
-          res.end(JSON.stringify({ error: 'Not found' }))
-        }
-      })
-    },
+    configureServer: attach,
+    configurePreviewServer: attach,
   }
 }
 
 function elevenLabsProxy() {
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (!req.url?.startsWith('/elevenlabs/')) return next()
+
+      const targetPath = req.url.replace(/^\/elevenlabs/, '')
+      const targetUrl = `https://api.elevenlabs.io${targetPath}`
+
+      try {
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(Buffer.from(chunk))
+        const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined
+
+        const headers: Record<string, string> = { 'xi-api-key': ELEVENLABS_KEY }
+        if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
+
+        const resp = await fetch(targetUrl, {
+          method: req.method || 'POST',
+          headers,
+          body,
+        })
+
+        res.statusCode = resp.status
+        const ct = resp.headers.get('content-type')
+        if (ct) res.setHeader('Content-Type', ct)
+
+        if (resp.body) {
+          const reader = resp.body.getReader()
+          const pump = async () => {
+            while (true) {
+              const { done, value } = await reader.read()
+              if (done) { res.end(); break }
+              res.write(value)
+            }
+          }
+          await pump()
+        } else {
+          res.end()
+        }
+      } catch (err: any) {
+        res.statusCode = 502
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+  }
+
   return {
     name: 'elevenlabs-proxy',
-    configureServer(server: any) {
-      server.middlewares.use(async (req: any, res: any, next: any) => {
-        if (!req.url?.startsWith('/elevenlabs/')) return next()
-
-        const targetPath = req.url.replace(/^\/elevenlabs/, '')
-        const targetUrl = `https://api.elevenlabs.io${targetPath}`
-
-        try {
-          const chunks: Buffer[] = []
-          for await (const chunk of req) chunks.push(Buffer.from(chunk))
-          const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined
-
-          const headers: Record<string, string> = { 'xi-api-key': ELEVENLABS_KEY }
-          if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
-
-          const resp = await fetch(targetUrl, {
-            method: req.method || 'POST',
-            headers,
-            body,
-          })
-
-          res.statusCode = resp.status
-          const ct = resp.headers.get('content-type')
-          if (ct) res.setHeader('Content-Type', ct)
-
-          if (resp.body) {
-            const reader = resp.body.getReader()
-            const pump = async () => {
-              while (true) {
-                const { done, value } = await reader.read()
-                if (done) { res.end(); break }
-                res.write(value)
-              }
-            }
-            await pump()
-          } else {
-            res.end()
-          }
-        } catch (err: any) {
-          res.statusCode = 502
-          res.end(JSON.stringify({ error: err.message }))
-        }
-      })
-    },
+    configureServer: attach,
+    configurePreviewServer: attach,
   }
 }
 
 function recipesApiPlugin() {
-  return {
-    name: 'recipes-api',
-    configureServer(server: any) {
-      async function readBody(req: any): Promise<string> {
-        const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(Buffer.from(chunk))
-        return Buffer.concat(chunks).toString('utf-8')
-      }
+  async function readBody(req: any): Promise<string> {
+    const chunks: Buffer[] = []
+    for await (const chunk of req) chunks.push(Buffer.from(chunk))
+    return Buffer.concat(chunks).toString('utf-8')
+  }
 
-      async function downloadImage(imageUrl: string): Promise<string> {
-        try {
-          const response = await fetch(imageUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Clavus/1.0)' },
-            redirect: 'follow',
-          })
-          if (!response.ok) return ''
-          const contentType = response.headers.get('content-type') || ''
-          let ext = '.jpg'
-          if (contentType.includes('png')) ext = '.png'
-          else if (contentType.includes('webp')) ext = '.webp'
-          else if (contentType.includes('gif')) ext = '.gif'
-          const fileName = `recipe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
-          const filePath = nodePath.join(IMAGES_DIR, fileName)
-          const buffer = Buffer.from(await response.arrayBuffer())
-          fs.writeFileSync(filePath, buffer)
-          return fileName
-        } catch {
-          return ''
-        }
-      }
+  async function downloadImage(imageUrl: string): Promise<string> {
+    try {
+      const response = await fetch(imageUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Clavus/1.0)' },
+        redirect: 'follow',
+      })
+      if (!response.ok) return ''
+      const contentType = response.headers.get('content-type') || ''
+      let ext = '.jpg'
+      if (contentType.includes('png')) ext = '.png'
+      else if (contentType.includes('webp')) ext = '.webp'
+      else if (contentType.includes('gif')) ext = '.gif'
+      const fileName = `recipe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
+      const filePath = nodePath.join(IMAGES_DIR, fileName)
+      const buffer = Buffer.from(await response.arrayBuffer())
+      fs.writeFileSync(filePath, buffer)
+      return fileName
+    } catch {
+      return ''
+    }
+  }
 
-      // Serve recipe images at /recipe-images/
-      server.middlewares.use((req: any, res: any, next: any) => {
+  const attach = (server: any) => {
+    // Serve recipe images at /recipe-images/
+    server.middlewares.use((req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/recipe-images/')) return next()
         const fileName = decodeURIComponent(req.url.replace('/recipe-images/', ''))
         const filePath = nodePath.join(IMAGES_DIR, fileName)
@@ -369,9 +403,9 @@ function recipesApiPlugin() {
         res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream')
         res.setHeader('Cache-Control', 'public, max-age=86400')
         fs.createReadStream(filePath).pipe(res)
-      })
+    })
 
-      server.middlewares.use(async (req: any, res: any, next: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/recipes')) return next()
 
         res.setHeader('Content-Type', 'application/json')
@@ -496,22 +530,25 @@ function recipesApiPlugin() {
           res.statusCode = 500
           res.end(JSON.stringify({ error: err.message }))
         }
-      })
-    },
+    })
+  }
+
+  return {
+    name: 'recipes-api',
+    configureServer: attach,
+    configurePreviewServer: attach,
   }
 }
 
 function pushApiPlugin() {
-  return {
-    name: 'push-api',
-    configureServer(server: any) {
-      async function readBody(req: any): Promise<string> {
-        const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(Buffer.from(chunk))
-        return Buffer.concat(chunks).toString('utf-8')
-      }
+  async function readBody(req: any): Promise<string> {
+    const chunks: Buffer[] = []
+    for await (const chunk of req) chunks.push(Buffer.from(chunk))
+    return Buffer.concat(chunks).toString('utf-8')
+  }
 
-      server.middlewares.use(async (req: any, res: any, next: any) => {
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/push')) return next()
 
         res.setHeader('Content-Type', 'application/json')
@@ -549,8 +586,13 @@ function pushApiPlugin() {
           res.statusCode = 500
           res.end(JSON.stringify({ error: err.message }))
         }
-      })
-    },
+    })
+  }
+
+  return {
+    name: 'push-api',
+    configureServer: attach,
+    configurePreviewServer: attach,
   }
 }
 
@@ -569,32 +611,8 @@ export default defineConfig({
       },
     },
   },
-  server: {
-    host: '0.0.0.0',
-    port: 5173,
-    https: {
-      cert: './mac-mini-von-janis.taild2ad59.ts.net.crt',
-      key: './mac-mini-von-janis.taild2ad59.ts.net.key',
-    },
-    allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost'],
-    proxy: {
-      '/v1': {
-        target: HERMES_API_TARGET,
-        changeOrigin: true,
-        configure: stripBrowserOrigin,
-      },
-      '/health': {
-        target: HERMES_API_TARGET,
-        changeOrigin: true,
-        configure: stripBrowserOrigin,
-      },
-      '/marksense': {
-        target: 'http://127.0.0.1:3700',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/marksense/, ''),
-      },
-    },
-  },
+  server: phoneServerOptions,
+  preview: phoneServerOptions,
   plugins: [
     threadsApiPlugin(),
     recipesApiPlugin(),
