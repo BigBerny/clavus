@@ -355,10 +355,9 @@ export function App() {
   // scrollLeft that looks like "one panel left"; without this guard, that fake
   // scroll changes visiblePanel to the previous conversation.
   useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      if (!mutations.some((m) => m.attributeName === 'data-keyboard-open')) return
+    const preserveVisiblePanel = () => {
+      keyboardScrollGuardUntil.current = Date.now() + 700
 
-      keyboardScrollGuardUntil.current = Date.now() + 550
       if (isUserHorizontalGesture.current) return
 
       const container = scrollContainerRef.current
@@ -370,10 +369,27 @@ export function App() {
       requestAnimationFrame(() => {
         isProgrammaticScroll.current = false
       })
+    }
+
+    const handleFocusIn = (event: FocusEvent) => {
+      const target = event.target as HTMLElement | null
+      if (!target) return
+      if (target.matches('input, textarea, [contenteditable="true"]')) {
+        preserveVisiblePanel()
+      }
+    }
+
+    const observer = new MutationObserver((mutations) => {
+      if (!mutations.some((m) => m.attributeName === 'data-keyboard-open')) return
+      preserveVisiblePanel()
     })
 
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-keyboard-open'] })
-    return () => observer.disconnect()
+    document.addEventListener('focusin', handleFocusIn)
+    return () => {
+      observer.disconnect()
+      document.removeEventListener('focusin', handleFocusIn)
+    }
   }, [visiblePanel])
 
   // Detect which panel is visible using scroll position
@@ -385,10 +401,16 @@ export function App() {
 
     const handleScroll = () => {
       if (isProgrammaticScroll.current) return
+      const active = document.activeElement as HTMLElement | null
+      const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
+      if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) return
       if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) return
 
       if (scrollTimeout) clearTimeout(scrollTimeout)
       scrollTimeout = setTimeout(() => {
+        const active = document.activeElement as HTMLElement | null
+        const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
+        if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) return
         if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) return
         const containerWidth = container.clientWidth
         if (!containerWidth) return
