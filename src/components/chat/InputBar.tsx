@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
+import { haptic, isNative } from '../../lib/native'
 
 interface Props {
   onSend: (message: string, images?: string[]) => void
@@ -51,14 +52,14 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         // Auto-send voice transcription directly
         onSend(text.slice(0, 10000))
       }
-      navigator.vibrate?.(10)
+      haptic.tap()
     },
     onInsertTranscription: (text) => {
       // Insert text into textarea without sending
       const current = value.trim()
       const newValue = current ? current + ' ' + text : text
       setValue(newValue.slice(0, 10000))
-      navigator.vibrate?.(10)
+      haptic.tap()
       setTimeout(() => textareaRef.current?.focus(), 50)
     },
   })
@@ -171,7 +172,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
-    navigator.vibrate?.(10)
+    haptic.tap()
     onSend(trimmed.slice(0, 10000), pendingImages.length > 0 ? pendingImages : undefined)
     setValue('')
     setPendingImages([])
@@ -224,7 +225,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     holdTimerRef.current = setTimeout(() => {
       // Long press: start hold-to-record
       isHoldRecording.current = true
-      navigator.vibrate?.(20)
+      haptic.medium()
       voice.start()
     }, 300)
   }, [voice])
@@ -243,7 +244,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   const handleMicClick = useCallback(() => {
     if (isHoldRecording.current) return // was a hold gesture, not a tap
-    navigator.vibrate?.(10)
+    haptic.tap()
     if (voice.state === 'recording') {
       voice.stop()
     } else if (voice.state === 'idle') {
@@ -509,8 +510,13 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onFocus={() => {
-                // Only scroll into view when inside a chat panel, not on home
-                if (!isHome) {
+                // Scroll-into-view is a Safari-PWA workaround: iOS Safari
+                // shifts the visualViewport on focus which needs manual
+                // correction. Inside Capacitor WKWebView with
+                // `Keyboard.resize: 'native'` the webview resizes itself
+                // and the textarea is already in view — the delayed smooth
+                // scroll only adds visible lag.
+                if (!isHome && !isNative) {
                   setTimeout(() => {
                     textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
                   }, 300)

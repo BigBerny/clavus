@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect, type ReactNode } from 'react'
+import { haptic } from '../../lib/native'
 
 interface PullDownDismissableProps {
   children: ReactNode
@@ -93,7 +94,7 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
 
         // Haptic feedback when crossing threshold
         if (isPast && !pastThresholdRef.current) {
-          navigator.vibrate?.(10)
+          haptic.tap()
         }
         pastThresholdRef.current = isPast
 

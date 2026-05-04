@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { getConfig } from '../../gateway/config'
 import { sendChatCompletion } from '../../gateway/chat'
+import { haptic } from '../../lib/native'
 
 type ComposeChannel = 'messaging' | 'slack' | 'email'
 
@@ -162,7 +163,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
     try {
       await navigator.clipboard.writeText(composedText)
       setToast('Copied!')
-      navigator.vibrate?.(10)
+      haptic.tap()
     } catch {
       setToast('Copy failed')
     }

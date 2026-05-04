@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense
 import type { Message } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
 import { ButtonGroup, SelectBlock, ConfirmBlock, parseButtonsLine, parseSelectLine, type ButtonAction, type SelectOption } from './InteractiveBlock.tsx'
+import { haptic } from '../../lib/native'
 
 const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(m => ({ default: m.RichMessageRenderer })))
 
@@ -77,7 +78,7 @@ function CopyableBlock({ children }: { children: string }) {
       navigator.clipboard.writeText(contentRef.current.innerText)
     }
     setCopied(true)
-    navigator.vibrate?.(10)
+    haptic.tap()
     setTimeout(() => setCopied(false), 2000)
   }, [])
 
@@ -352,7 +353,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
-    navigator.vibrate?.(10)
+    haptic.tap()
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }, [message.content])

@@ -3,6 +3,7 @@ import { MessageBubble } from './MessageBubble'
 import { useTTS } from '../../hooks/useTTS'
 import { useThreadsStore } from '../../state/threads'
 import type { Message } from '../../state/chat'
+import { isNative } from '../../lib/native'
 
 interface Props {
   messages: Message[]
@@ -132,14 +133,25 @@ export function ChatView({ messages, title }: Props) {
         if (m.attributeName === 'data-keyboard-open') {
           const isOpen = document.documentElement.getAttribute('data-keyboard-open') === 'true'
           if (isOpen && autoScroll) {
-            // Double-rAF + timeout for iOS keyboard animation
-            requestAnimationFrame(() => {
+            if (isNative) {
+              // Capacitor fires `keyboardWillShow` before the iOS animation
+              // starts, and WKWebView resizes in lockstep. A single rAF is
+              // enough to scroll alongside the keyboard lift.
               requestAnimationFrame(() => {
-                setTimeout(() => {
-                  bottomRef.current?.scrollIntoView({ block: 'end' })
-                }, 120)
+                bottomRef.current?.scrollIntoView({ block: 'end' })
               })
-            })
+            } else {
+              // Safari PWA: visualViewport resize lags the keyboard
+              // animation. Double-rAF + 120ms lets it settle before we
+              // scroll, avoiding a mid-animation jump.
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  setTimeout(() => {
+                    bottomRef.current?.scrollIntoView({ block: 'end' })
+                  }, 120)
+                })
+              })
+            }
           }
         }
       }

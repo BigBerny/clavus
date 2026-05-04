@@ -67,6 +67,21 @@ body {
   display: none;
 }
 
+/*
+ * Capacitor (iOS WKWebView) with `Keyboard.resize: 'native'`:
+ * The WebView shrinks itself when the keyboard opens, so `100dvh` already
+ * reflects the visible area — no JS layout compensation needed.
+ *
+ * We only neutralize the `translateY(--vv-offset)` trick that the PWA path
+ * uses to counteract iOS Safari scrolling focused inputs into view. Inside
+ * WKWebView that doesn't happen, but useVisualViewport doesn't set
+ * `--vv-offset` on native at all. This rule is a belt-and-braces safeguard
+ * against any stray transform being applied during the keyboard animation.
+ */
+html[data-native="true"] #root {
+  transform: none;
+}
+
 html:not(.dark), html:not(.dark) body, html:not(.dark) #root {
   background-color: var(--color-surface-light, #ffffff);
 }

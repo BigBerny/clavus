@@ -1,22 +1,55 @@
 import { useEffect, useRef } from 'react'
+import { isNative, subscribeKeyboard } from '../lib/native'
 
 /**
- * Tracks the visual viewport on iOS Safari PWA and sets CSS custom properties
- * on document.documentElement:
- *   --vvh: visible viewport height (falls back to 100dvh)
- *   --vv-offset: iOS keyboard scroll offset (falls back to 0px)
- *   data-keyboard-open: "true" when software keyboard is detected
+ * Keyboard / viewport tracking.
  *
- * Also resets window scroll position when the keyboard closes (iOS quirk).
+ * Two very different implementations depending on the runtime:
+ *
+ * - Capacitor / iOS WKWebView (`isNative`):
+ *     The WebView shrinks itself when the keyboard opens (Capacitor
+ *     `Keyboard.resize: 'native'`), so `100dvh` / `100vh` already reflect
+ *     the visible area. We do NOT touch any CSS variables or scroll
+ *     positions — the native resize does the layout work. The hook's
+ *     sole responsibility is toggling `data-keyboard-open` via the
+ *     deterministic `keyboardWillShow` / `keyboardWillHide` events so
+ *     the app (chat auto-scroll, etc.) can react.
+ *
+ * - iOS Safari PWA / web:
+ *     The browser scrolls focused inputs into view, shifts
+ *     `visualViewport.offsetTop`, and the URL bar behaviour makes
+ *     `100vh` wrong. We track `visualViewport` and expose:
+ *       --vvh          visible viewport height (defaults to 100dvh)
+ *       --vv-offset    vertical scroll offset to compensate for
+ *       data-keyboard-open  present when software keyboard is detected
+ *     Also resets `window.scrollY` on keyboard close to clear iOS's
+ *     residual scroll state.
  */
 export function useVisualViewport() {
   const rafId = useRef(0)
 
   useEffect(() => {
+    const root = document.documentElement
+
+    // ---- Native (Capacitor): keyboard events only, zero layout JS ----
+    if (isNative) {
+      let unsub: (() => void) | null = null
+      subscribeKeyboard({
+        onWillShow: () => root.setAttribute('data-keyboard-open', 'true'),
+        onWillHide: () => root.removeAttribute('data-keyboard-open'),
+      }).then((u) => {
+        unsub = u
+      })
+      return () => {
+        unsub?.()
+        root.removeAttribute('data-keyboard-open')
+      }
+    }
+
+    // ---- Web / iOS Safari PWA: visualViewport compensation ----
     const vv = window.visualViewport
     if (!vv) return
 
-    const root = document.documentElement
     const KEYBOARD_THRESHOLD = 150 // px difference → keyboard is open
 
     const update = () => {
@@ -33,7 +66,6 @@ export function useVisualViewport() {
           root.setAttribute('data-keyboard-open', 'true')
         } else {
           root.removeAttribute('data-keyboard-open')
-          // Reset iOS scroll position when keyboard closes
           if (window.scrollY !== 0) {
             window.scrollTo(0, 0)
           }
@@ -41,13 +73,10 @@ export function useVisualViewport() {
       })
     }
 
-    // Run once immediately
     update()
-
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
 
-    // Orientation change: delayed update since viewport takes time to settle
     const handleOrientation = () => {
       setTimeout(update, 200)
     }
@@ -58,7 +87,6 @@ export function useVisualViewport() {
       vv.removeEventListener('resize', update)
       vv.removeEventListener('scroll', update)
       window.removeEventListener('orientationchange', handleOrientation)
-      // Clean up CSS vars
       root.style.removeProperty('--vvh')
       root.style.removeProperty('--vv-offset')
       root.removeAttribute('data-keyboard-open')
