@@ -354,12 +354,9 @@ export function App() {
 
     const handleScroll = () => {
       if (isProgrammaticScroll.current) return
-      // Don't change panels when keyboard opens (resize can shift scroll position)
-      if (document.documentElement.hasAttribute('data-keyboard-open')) return
 
       if (scrollTimeout) clearTimeout(scrollTimeout)
       scrollTimeout = setTimeout(() => {
-        if (document.documentElement.hasAttribute('data-keyboard-open')) return
         const containerWidth = container.clientWidth
         if (!containerWidth) return
         const scrollLeft = container.scrollLeft
