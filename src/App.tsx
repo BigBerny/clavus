@@ -168,6 +168,46 @@ export function App() {
     })
   }, [sortedTabs.length, visiblePanel])
 
+  const preserveVisiblePanelDuringKeyboard = useCallback((reason: string) => {
+    keyboardScrollGuardUntil.current = Date.now() + 900
+
+    if (isUserHorizontalGesture.current) {
+      logKeyboardScroll('preserve-skip-user-gesture', { reason })
+      return
+    }
+
+    const container = scrollContainerRef.current
+    const panel = panelRefs.current.get(visiblePanel)
+    if (!container || !panel) {
+      logKeyboardScroll('preserve-missing-target', {
+        reason,
+        hasContainer: Boolean(container),
+        hasPanel: Boolean(panel),
+      })
+      return
+    }
+
+    isProgrammaticScroll.current = true
+    logKeyboardScroll('preserve-current-panel', {
+      reason,
+      targetPanel: visiblePanel,
+      targetOffsetLeft: panel.offsetLeft,
+      beforeScrollLeft: container.scrollLeft,
+    })
+    container.scrollLeft = panel.offsetLeft
+    requestAnimationFrame(() => {
+      isProgrammaticScroll.current = false
+      logKeyboardScroll('preserve-current-panel-done', {
+        reason,
+        afterScrollLeft: container.scrollLeft,
+      })
+    })
+  }, [logKeyboardScroll, visiblePanel])
+
+  useEffect(() => {
+    logKeyboardScroll('visible-panel-change')
+  }, [logKeyboardScroll])
+
   const handleTokenSave = useCallback((token: string) => {
     setGatewayToken(token)
     setNeedsToken(false)
@@ -374,39 +414,6 @@ export function App() {
   // scrollLeft that looks like "one panel left"; without this guard, that fake
   // scroll changes visiblePanel to the previous conversation.
   useEffect(() => {
-    const preserveVisiblePanel = () => {
-      keyboardScrollGuardUntil.current = Date.now() + 700
-
-      if (isUserHorizontalGesture.current) {
-        logKeyboardScroll('preserve-skip-user-gesture')
-        return
-      }
-
-      const container = scrollContainerRef.current
-      const panel = panelRefs.current.get(visiblePanel)
-      if (!container || !panel) {
-        logKeyboardScroll('preserve-missing-target', {
-          hasContainer: Boolean(container),
-          hasPanel: Boolean(panel),
-        })
-        return
-      }
-
-      isProgrammaticScroll.current = true
-      logKeyboardScroll('preserve-current-panel', {
-        targetPanel: visiblePanel,
-        targetOffsetLeft: panel.offsetLeft,
-        beforeScrollLeft: container.scrollLeft,
-      })
-      container.scrollLeft = panel.offsetLeft
-      requestAnimationFrame(() => {
-        isProgrammaticScroll.current = false
-        logKeyboardScroll('preserve-current-panel-done', {
-          afterScrollLeft: container.scrollLeft,
-        })
-      })
-    }
-
     const handleFocusIn = (event: FocusEvent) => {
       const target = event.target as HTMLElement | null
       if (!target) return
@@ -415,14 +422,14 @@ export function App() {
           targetTag: target.tagName,
           targetLabel: target.getAttribute('aria-label') ?? target.getAttribute('placeholder') ?? null,
         })
-        preserveVisiblePanel()
+        preserveVisiblePanelDuringKeyboard('focusin')
       }
     }
 
     const observer = new MutationObserver((mutations) => {
       if (!mutations.some((m) => m.attributeName === 'data-keyboard-open')) return
       logKeyboardScroll('keyboard-attr-change')
-      preserveVisiblePanel()
+      preserveVisiblePanelDuringKeyboard('keyboard-attr-change')
     })
 
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-keyboard-open'] })
@@ -431,7 +438,7 @@ export function App() {
       observer.disconnect()
       document.removeEventListener('focusin', handleFocusIn)
     }
-  }, [logKeyboardScroll, visiblePanel])
+  }, [logKeyboardScroll, preserveVisiblePanelDuringKeyboard])
 
   // Detect which panel is visible using scroll position
   useEffect(() => {
@@ -443,6 +450,11 @@ export function App() {
     const handleScroll = () => {
       if (isProgrammaticScroll.current) {
         logKeyboardScroll('scroll-ignore-programmatic')
+        return
+      }
+      const isNativeShell = document.documentElement.hasAttribute('data-native')
+      if (isNativeShell && !isUserHorizontalGesture.current) {
+        logKeyboardScroll('scroll-ignore-native-no-gesture')
         return
       }
       const active = document.activeElement as HTMLElement | null
@@ -459,6 +471,11 @@ export function App() {
       if (scrollTimeout) clearTimeout(scrollTimeout)
       logKeyboardScroll('scroll-schedule')
       scrollTimeout = setTimeout(() => {
+        const isNativeShell = document.documentElement.hasAttribute('data-native')
+        if (isNativeShell && !isUserHorizontalGesture.current) {
+          logKeyboardScroll('scroll-debounce-ignore-native-no-gesture')
+          return
+        }
         const active = document.activeElement as HTMLElement | null
         const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
         if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) {
@@ -692,7 +709,7 @@ export function App() {
       isUserHorizontalGesture.current = false
       userGestureEndTimer.current = null
       logKeyboardScroll('gesture-end-cleared')
-    }, 400)
+    }, 900)
   }, [logKeyboardScroll])
 
   useEffect(() => {
@@ -889,6 +906,7 @@ export function App() {
               isStreaming={visibleThreadStreaming}
               onRecordingChange={handleRecordingChange}
               isHome={!isDesktop && visiblePanel === 'home'}
+              onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening, interrupt: talkMode.interrupt }}
             />

@@ -8,6 +8,7 @@ interface Props {
   isStreaming: boolean
   onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
   isHome?: boolean
+  onFocusInput?: () => void
   onClear?: () => void
   talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void; interrupt: () => void }
 }
@@ -30,7 +31,7 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { command: '/help', description: 'Show help' },
 ]
 
-export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onClear, talkMode }: Props) {
+export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, talkMode }: Props) {
   const [value, setValue] = useState('')
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
@@ -510,6 +511,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onFocus={() => {
+                onFocusInput?.()
                 // Scroll-into-view is a Safari-PWA workaround: iOS Safari
                 // shifts the visualViewport on focus which needs manual
                 // correction. Inside Capacitor WKWebView with
