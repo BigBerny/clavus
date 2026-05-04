@@ -91,6 +91,7 @@ export function App() {
   // those during the short keyboard transition, but still allow real gestures.
   const keyboardScrollGuardUntil = useRef(0)
   const isUserHorizontalGesture = useRef(false)
+  const gestureStartPoint = useRef<{ x: number; y: number } | null>(null)
   const userGestureEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
@@ -745,17 +746,46 @@ export function App() {
     }
   }, [closeTab, visiblePanel, sortedTabs])
 
-  const markHorizontalGestureStart = useCallback(() => {
+  const markHorizontalGestureStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (userGestureEndTimer.current) {
       clearTimeout(userGestureEndTimer.current)
       userGestureEndTimer.current = null
     }
+    gestureStartPoint.current = { x: event.clientX, y: event.clientY }
+    isUserHorizontalGesture.current = false
+    logKeyboardScroll('gesture-pending', {
+      pointerType: event.pointerType,
+      startX: event.clientX,
+      startY: event.clientY,
+    })
+  }, [logKeyboardScroll])
+
+  const markHorizontalGestureMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (isUserHorizontalGesture.current) return
+    const start = gestureStartPoint.current
+    if (!start) return
+
+    const dx = event.clientX - start.x
+    const dy = event.clientY - start.y
+    const absX = Math.abs(dx)
+    const absY = Math.abs(dy)
+    if (absX < 16 || absX < absY * 1.25) return
+
     isUserHorizontalGesture.current = true
-    logKeyboardScroll('gesture-start')
+    logKeyboardScroll('gesture-start', {
+      pointerType: event.pointerType,
+      dx,
+      dy,
+    })
   }, [logKeyboardScroll])
 
   const markHorizontalGestureEnd = useCallback(() => {
+    gestureStartPoint.current = null
     if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
+    if (!isUserHorizontalGesture.current) {
+      logKeyboardScroll('gesture-cancelled-before-horizontal')
+      return
+    }
     logKeyboardScroll('gesture-end-schedule-clear')
     // Keep accepting inertial/snap scroll events after the finger leaves.
     userGestureEndTimer.current = setTimeout(() => {
@@ -879,11 +909,9 @@ export function App() {
             ref={scrollContainerRef}
             className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
             onPointerDown={markHorizontalGestureStart}
+            onPointerMove={markHorizontalGestureMove}
             onPointerUp={markHorizontalGestureEnd}
             onPointerCancel={markHorizontalGestureEnd}
-            onTouchStart={markHorizontalGestureStart}
-            onTouchEnd={markHorizontalGestureEnd}
-            onTouchCancel={markHorizontalGestureEnd}
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
