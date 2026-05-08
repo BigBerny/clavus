@@ -126,6 +126,9 @@ body {
   padding-top: env(safe-area-inset-top);
 }
 .safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+html[data-keyboard-open] .safe-area-bottom {
   padding-bottom: 0px;
 }
 

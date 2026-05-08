@@ -78,19 +78,26 @@ export function ComposeFlow({ channel, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Track voice state
+  // Track voice state — guard with transcriptionProcessedRef to avoid a race
+  // where this effect's setComposeState('transcribing') overwrites the
+  // 'composing' state set by onTranscription in the same React batch.
   const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    console.log('[ComposeFlow] voice.state:', voice.state, 'composeState:', composeState, 'transcription:', !!transcription)
-    if (voice.state === 'transcribing') {
+    console.log('[ComposeFlow] voice.state:', voice.state, 'composeState:', composeState, 'transcription:', !!transcription, 'voice.error:', voice.error, 'processed:', transcriptionProcessedRef.current)
+    if (voice.state === 'transcribing' && !transcriptionProcessedRef.current) {
       setComposeState('transcribing')
+    }
+    // If voice reports an error while we're still transcribing, show it immediately
+    if (voice.error && (composeState === 'transcribing' || composeState === 'recording')) {
+      setError(voice.error)
+      setComposeState('error')
+      return
     }
     // If voice goes idle while we're still in transcribing state, wait a bit
     // then check if transcription arrived (gives React time to batch updates)
     if (voice.state === 'idle' && composeState === 'transcribing') {
       if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current)
       stuckTimerRef.current = setTimeout(() => {
-        // Re-check: if still in transcribing state after 2s, something went wrong
         if (!transcriptionProcessedRef.current) {
           setError('No speech detected. Try again.')
           setComposeState('error')
@@ -98,7 +105,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
       }, 2000)
     }
     return () => { if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current) }
-  }, [voice.state, composeState, transcription])
+  }, [voice.state, voice.error, composeState, transcription])
   // Also clear stuck timer when we move past transcribing
   useEffect(() => {
     if (composeState !== 'transcribing' && stuckTimerRef.current) {
@@ -242,6 +249,9 @@ export function ComposeFlow({ channel, onClose }: Props) {
           <div className="flex flex-col items-center gap-4 animate-[fadeSlideIn_0.3s_ease-out]">
             <div className="voice-spinner" style={{ width: 32, height: 32, borderWidth: 2.5 }} />
             <p className="text-sm text-text-dark-muted">Transcribing...</p>
+            {voice.error && (
+              <p className="text-xs text-red-400 text-center max-w-[280px]">{voice.error}</p>
+            )}
           </div>
         )}
 
@@ -283,13 +293,29 @@ export function ComposeFlow({ channel, onClose }: Props) {
 
         {composeState === 'error' && (
           <div className="flex flex-col items-center gap-4 animate-[fadeSlideIn_0.3s_ease-out]">
-            <p className="text-sm text-red-400">{error}</p>
-            <button
-              onClick={handleClose}
-              className="inline-btn px-4 py-2 rounded-xl text-text-dark-muted text-sm hover:text-text-dark transition-colors"
-            >
-              Close
-            </button>
+            <p className="text-sm text-red-400 text-center max-w-[280px]">{error}</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setError('')
+                  setComposeState('recording')
+                  transcriptionProcessedRef.current = false
+                  reformulatingRef.current = false
+                  startedRef.current = false
+                  // Re-trigger start
+                  setTimeout(() => { startedRef.current = true; voice.start() }, 50)
+                }}
+                className="inline-btn px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover active:scale-95 transition-all"
+              >
+                Try again
+              </button>
+              <button
+                onClick={handleClose}
+                className="inline-btn px-4 py-2 rounded-xl text-text-dark-muted text-sm hover:text-text-dark transition-colors"
+              >
+                Close
+              </button>
+            </div>
           </div>
         )}
       </div>

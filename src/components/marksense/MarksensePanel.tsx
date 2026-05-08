@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 
 const MARKSENSE_BASE = 'https://mac-mini-von-janis.taild2ad59.ts.net:3700'
 
@@ -9,6 +9,38 @@ export function MarksensePanel({ documentUrl, title, isVisible }: {
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const src = documentUrl || MARKSENSE_BASE
+
+  // Gesture detection: distinguish horizontal swipes (for panel nav) from taps/vertical scrolls
+  const [swiping, setSwiping] = useState(false)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const directionLocked = useRef<'horizontal' | 'vertical' | null>(null)
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0]
+    touchStartRef.current = { x: t.clientX, y: t.clientY }
+    directionLocked.current = null
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return
+    const t = e.touches[0]
+    const dx = Math.abs(t.clientX - touchStartRef.current.x)
+    const dy = Math.abs(t.clientY - touchStartRef.current.y)
+
+    if (!directionLocked.current && (dx > 8 || dy > 8)) {
+      directionLocked.current = dx > dy ? 'horizontal' : 'vertical'
+      if (directionLocked.current === 'horizontal') {
+        // Disable iframe pointer events so parent scroll-snap takes over
+        setSwiping(true)
+      }
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    touchStartRef.current = null
+    directionLocked.current = null
+    setSwiping(false)
+  }, [])
 
   // Only load iframe content when panel is visible or near-visible
   useEffect(() => {
@@ -39,13 +71,20 @@ export function MarksensePanel({ documentUrl, title, isVisible }: {
           className="w-full h-full border-0"
           title={title || 'Marksense'}
           style={{
-            pointerEvents: isVisible ? 'auto' : 'none',
+            pointerEvents: isVisible && !swiping ? 'auto' : 'none',
           }}
           allow="clipboard-write"
         />
-        {/* Gesture interceptor: captures horizontal swipes to forward to parent scroll-snap */}
-        {!isVisible && (
-          <div className="absolute inset-0" />
+        {/* Gesture interceptor: detects horizontal swipes and disables iframe pointer events
+            so the parent scroll-snap container can handle them */}
+        {isVisible && (
+          <div
+            className="absolute inset-0"
+            style={{ touchAction: 'pan-x pan-y' }}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          />
         )}
       </div>
     </div>

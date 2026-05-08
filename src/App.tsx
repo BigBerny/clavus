@@ -82,7 +82,15 @@ export function App() {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Track which panel is visible (tab id or 'home')
-  const [visiblePanel, setVisiblePanel] = useState<string>('home')
+  const [visiblePanel, _setVisiblePanel] = useState<string>('home')
+  const setVisiblePanel = useCallback((next: string) => {
+    _setVisiblePanel(prev => {
+      if (next === 'home' && prev !== 'home') {
+        console.warn('[CLAVUS-DEBUG] visiblePanel → home (was:', prev, ')', new Error().stack)
+      }
+      return next
+    })
+  }, [])
   // Refs for each panel element
   const panelRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   // Flag to prevent scroll handler from firing during programmatic scrolls
@@ -95,6 +103,7 @@ export function App() {
   const userGestureEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
+  const [initialReady, setInitialReady] = useState(false)
 
   // Per-thread isStreaming for the visible panel (only relevant for chat tabs)
   const visibleThreadStreaming = useChatStore(
@@ -425,6 +434,13 @@ export function App() {
     const container = scrollContainerRef.current
     if (!container) return
 
+    // If home is the only panel (no tabs), no scroll needed
+    if (sortedTabs.length === 0) {
+      initialScrollDone.current = true
+      setInitialReady(true)
+      return
+    }
+
     const scrollToHome = () => {
       isProgrammaticScroll.current = true
       container.scrollLeft = container.scrollWidth
@@ -433,6 +449,7 @@ export function App() {
         if (container.scrollWidth > container.clientWidth) {
           container.scrollLeft = container.scrollWidth
           initialScrollDone.current = true
+          setInitialReady(true)
         }
         isProgrammaticScroll.current = false
       })
@@ -442,6 +459,8 @@ export function App() {
       requestAnimationFrame(scrollToHome)
       const timer = setTimeout(scrollToHome, 100)
       return () => clearTimeout(timer)
+    } else {
+      setInitialReady(true)
     }
   }, [needsToken, sortedTabs])
 
@@ -482,6 +501,10 @@ export function App() {
     if (!container) return
 
     let scrollTimeout: ReturnType<typeof setTimeout> | null = null
+    // Track whether a gesture-initiated debounce is pending — while it is,
+    // the scroll-snap animation is still settling and we must NOT pin back
+    // to the old panel.
+    let gestureDebounceActive = false
 
     const handleScroll = () => {
       if (isProgrammaticScroll.current) {
@@ -489,7 +512,7 @@ export function App() {
         return
       }
       const isNativeShell = document.documentElement.hasAttribute('data-native')
-      if (isNativeShell && !isUserHorizontalGesture.current) {
+      if (isNativeShell && !isUserHorizontalGesture.current && !gestureDebounceActive) {
         logKeyboardScroll('scroll-ignore-native-no-gesture')
         pinVisiblePanelIfNeeded('native-no-gesture-scroll')
         return
@@ -506,21 +529,28 @@ export function App() {
       }
 
       if (scrollTimeout) clearTimeout(scrollTimeout)
+      // Capture gesture state NOW — by the time the debounce fires, the gesture
+      // window may have expired even though the scroll-snap animation is still
+      // settling.  Since non-gesture scroll events return early above (before we
+      // get here), every debounce we schedule was initiated by a real gesture.
+      const wasGesture = isUserHorizontalGesture.current
+      if (wasGesture) gestureDebounceActive = true
       logKeyboardScroll('scroll-schedule')
       scrollTimeout = setTimeout(() => {
+        gestureDebounceActive = false
         const isNativeShell = document.documentElement.hasAttribute('data-native')
-        if (isNativeShell && !isUserHorizontalGesture.current) {
+        if (isNativeShell && !wasGesture && !isUserHorizontalGesture.current) {
           logKeyboardScroll('scroll-debounce-ignore-native-no-gesture')
           pinVisiblePanelIfNeeded('native-no-gesture-scroll-debounce')
           return
         }
         const active = document.activeElement as HTMLElement | null
         const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
-        if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) {
+        if (focusCanOpenKeyboard && !wasGesture && !isUserHorizontalGesture.current) {
           logKeyboardScroll('scroll-debounce-ignore-focused-input')
           return
         }
-        if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) {
+        if (Date.now() < keyboardScrollGuardUntil.current && !wasGesture && !isUserHorizontalGesture.current) {
           logKeyboardScroll('scroll-debounce-ignore-guard-window')
           return
         }
@@ -543,6 +573,7 @@ export function App() {
           if (tab) {
             logKeyboardScroll('scroll-accept-tab', { panelIndex, rawPanelIndex, nextPanel })
             setVisiblePanel(tab.id)
+            if (tab.type === 'chat') switchThread((tab as ChatTab).threadId)
           } else {
             logKeyboardScroll('scroll-debounce-ignore-missing-tab', { panelIndex, rawPanelIndex })
           }
@@ -555,7 +586,7 @@ export function App() {
       container.removeEventListener('scroll', handleScroll)
       if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [logKeyboardScroll, pinVisiblePanelIfNeeded, sortedTabs])
+  }, [logKeyboardScroll, pinVisiblePanelIfNeeded, sortedTabs, switchThread])
 
   // When tabs load/sync after startup, Home moves further to the right. Keep
   // the currently selected panel pinned to its DOM position unless the user is
@@ -571,7 +602,8 @@ export function App() {
       if (isUserHorizontalGesture.current) return
       pinVisiblePanelIfNeeded('layout-effect')
     })
-  }, [pinVisiblePanelIfNeeded, sortedTabs.length, visiblePanel])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- need to re-pin when tab ORDER changes, not just count
+  }, [pinVisiblePanelIfNeeded, sortedTabs.map(t => t.id).join(','), visiblePanel])
 
   // Scroll to a specific tab panel
   const scrollToTab = useCallback((tabId: string) => {
@@ -917,6 +949,7 @@ export function App() {
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
               touchAction: 'pan-x pan-y',
+              visibility: initialReady ? 'visible' : 'hidden',
             }}
           >
             {sortedTabs.map((tab) => {
@@ -1031,5 +1064,5 @@ function ChatViewPanel({ threadId }: { threadId: string }) {
     useChatStore.getState().ensureThread(threadId)
   }, [threadId])
 
-  return <ChatView messages={messages} title={thread?.title} />
+  return <ChatView messages={messages} title={thread?.title} threadId={threadId} />
 }

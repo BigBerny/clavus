@@ -66,16 +66,15 @@ function CopyableBlock({ children }: { children: string }) {
     if (!contentRef.current) return
     try {
       const html = contentRef.current.innerHTML
-      const plain = contentRef.current.innerText
       await navigator.clipboard.write([
         new ClipboardItem({
           'text/html': new Blob([html], { type: 'text/html' }),
-          'text/plain': new Blob([plain], { type: 'text/plain' }),
+          'text/plain': new Blob([children], { type: 'text/plain' }),
         }),
       ])
     } catch {
       // Fallback: copy plain text
-      navigator.clipboard.writeText(contentRef.current.innerText)
+      navigator.clipboard.writeText(children)
     }
     setCopied(true)
     haptic.tap()

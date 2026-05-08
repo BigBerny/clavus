@@ -1,25 +1,23 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
 import { useTTS } from '../../hooks/useTTS'
-import { useThreadsStore } from '../../state/threads'
 import type { Message } from '../../state/chat'
 import { isNative } from '../../lib/native'
 
 interface Props {
   messages: Message[]
   title?: string
+  threadId: string
 }
 
 // Cache scroll positions per thread
 const scrollPositionCache = new Map<string, number>()
 
-export function ChatView({ messages, title }: Props) {
+export function ChatView({ messages, title, threadId }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const tts = useTTS()
-
-  const threadId = useThreadsStore((s) => s.activeThreadId)
 
   // Save scroll position on unmount
   useEffect(() => {

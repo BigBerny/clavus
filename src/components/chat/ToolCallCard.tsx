@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useState, useMemo } from 'react'
 import type { ToolCall } from '../../state/chat.ts'
 
 // Map tool names to display info
@@ -90,13 +90,41 @@ function ToolCallCardInner({ toolCall }: { toolCall: ToolCall }) {
 export const ToolCallCard = memo(ToolCallCardInner)
 
 // Renders a list of tool call cards for a message
+// By default only the last action is visible; expand to see all
 export function ToolCallCards({ toolCalls }: { toolCalls: ToolCall[] }) {
+  const [showAll, setShowAll] = useState(false)
   if (!toolCalls.length) return null
+
+  const lastCall = toolCalls[toolCalls.length - 1]
+  const hiddenCount = toolCalls.length - 1
+
+  if (showAll || toolCalls.length <= 1) {
+    return (
+      <div className="space-y-1 mb-2">
+        {toolCalls.length > 1 && (
+          <button
+            onClick={() => setShowAll(false)}
+            className="inline-btn text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors px-1"
+          >
+            ▾ Collapse
+          </button>
+        )}
+        {toolCalls.map(tc => (
+          <ToolCallCard key={tc.id} toolCall={tc} />
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-1 mb-2">
-      {toolCalls.map(tc => (
-        <ToolCallCard key={tc.id} toolCall={tc} />
-      ))}
+      <button
+        onClick={() => setShowAll(true)}
+        className="inline-btn text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors px-1"
+      >
+        ▸ {hiddenCount} more action{hiddenCount > 1 ? 's' : ''}
+      </button>
+      <ToolCallCard key={lastCall.id} toolCall={lastCall} />
     </div>
   )
 }

@@ -287,6 +287,14 @@ async function sendResponsesStream(
       return
     }
 
+    if (eventName === 'reasoning') {
+      const text = typeof parsed.text === 'string' ? parsed.text : ''
+      if (text) {
+        callbacks.onThinking?.(text)
+      }
+      return
+    }
+
     if (eventName === 'response.output_text.delta') {
       const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
       if (delta) {

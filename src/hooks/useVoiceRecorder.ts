@@ -67,6 +67,7 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const startTimeRef = useRef(0)
   const cancelledRef = useRef(false)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
   const cleanup = useCallback(() => {
     if (timerRef.current) {
@@ -84,6 +85,10 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
     if (audioCtxRef.current) {
       audioCtxRef.current.close().catch(() => {})
       audioCtxRef.current = null
+    }
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release().catch(() => {})
+      wakeLockRef.current = null
     }
     analyserRef.current = null
     mediaRecorderRef.current = null
@@ -278,6 +283,13 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
       startTimeRef.current = Date.now()
       setState('recording')
       startAnalyser(stream)
+
+      // Keep screen awake during recording
+      if ('wakeLock' in navigator) {
+        (navigator as any).wakeLock.request('screen').then((lock: WakeLockSentinel) => {
+          wakeLockRef.current = lock
+        }).catch(() => {})
+      }
 
       timerRef.current = setInterval(() => {
         const elapsed = Date.now() - startTimeRef.current
