@@ -134,20 +134,23 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
             onDismiss(tabId)
           }, { once: true })
         } else {
-          // Spring back — cancel any pending rAF first so it doesn't
-          // overwrite styles after we reset them
+          // Spring back — cancel pending rAF, commit current position,
+          // then animate to origin in the next frame
           cancelAnimationFrame(animFrameRef.current)
+          // Force browser to commit the current translated position
+          void container.offsetHeight
           container.classList.add('panel-spring-back')
-          container.style.transform = ''
-          container.style.opacity = ''
-          container.style.borderRadius = ''
+          requestAnimationFrame(() => {
+            container.style.transform = ''
+            container.style.opacity = ''
+            container.style.borderRadius = ''
+          })
 
           const cleanup = () => {
             container.classList.remove('panel-spring-back')
           }
           container.addEventListener('transitionend', cleanup, { once: true })
-          // Fallback cleanup
-          setTimeout(cleanup, 400)
+          setTimeout(cleanup, 450)
         }
       }
 
