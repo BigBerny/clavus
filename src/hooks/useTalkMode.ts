@@ -116,6 +116,8 @@ export function useTalkMode(
     formData.append('tag_audio_events', 'false')
     formData.append('additional_languages', JSON.stringify(['eng']))
     formData.append('additional_formats', JSON.stringify([]))
+    formData.append('no_verbatim', 'true')
+    formData.append('num_speakers', '1')
     const keyterms = [
       'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
       'Typewise', 'David Eberle',

@@ -24,6 +24,7 @@ const RecipePanel = lazy(() => import('./components/recipes/RecipePanel.tsx').th
 const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
 const FileViewerPanel = lazy(() => import('./components/files/FileViewerPanel.tsx').then(m => ({ default: m.FileViewerPanel })))
 const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
+const RealtimeChat = lazy(() => import('./components/realtime/RealtimeChat.tsx').then(m => ({ default: m.RealtimeChat })))
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   const [token, setToken] = useState('')
@@ -64,6 +65,27 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   )
 }
 
+/** Wait for scroll-snap to settle: 3 consecutive frames with stable scrollLeft,
+ *  or 500ms timeout as a safety net. Returns a cancel function. */
+function waitForScrollSettle(container: HTMLElement, onSettled: () => void): () => void {
+  let cancelled = false
+  let stableFrames = 0
+  let lastLeft = container.scrollLeft
+  const started = Date.now()
+  const check = () => {
+    if (cancelled) return
+    if (Date.now() - started > 500) { onSettled(); return }
+    const currentLeft = container.scrollLeft
+    if (Math.abs(currentLeft - lastLeft) < 1) stableFrames++
+    else stableFrames = 0
+    lastLeft = currentLeft
+    if (stableFrames < 3) requestAnimationFrame(check)
+    else onSettled()
+  }
+  requestAnimationFrame(check)
+  return () => { cancelled = true }
+}
+
 export function App() {
   useVisualViewport()
   const { send, abort } = useChat()
@@ -79,6 +101,7 @@ export function App() {
   const [needsToken, setNeedsToken] = useState(!hasToken())
   const cancelRecordingRef = useRef<(() => void) | null>(null)
   const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
+  const [realtimeOpen, setRealtimeOpen] = useState(false)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Track which panel is visible (tab id or 'home')
@@ -95,11 +118,17 @@ export function App() {
   const panelRefs = useRef<Map<string, HTMLDivElement>>(new Map())
   // Flag to prevent scroll handler from firing during programmatic scrolls
   const isProgrammaticScroll = useRef(false)
+  const cancelScrollSettle = useRef<(() => void) | null>(null)
   // Keyboard focus can emit a horizontal scroll without a user swipe. Ignore
   // those during the short keyboard transition, but still allow real gestures.
   const keyboardScrollGuardUntil = useRef(0)
   const isUserHorizontalGesture = useRef(false)
   const gestureStartPoint = useRef<{ x: number; y: number } | null>(null)
+  // Direction of finger motion during the most recent horizontal swipe.
+  // +1 = finger moved left (scrollLeft increasing, advancing to a panel further right in DOM).
+  // -1 = finger moved right (scrollLeft decreasing, going to a panel further left).
+  // Used to commit a mid-animation snap when a second swipe interrupts the first.
+  const lastSwipeDirection = useRef<-1 | 0 | 1>(0)
   const userGestureEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
@@ -179,7 +208,7 @@ export function App() {
   }, [sortedTabs.length, visiblePanel])
 
   const preserveVisiblePanelDuringKeyboard = useCallback((reason: string) => {
-    keyboardScrollGuardUntil.current = Date.now() + 900
+    keyboardScrollGuardUntil.current = Date.now() + 400
 
     if (isUserHorizontalGesture.current) {
       logKeyboardScroll('preserve-skip-user-gesture', { reason })
@@ -205,8 +234,12 @@ export function App() {
       beforeScrollLeft: container.scrollLeft,
     })
     container.scrollLeft = panel.offsetLeft
-    requestAnimationFrame(() => {
+    // Wait for scroll-snap to settle (3 stable frames) before allowing
+    // scroll events through, instead of clearing after a single rAF.
+    cancelScrollSettle.current?.()
+    cancelScrollSettle.current = waitForScrollSettle(container, () => {
       isProgrammaticScroll.current = false
+      cancelScrollSettle.current = null
       logKeyboardScroll('preserve-current-panel-done', {
         reason,
         afterScrollLeft: container.scrollLeft,
@@ -215,7 +248,7 @@ export function App() {
   }, [logKeyboardScroll, visiblePanel])
 
   const pinVisiblePanelIfNeeded = useCallback((reason: string) => {
-    if (isUserHorizontalGesture.current) return false
+    if (isUserHorizontalGesture.current || gestureStartPoint.current) return false
 
     const container = scrollContainerRef.current
     const panel = panelRefs.current.get(visiblePanel)
@@ -239,8 +272,10 @@ export function App() {
       beforeScrollLeft: container.scrollLeft,
     })
     container.scrollLeft = targetLeft
-    requestAnimationFrame(() => {
+    cancelScrollSettle.current?.()
+    cancelScrollSettle.current = waitForScrollSettle(container, () => {
       isProgrammaticScroll.current = false
+      cancelScrollSettle.current = null
       logKeyboardScroll('pin-visible-panel-done', {
         reason,
         afterScrollLeft: container.scrollLeft,
@@ -462,7 +497,7 @@ export function App() {
     } else {
       setInitialReady(true)
     }
-  }, [needsToken, sortedTabs])
+  }, [needsToken, sortedTabs.length])
 
   // Keep Home/current panel stable while iOS focuses the input and starts the
   // keyboard animation. The horizontal snap container can briefly emit a
@@ -507,23 +542,35 @@ export function App() {
     let gestureDebounceActive = false
 
     const handleScroll = () => {
+      // Extend gesture window while scroll events keep firing — WKWebView's
+      // inertial scroll can outlast the fixed 900ms gesture-end timer,
+      // causing the native guard to pin back to the old panel mid-scroll.
+      if (userGestureEndTimer.current) {
+        clearTimeout(userGestureEndTimer.current)
+        userGestureEndTimer.current = setTimeout(() => {
+          isUserHorizontalGesture.current = false
+          userGestureEndTimer.current = null
+          logKeyboardScroll('gesture-end-cleared')
+        }, 300)
+      }
+
       if (isProgrammaticScroll.current) {
         logKeyboardScroll('scroll-ignore-programmatic')
         return
       }
       const isNativeShell = document.documentElement.hasAttribute('data-native')
-      if (isNativeShell && !isUserHorizontalGesture.current && !gestureDebounceActive) {
+      if (isNativeShell && !isUserHorizontalGesture.current && !gestureStartPoint.current && !gestureDebounceActive) {
         logKeyboardScroll('scroll-ignore-native-no-gesture')
         pinVisiblePanelIfNeeded('native-no-gesture-scroll')
         return
       }
       const active = document.activeElement as HTMLElement | null
       const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
-      if (focusCanOpenKeyboard && !isUserHorizontalGesture.current) {
+      if (focusCanOpenKeyboard && !isUserHorizontalGesture.current && !gestureStartPoint.current) {
         logKeyboardScroll('scroll-ignore-focused-input')
         return
       }
-      if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current) {
+      if (Date.now() < keyboardScrollGuardUntil.current && !isUserHorizontalGesture.current && !gestureStartPoint.current) {
         logKeyboardScroll('scroll-ignore-guard-window')
         return
       }
@@ -533,24 +580,25 @@ export function App() {
       // window may have expired even though the scroll-snap animation is still
       // settling.  Since non-gesture scroll events return early above (before we
       // get here), every debounce we schedule was initiated by a real gesture.
-      const wasGesture = isUserHorizontalGesture.current
+      const wasGesture = isUserHorizontalGesture.current || !!gestureStartPoint.current
       if (wasGesture) gestureDebounceActive = true
       logKeyboardScroll('scroll-schedule')
       scrollTimeout = setTimeout(() => {
         gestureDebounceActive = false
         const isNativeShell = document.documentElement.hasAttribute('data-native')
-        if (isNativeShell && !wasGesture && !isUserHorizontalGesture.current) {
+        const gestureActive = wasGesture || isUserHorizontalGesture.current || !!gestureStartPoint.current
+        if (isNativeShell && !gestureActive) {
           logKeyboardScroll('scroll-debounce-ignore-native-no-gesture')
           pinVisiblePanelIfNeeded('native-no-gesture-scroll-debounce')
           return
         }
         const active = document.activeElement as HTMLElement | null
         const focusCanOpenKeyboard = active?.matches('input, textarea, [contenteditable="true"]') ?? false
-        if (focusCanOpenKeyboard && !wasGesture && !isUserHorizontalGesture.current) {
+        if (focusCanOpenKeyboard && !gestureActive) {
           logKeyboardScroll('scroll-debounce-ignore-focused-input')
           return
         }
-        if (Date.now() < keyboardScrollGuardUntil.current && !wasGesture && !isUserHorizontalGesture.current) {
+        if (Date.now() < keyboardScrollGuardUntil.current && !gestureActive) {
           logKeyboardScroll('scroll-debounce-ignore-guard-window')
           return
         }
@@ -594,12 +642,15 @@ export function App() {
   // conversation while state still says `visiblePanel === 'home'`.
   useEffect(() => {
     if (isUserHorizontalGesture.current) return
+    // gestureStartPoint is non-null between pointerDown and pointerUp — a swipe
+    // may be in progress but hasn't reached the horizontal threshold yet.
+    if (gestureStartPoint.current) return
     const container = scrollContainerRef.current
     const panel = panelRefs.current.get(visiblePanel)
     if (!container || !panel) return
 
     requestAnimationFrame(() => {
-      if (isUserHorizontalGesture.current) return
+      if (isUserHorizontalGesture.current || gestureStartPoint.current) return
       pinVisiblePanelIfNeeded('layout-effect')
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps -- need to re-pin when tab ORDER changes, not just count
@@ -779,21 +830,87 @@ export function App() {
   }, [closeTab, visiblePanel, sortedTabs])
 
   const markHorizontalGestureStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    const wasSwipeInProgress = !!userGestureEndTimer.current
     if (userGestureEndTimer.current) {
       clearTimeout(userGestureEndTimer.current)
       userGestureEndTimer.current = null
     }
+    // Cancel any in-flight scroll-settle so it doesn't eat gesture events
+    if (cancelScrollSettle.current) {
+      cancelScrollSettle.current()
+      cancelScrollSettle.current = null
+      isProgrammaticScroll.current = false
+    }
+
+    // If a previous swipe's snap animation is still in progress, the touch-down
+    // interrupts it and freezes scroll at an intermediate position.  Instantly
+    // complete the snap so the next swipe starts from a clean panel boundary.
+    if (wasSwipeInProgress) {
+      const container = scrollContainerRef.current
+      if (container) {
+        const containerWidth = container.clientWidth
+        if (containerWidth) {
+          // If scrollLeft is already on a snap boundary, nothing to commit.
+          const nearestIndex = Math.round(container.scrollLeft / containerWidth)
+          const remainder = container.scrollLeft - nearestIndex * containerWidth
+          const settledAtNearest = Math.abs(remainder) < 2
+
+          let panelIndex: number
+          if (settledAtNearest) {
+            panelIndex = nearestIndex
+          } else {
+            // Mid-snap. `Math.round` would commit to the nearest snap point,
+            // which is often the panel the user just left (when the snap is
+            // <50% complete). That cancels the in-flight swipe and makes the
+            // next gesture appear to "go back to the initial column."
+            // Instead, commit in the direction the user's last swipe was
+            // travelling so the in-flight swipe completes one panel forward.
+            // We derive the target purely from scrollLeft + direction to avoid
+            // stale-closure issues with visiblePanel (which may not reflect the
+            // panel the first swipe was heading towards yet).
+            const dir = lastSwipeDirection.current
+            if (dir === 1) panelIndex = Math.ceil(container.scrollLeft / containerWidth)
+            else if (dir === -1) panelIndex = Math.floor(container.scrollLeft / containerWidth)
+            else panelIndex = nearestIndex
+          }
+
+          // Clamp to valid panel range (0..sortedTabs.length, where last index = home)
+          panelIndex = Math.max(0, Math.min(sortedTabs.length, panelIndex))
+          const targetLeft = panelIndex * containerWidth
+          if (Math.abs(container.scrollLeft - targetLeft) > 2) {
+            // Temporarily disable scroll-snap to set position without animation
+            container.style.scrollSnapType = 'none'
+            container.scrollLeft = targetLeft
+            // Re-enable on next frame so the new swipe gets snap behavior
+            requestAnimationFrame(() => {
+              container.style.scrollSnapType = ''
+            })
+          }
+          // Update visiblePanel to match the snapped position
+          if (panelIndex >= sortedTabs.length) {
+            setVisiblePanel('home')
+          } else {
+            const tab = sortedTabs[panelIndex]
+            if (tab) {
+              setVisiblePanel(tab.id)
+              if (tab.type === 'chat') switchThread((tab as ChatTab).threadId)
+            }
+          }
+        }
+      }
+    }
+
     gestureStartPoint.current = { x: event.clientX, y: event.clientY }
     isUserHorizontalGesture.current = false
     logKeyboardScroll('gesture-pending', {
       pointerType: event.pointerType,
       startX: event.clientX,
       startY: event.clientY,
+      wasSwipeInProgress,
     })
-  }, [logKeyboardScroll])
+  }, [logKeyboardScroll, sortedTabs, switchThread])
 
   const markHorizontalGestureMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (isUserHorizontalGesture.current) return
     const start = gestureStartPoint.current
     if (!start) return
 
@@ -801,6 +918,15 @@ export function App() {
     const dy = event.clientY - start.y
     const absX = Math.abs(dx)
     const absY = Math.abs(dy)
+
+    // Continuously track the dominant swipe direction so we can commit the
+    // in-flight snap if a second pointer-down interrupts before scroll settles.
+    // dx < 0 means finger moved left ⇒ scrollLeft increases ⇒ +1.
+    if (absX > 8 && absX >= absY) {
+      lastSwipeDirection.current = dx < 0 ? 1 : -1
+    }
+
+    if (isUserHorizontalGesture.current) return
     if (absX < 16 || absX < absY * 1.25) return
 
     isUserHorizontalGesture.current = true
@@ -892,6 +1018,7 @@ export function App() {
                   onSelectTab={handleDesktopSelectTab}
                   pushState={pushState}
                   onEnablePush={requestPermission}
+                  onOpenRealtime={() => setRealtimeOpen(true)}
                 />
               ) : (
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
@@ -939,7 +1066,7 @@ export function App() {
           /* Mobile: horizontal scroll-snap */
           <div
             ref={scrollContainerRef}
-            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto snap-x snap-mandatory relative z-[1]"
+            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto relative z-[1]"
             onPointerDown={markHorizontalGestureStart}
             onPointerMove={markHorizontalGestureMove}
             onPointerUp={markHorizontalGestureEnd}
@@ -949,7 +1076,8 @@ export function App() {
               msOverflowStyle: 'none',
               WebkitOverflowScrolling: 'touch',
               touchAction: 'pan-x pan-y',
-              visibility: initialReady ? 'visible' : 'hidden',
+              opacity: initialReady ? 1 : 0,
+              scrollSnapType: initialReady ? 'x mandatory' : 'none',
             }}
           >
             {sortedTabs.map((tab) => {
@@ -1006,6 +1134,7 @@ export function App() {
               onSelectTab={scrollToTab}
               pushState={pushState}
               onEnablePush={requestPermission}
+              onOpenRealtime={() => setRealtimeOpen(true)}
             />
           </div>
         </div>
@@ -1022,6 +1151,12 @@ export function App() {
               isHome={!isDesktop && visiblePanel === 'home'}
               onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
+              threadId={visiblePanel !== 'home' ? visiblePanel : null}
+              onRetry={visiblePanel !== 'home' ? () => {
+                const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
+                const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
+                if (lastUser) handleSend(lastUser.content, lastUser.images)
+              } : undefined}
               talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening, interrupt: talkMode.interrupt }}
             />
           </div>
@@ -1045,6 +1180,11 @@ export function App() {
             channel={composeChannel}
             onClose={() => setComposeChannel(null)}
           />
+        </Suspense>
+      )}
+      {realtimeOpen && (
+        <Suspense fallback={null}>
+          <RealtimeChat onClose={() => setRealtimeOpen(false)} />
         </Suspense>
       )}
     </div>

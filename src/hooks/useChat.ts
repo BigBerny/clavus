@@ -4,6 +4,9 @@ import { useUIStore } from '../state/ui.ts'
 import { sendChatStream, generateTitleViaOpenRouter } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
+import { usePresetStore } from '../state/preset.ts'
+import { useChatSettingsStore } from '../state/chatSettings.ts'
+import { MODEL_PRESETS } from '../gateway/presets.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 
@@ -106,6 +109,13 @@ export function useChat() {
     setConnectionStatus('connected')
 
     const config = getConfig()
+    // Apply selected model preset
+    const selectedPresetId = usePresetStore.getState().selectedPresetId
+    const preset = MODEL_PRESETS.find((p) => p.id === selectedPresetId)
+    if (preset) {
+      config.model = preset.model
+    }
+
     const apiMessages: ChatCompletionMessage[] = store
       .getState()
       .getThreadState(threadId)
@@ -150,8 +160,25 @@ export function useChat() {
           onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
           onToken: (token) => store.getState().appendToMessage(threadId, assistantId, token),
           onToolCall: handleToolCall,
+          onUsage: (usage) => {
+            store.getState().setMessageUsage(threadId, assistantId, {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.totalTokens,
+            })
+            // Use model from response if available, fallback to preset
+            const modelLabel = usage.model || preset?.shortLabel
+            if (modelLabel) {
+              store.getState().setMessageModel(threadId, assistantId, modelLabel)
+            }
+          },
           onDone: () => {
             store.getState().finalizeMessage(threadId, assistantId)
+            // Fallback: set model from preset if onUsage didn't fire
+            const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
+            if (!msg?.model && preset) {
+              store.getState().setMessageModel(threadId, assistantId, preset.shortLabel)
+            }
             store.getState().setStreaming(threadId, false)
             store.getState().setAbortController(threadId, null)
           },
@@ -170,9 +197,17 @@ export function useChat() {
           },
         },
         controller.signal,
-        { conversationId: threadId },
+        {
+          conversationId: threadId,
+          reasoningEffort:
+            useChatSettingsStore.getState().getReasoningOverride(threadId) ??
+            preset?.reasoningEffort,
+        },
       )
     } catch (error) {
+      const errMsg = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+      console.error(`[Chat] Send failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, errMsg, error)
+
       store.getState().finalizeMessage(threadId, assistantId)
       store.getState().setStreaming(threadId, false)
       store.getState().setAbortController(threadId, null)

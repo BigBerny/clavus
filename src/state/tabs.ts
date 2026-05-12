@@ -169,3 +169,25 @@ export function ensureChatTab(threadId: string, title: string) {
     })
   }
 }
+
+// Batch version: ensure chat tabs for multiple threads in a single store update
+export function ensureChatTabsBatch(entries: Array<{ threadId: string; title: string }>) {
+  const state = useTabsStore.getState()
+  const existingIds = new Set(
+    state.tabs.filter(t => t.type === 'chat').map(t => (t as ChatTab).threadId)
+  )
+  const newTabs: ChatTab[] = entries
+    .filter(e => !existingIds.has(e.threadId))
+    .map(e => ({
+      id: e.threadId,
+      type: 'chat' as const,
+      threadId: e.threadId,
+      title: e.title,
+      openedAt: Date.now(),
+      updatedAt: Date.now(),
+    }))
+  if (newTabs.length === 0) return
+  const tabs = [...state.tabs, ...newTabs]
+  saveTabs(tabs)
+  useTabsStore.setState({ tabs })
+}

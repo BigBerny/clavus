@@ -17,6 +17,12 @@ export interface MediaAttachment {
   mimeType?: string
 }
 
+export interface MessageUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -28,6 +34,7 @@ export interface Message {
   images?: string[] // base64 data URLs
   toolCalls?: ToolCall[]
   model?: string
+  usage?: MessageUsage
   media?: MediaAttachment[]
 }
 
@@ -58,6 +65,7 @@ interface ChatState {
   setAbortController: (threadId: string, controller: AbortController | null) => void
   updateToolCalls: (threadId: string, id: string, toolCalls: ToolCall[]) => void
   setMessageModel: (threadId: string, id: string, model: string) => void
+  setMessageUsage: (threadId: string, id: string, usage: MessageUsage) => void
   addMedia: (threadId: string, id: string, media: MediaAttachment[]) => void
   clearMessages: (threadId: string) => void
   removeMessage: (threadId: string, messageId: string) => void
@@ -278,6 +286,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ...ts,
             messages: ts.messages.map((m) =>
               m.id === id ? { ...m, model } : m,
+            ),
+          },
+        },
+      }
+    }),
+
+  setMessageUsage: (threadId, id, usage) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id ? { ...m, usage } : m,
             ),
           },
         },

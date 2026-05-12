@@ -9,11 +9,19 @@ export interface ChatCompletionMessage {
   content: string | ContentPart[]
 }
 
+export interface UsageData {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  model?: string
+}
+
 export interface StreamCallbacks {
   onToken: (token: string) => void
   onThinking?: (token: string) => void
   onThinkingDone?: () => void
   onToolCall?: (toolCall: ToolCallEvent) => void
+  onUsage?: (usage: UsageData) => void
   onDone: () => void
   onError: (error: Error) => void
 }
@@ -205,7 +213,7 @@ export async function sendChatStream(
   messages: ChatCompletionMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  options: { conversationId?: string } = {},
+  options: { conversationId?: string; reasoningEffort?: string } = {},
 ): Promise<void> {
   const capabilities = await getHermesCapabilities(config)
   const canUseResponses = capabilities?.features?.responses_api !== false
@@ -222,7 +230,7 @@ export async function sendChatStream(
     }
   }
 
-  await sendChatCompletionsStream(config, messages, callbacks, signal)
+  await sendChatCompletionsStream(config, messages, callbacks, signal, options)
 }
 
 async function sendResponsesStream(
@@ -230,7 +238,7 @@ async function sendResponsesStream(
   messages: ChatCompletionMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  options: { conversationId?: string } = {},
+  options: { conversationId?: string; reasoningEffort?: string } = {},
 ): Promise<void> {
   const lastUser = [...messages].reverse().find((msg) => msg.role === 'user')
   if (!lastUser) throw new Error('No user message to send')
@@ -247,6 +255,7 @@ async function sendResponsesStream(
       stream: true,
       store: true,
       ...(options.conversationId ? { conversation: `clavus:${options.conversationId}` } : {}),
+      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
       input: [{
         role: 'user',
         content: toResponsesContent(lastUser.content),
@@ -336,10 +345,23 @@ async function sendResponsesStream(
     }
 
     if (eventName === 'response.completed') {
-      const finalText = finalTextFromResponse(parsed.response)
+      const response = parsed.response as Record<string, unknown> | undefined
+      const finalText = finalTextFromResponse(response)
       if (finalText && !receivedText) {
         callbacks.onThinkingDone?.()
         callbacks.onToken(finalText)
+      }
+      // Extract usage data
+      if (response && callbacks.onUsage) {
+        const usage = response.usage as Record<string, number> | undefined
+        if (usage) {
+          callbacks.onUsage({
+            inputTokens: usage.input_tokens || 0,
+            outputTokens: usage.output_tokens || 0,
+            totalTokens: usage.total_tokens || 0,
+            model: typeof response.model === 'string' ? response.model : undefined,
+          })
+        }
       }
       finish()
       return
@@ -359,6 +381,7 @@ async function sendChatCompletionsStream(
   messages: ChatCompletionMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
+  options: { reasoningEffort?: string } = {},
 ): Promise<void> {
   const res = await fetch(apiPath(config, '/v1/chat/completions'), {
     method: 'POST',
@@ -371,6 +394,7 @@ async function sendChatCompletionsStream(
       model: config.model,
       stream: true,
       messages,
+      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
     }),
     signal,
   })

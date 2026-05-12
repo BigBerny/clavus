@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPT Realtime - UI Mockups</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Segoe UI', sans-serif;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    padding: 40px;
+    justify-content: center;
+  }
+
+  .mockup-card {
+    width: 375px;
+    height: 700px;
+    background: #111827;
+    border-radius: 40px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 3px solid #2a2a4a;
+    position: relative;
+  }
+
+  .mockup-label {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: #94a3b8;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+  }
+  .mockup-sublabel {
+    text-align: center;
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 16px;
+  }
+
+  .mockup-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 52px 16px 12px;
+    border-bottom: 1px solid #1f2937;
+    gap: 8px;
+    position: relative;
+  }
+  .header .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+  }
+  .header .dot.amber { background: #f59e0b; }
+  .header .title {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* Messages area */
+  .messages {
+    flex: 1;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: hidden;
+  }
+  .msg {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .msg.user {
+    align-self: flex-end;
+    background: #3b82f6;
+    color: white;
+    border-bottom-right-radius: 6px;
+  }
+  .msg.assistant {
+    align-self: flex-start;
+    background: #1f2937;
+    color: #e5e7eb;
+    border-bottom-left-radius: 6px;
+  }
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .empty-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .empty-text {
+    font-size: 14px;
+    font-weight: 500;
+    color: #9ca3af;
+  }
+
+  /* Bottom controls area */
+  .bottom {
+    padding: 20px 20px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    border-top: 1px solid #1f2937;
+    background: rgba(17, 24, 39, 0.9);
+  }
+
+  /* ─── PILL TRACK ─── */
+  .pill-track {
+    width: 160px;
+    height: 64px;
+    border-radius: 32px;
+    background: #1f2937;
+    display: flex;
+    align-items: center;
+    padding: 6px;
+    position: relative;
+  }
+
+  /* Record button inside pill */
+  .rec-btn {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+  }
+  .rec-btn.idle {
+    background: rgba(59, 130, 246, 0.15);
+  }
+  .rec-btn.idle svg { color: #3b82f6; }
+  .rec-btn.active {
+    background: #10b981;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+  .rec-btn.active svg { color: white; }
+
+  /* Lock icon at right end of pill */
+  .lock-target {
+    position: absolute;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .lock-target svg {
+    color: #4b5563;
+  }
+  .lock-target.highlight {
+    background: rgba(16, 185, 129, 0.15);
+  }
+  .lock-target.highlight svg {
+    color: #10b981;
+  }
+
+  /* ─── Locked state: pill filled ─── */
+  .pill-track.locked {
+    background: #10b981;
+    box-shadow: 0 0 24px rgba(16, 185, 129, 0.2);
+  }
+  .pill-track.locked .rec-btn {
+    background: rgba(255,255,255,0.2);
+  }
+  .pill-track.locked .rec-btn svg { color: white; }
+  .pill-track.locked .lock-target svg { color: rgba(255,255,255,0.7); }
+
+  /* ─── Wider pill variant ─── */
+  .pill-track.wide {
+    width: 200px;
+  }
+
+  /* ─── Stop button ─── */
+  .stop-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px 28px;
+    border-radius: 14px;
+    border: none;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .stop-btn.subtle {
+    background: #1f2937;
+    color: #9ca3af;
+  }
+  .stop-btn.red {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+  }
+  .stop-btn.outline {
+    background: transparent;
+    border: 1.5px solid #374151;
+    color: #9ca3af;
+  }
+
+  /* Waveform bars */
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-left: 10px;
+  }
+  .waveform span {
+    width: 3px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.6);
+  }
+
+  /* Arrows hint */
+  .swipe-arrows {
+    position: absolute;
+    right: 50px;
+    display: flex;
+    gap: 2px;
+    opacity: 0.3;
+  }
+  .swipe-arrows svg { color: #9ca3af; }
+
+  /* Section divider */
+  .section-divider {
+    width: 100%;
+    text-align: center;
+    padding: 40px 0 20px;
+    font-size: 20px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: -0.3px;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 400;
+    margin-top: 4px;
+  }
+
+  /* Holding state - button mid-slide */
+  .rec-btn.mid-slide {
+    transform: translateX(30px);
+    background: #10b981;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+  }
+  .rec-btn.mid-slide svg { color: white; }
+
+  /* Pulse ring for recording */
+  .pulse-ring {
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid rgba(16, 185, 129, 0.4);
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
+  @keyframes pulse-ring {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.4); opacity: 0; }
+  }
+
+  /* ─── VARIANT B: Minimal pill ─── */
+  .pill-minimal {
+    height: 56px;
+    border-radius: 28px;
+    display: flex;
+    align-items: center;
+    padding: 4px;
+    position: relative;
+  }
+  .pill-minimal.idle-bg {
+    background: #1f2937;
+    width: 140px;
+  }
+  .pill-minimal.locked-bg {
+    background: #10b981;
+    width: 180px;
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.25);
+  }
+  .pill-minimal .inner-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* ─── VARIANT C: Track with grooved slot ─── */
+  .pill-grooved {
+    width: 160px;
+    height: 60px;
+    border-radius: 30px;
+    background: #0f172a;
+    border: 1.5px solid #1e293b;
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    position: relative;
+  }
+  .pill-grooved .knob {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    z-index: 2;
+  }
+  .pill-grooved .groove-lock {
+    position: absolute;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ OPTION A ═══════════ -->
+<div class="mockup-wrapper">
+  <div class="mockup-label">Option A — Idle</div>
+  <div class="mockup-sublabel">Round button sits in left of pill. Lock icon visible on right.</div>
+  <div class="mockup-card">
+    <div class="header">
+      <div class="dot"></div>
+      <span class="title">GPT Realtime</span>
+    </div>
+    <div class="messages">
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <span class="empty-text">Listening</span>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="pill-track">
+        <div class="rec-btn idle">
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div class="lock-target">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+        </div>
+      </div>
+      <button class="stop-btn subtle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OPTION A — HOLDING ═══════════ -->
+<div class="mockup-wrapper">
+  <div class="mockup-label">Option A — Holding</div>
+  <div class="mockup-sublabel">User is holding down, button glows. Sliding toward lock.</div>
+  <div class="mockup-card">
+    <div class="header">
+      <div class="dot"></div>
+      <span class="title">GPT Realtime</span>
+    </div>
+    <div class="messages">
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <span class="empty-text">Listening</span>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="pill-track">
+        <div class="rec-btn mid-slide">
+          <div class="pulse-ring"></div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div class="lock-target highlight">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+        </div>
+      </div>
+      <button class="stop-btn subtle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OPTION A — LOCKED ═══════════ -->
+<div class="mockup-wrapper">
+  <div class="mockup-label">Option A — Locked</div>
+  <div class="mockup-sublabel">Pill fills green, waveform shows. Tap to pause.</div>
+  <div class="mockup-card">
+    <div class="header">
+      <div class="dot"></div>
+      <span class="title">GPT Realtime</span>
+    </div>
+    <div class="messages">
+      <div class="msg user">What's the weather like in Berlin today?</div>
+      <div class="msg assistant">It's currently around 18 degrees in Berlin with partly cloudy skies. A light breeze from the west, and there might be some rain later this evening.</div>
+      <div class="msg user">Thanks! And tomorrow?</div>
+    </div>
+    <div class="bottom">
+      <div class="pill-track locked" style="width: 180px;">
+        <div class="rec-btn" style="background: rgba(255,255,255,0.2);">
+          <div class="pulse-ring" style="border-color: rgba(255,255,255,0.3);"></div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div class="waveform">
+          <span style="height: 12px;"></span>
+          <span style="height: 18px;"></span>
+          <span style="height: 14px;"></span>
+          <span style="height: 20px;"></span>
+          <span style="height: 10px;"></span>
+          <span style="height: 16px;"></span>
+          <span style="height: 12px;"></span>
+        </div>
+        <div class="lock-target" style="right: 8px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+      </div>
+      <button class="stop-btn red">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OPTION B — IDLE ═══════════ -->
+<div class="mockup-wrapper">
+  <div class="mockup-label">Option B — Idle</div>
+  <div class="mockup-sublabel">Compact pill, darker track. Chevrons hint at slide direction.</div>
+  <div class="mockup-card">
+    <div class="header">
+      <div class="dot"></div>
+      <span class="title">GPT Realtime</span>
+    </div>
+    <div class="messages">
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <span class="empty-text">Listening</span>
+      </div>
+    </div>
+    <div class="bottom">
+      <div class="pill-grooved" style="width: 150px;">
+        <div class="knob" style="background: rgba(59, 130, 246, 0.15);">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div style="display: flex; gap: 1px; margin-left: 12px; opacity: 0.25;">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+        <div class="groove-lock" style="right: 10px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+        </div>
+      </div>
+      <button class="stop-btn outline">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OPTION B — LOCKED ═══════════ -->
+<div class="mockup-wrapper">
+  <div class="mockup-label">Option B — Locked</div>
+  <div class="mockup-sublabel">Button snapped right over lock. Filled green. Tap to unlock.</div>
+  <div class="mockup-card">
+    <div class="header">
+      <div class="dot"></div>
+      <span class="title">GPT Realtime</span>
+    </div>
+    <div class="messages">
+      <div class="msg user">Tell me about React Server Components</div>
+      <div class="msg assistant">React Server Components let you render components on the server without sending their JavaScript to the client. They can directly access databases, file systems, and other server resources.</div>
+    </div>
+    <div class="bottom">
+      <div class="pill-grooved" style="width: 150px; background: #064e3b; border-color: #10b981;">
+        <div style="flex: 1;"></div>
+        <div class="knob" style="background: #10b981; box-shadow: 0 0 16px rgba(16,185,129,0.4); position: absolute; right: 5px;">
+          <div class="pulse-ring" style="border-color: rgba(16,185,129,0.3);"></div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div style="position: absolute; left: 14px; display: flex; align-items: center; gap: 3px;">
+          <span style="width: 3px; height: 10px; border-radius: 2px; background: rgba(16,185,129,0.5);"></span>
+          <span style="width: 3px; height: 16px; border-radius: 2px; background: rgba(16,185,129,0.6);"></span>
+          <span style="width: 3px; height: 12px; border-radius: 2px; background: rgba(16,185,129,0.5);"></span>
+          <span style="width: 3px; height: 18px; border-radius: 2px; background: rgba(16,185,129,0.7);"></span>
+          <span style="width: 3px; height: 8px; border-radius: 2px; background: rgba(16,185,129,0.4);"></span>
+        </div>
+      </div>
+      <button class="stop-btn red">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OPTION C — IDLE ═══════════ -->
+<div class="mockup-wrapper">
+  <div class="mockup-label">Option C — Idle</div>
+  <div class="mockup-sublabel">Wider pill, frosted glass feel. Lock icon as destination.</div>
+  <div class="mockup-card">
+    <div class="header">
+      <div class="dot"></div>
+      <span class="title">GPT Realtime</span>
+    </div>
+    <div class="messages">
+      <div class="empty-state">
+        <div class="empty-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <span class="empty-text">Listening</span>
+      </div>
+    </div>
+    <div class="bottom">
+      <div style="width: 180px; height: 68px; border-radius: 34px; background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; display: flex; align-items: center; padding: 6px; position: relative; box-shadow: inset 0 1px 2px rgba(0,0,0,0.3);">
+        <div style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #3b82f6, #2563eb); display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 10px rgba(59,130,246,0.3); flex-shrink: 0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <!-- Slide hint dots -->
+        <div style="display: flex; gap: 6px; margin-left: 16px; opacity: 0.2;">
+          <span style="width: 4px; height: 4px; border-radius: 50%; background: #94a3b8;"></span>
+          <span style="width: 4px; height: 4px; border-radius: 50%; background: #94a3b8;"></span>
+          <span style="width: 4px; height: 4px; border-radius: 50%; background: #94a3b8;"></span>
+        </div>
+        <div style="position: absolute; right: 14px;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+        </div>
+      </div>
+      <button class="stop-btn subtle">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ OPTION C — LOCKED ═══════════ -->
+<div class="mockup-wrapper">
+  <div class="mockup-label">Option C — Locked</div>
+  <div class="mockup-sublabel">Button snapped to lock. Entire pill glows green. Waveform fills track.</div>
+  <div class="mockup-card">
+    <div class="header">
+      <div class="dot"></div>
+      <span class="title">GPT Realtime</span>
+    </div>
+    <div class="messages">
+      <div class="msg user">Explain quantum entanglement simply</div>
+      <div class="msg assistant">Imagine two coins that are magically linked. When you flip one and it lands on heads, the other instantly lands on tails, no matter how far apart they are. That's the basic idea of quantum entanglement.</div>
+      <div class="msg user">That's cool! Can we use it for communication?</div>
+      <div class="msg assistant">Not directly for sending messages, actually. While the correlation is instant, you can't control which outcome you get. It's random on both sides. But it's incredibly useful for encryption and quantum computing.</div>
+    </div>
+    <div class="bottom">
+      <div style="width: 180px; height: 68px; border-radius: 34px; background: linear-gradient(135deg, #059669, #10b981); border: 1px solid rgba(16,185,129,0.4); display: flex; align-items: center; padding: 6px; position: relative; box-shadow: 0 4px 24px rgba(16,185,129,0.25), inset 0 1px 2px rgba(255,255,255,0.1);">
+        <!-- Waveform on left side -->
+        <div style="display: flex; align-items: center; gap: 3px; margin-left: 14px;">
+          <span style="width: 3px; height: 10px; border-radius: 2px; background: rgba(255,255,255,0.4);"></span>
+          <span style="width: 3px; height: 18px; border-radius: 2px; background: rgba(255,255,255,0.5);"></span>
+          <span style="width: 3px; height: 12px; border-radius: 2px; background: rgba(255,255,255,0.4);"></span>
+          <span style="width: 3px; height: 22px; border-radius: 2px; background: rgba(255,255,255,0.6);"></span>
+          <span style="width: 3px; height: 14px; border-radius: 2px; background: rgba(255,255,255,0.4);"></span>
+          <span style="width: 3px; height: 8px; border-radius: 2px; background: rgba(255,255,255,0.3);"></span>
+        </div>
+        <!-- Button snapped to right -->
+        <div style="width: 56px; height: 56px; border-radius: 50%; background: rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; position: absolute; right: 6px; backdrop-filter: blur(4px);">
+          <div class="pulse-ring" style="border-color: rgba(255,255,255,0.25);"></div>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+      </div>
+      <button class="stop-btn red">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+        Stop
+      </button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

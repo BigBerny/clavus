@@ -1,6 +1,16 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { haptic, isNative } from '../../lib/native'
+import { usePresetStore } from '../../state/preset'
+import { useChatSettingsStore } from '../../state/chatSettings'
+import { MODEL_PRESETS } from '../../gateway/presets'
+import {
+  SLASH_COMMANDS,
+  filterSlashCommands,
+  tryRunSlashCommand,
+  syncReasoningToHermes,
+  type SlashCommand,
+} from '../../lib/slashCommands'
 
 interface Props {
   onSend: (message: string, images?: string[]) => void
@@ -10,33 +20,33 @@ interface Props {
   isHome?: boolean
   onFocusInput?: () => void
   onClear?: () => void
+  /** Currently visible thread id, or null when on the home screen. */
+  threadId?: string | null
+  /** Resend the last user message in this thread (used by /retry). */
+  onRetry?: () => void
   talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void; interrupt: () => void }
-}
-
-interface SlashCommand {
-  command: string
-  description: string
-  local?: boolean
 }
 
 const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 
-const SLASH_COMMANDS: SlashCommand[] = [
-  { command: '/tasks', description: 'Show tasks' },
-  { command: '/tasks list', description: 'List all tasks' },
-  { command: '/status', description: 'Show status' },
-  { command: '/model', description: 'Show/change model' },
-  { command: '/clear', description: 'Clear chat', local: true },
-  { command: '/help', description: 'Show help' },
-]
-
-export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, talkMode }: Props) {
+export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode }: Props) {
   const [value, setValue] = useState('')
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [slashIndex, setSlashIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
+  const [menuState, setMenuState] = useState<'closed' | 'open' | 'closing'>('closed')
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuBtnRef = useRef<HTMLButtonElement>(null)
+
+  const toggleMenu = useCallback(() => {
+    setMenuState((s) => s === 'open' ? 'closing' : 'open')
+  }, [])
+
+  const closeMenu = useCallback(() => {
+    setMenuState('closing')
+  }, [])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -122,12 +132,23 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     }
   }, [pendingImages.length])
 
-  // Slash command filtering
+  // Toast (slash command feedback)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500)
+  }, [])
+
+  // Help overlay
+  const [helpOpen, setHelpOpen] = useState(false)
+
+  // Slash command palette
   const showSlashPalette = value.startsWith('/') && !isStreaming
   const filteredCommands = useMemo(() => {
     if (!showSlashPalette) return []
-    const query = value.toLowerCase()
-    return SLASH_COMMANDS.filter((cmd) => cmd.command.startsWith(query))
+    return filterSlashCommands(value.toLowerCase())
   }, [showSlashPalette, value])
 
   // Reset slash index when filtered list changes
@@ -136,40 +157,48 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   }, [filteredCommands.length])
 
   const selectSlashCommand = useCallback((cmd: SlashCommand) => {
-    if (cmd.local) {
-      // Execute locally
-      onClear?.()
-      setValue('')
-      if (textareaRef.current) textareaRef.current.style.height = 'auto'
-    } else {
-      // Put command in input for user to send
-      setValue(cmd.command)
-      setTimeout(() => textareaRef.current?.focus(), 50)
-    }
-  }, [onClear])
+    // Tab-complete: put the command into the input so the user can append args.
+    // For commands that take args, append a trailing space.
+    const needsArgs = !!cmd.arg
+    setValue(needsArgs ? `${cmd.command} ` : cmd.command)
+    setTimeout(() => textareaRef.current?.focus(), 50)
+  }, [])
 
-  const handleSubmit = useCallback(() => {
+  /** Execute a slash command via the interpreter. Returns true if handled. */
+  const runSlash = useCallback(async (input: string): Promise<boolean> => {
+    const result = await tryRunSlashCommand(input, {
+      threadId: threadId ?? null,
+      setReasoningOverride: (tid, level) => useChatSettingsStore.getState().setReasoningOverride(tid, level),
+      getReasoningOverride: (tid) => useChatSettingsStore.getState().getReasoningOverride(tid),
+      setPresetId: (id) => usePresetStore.getState().setSelectedPresetId(id),
+      getPresetId: () => usePresetStore.getState().selectedPresetId,
+      clearChat: () => onClear?.(),
+      regenerateLast: () => {
+        if (onRetry) onRetry()
+        else showToast('Retry is unavailable')
+      },
+      showHelp: () => setHelpOpen(true),
+      toast: showToast,
+      syncReasoningToHermes,
+    })
+    return result.handled
+  }, [threadId, onClear, onRetry, showToast])
+
+  const handleSubmit = useCallback(async () => {
     const trimmed = value.trim()
     if (!trimmed && pendingImages.length === 0) return
 
-    // Handle slash commands
-    if (showSlashPalette && filteredCommands.length > 0) {
-      const exact = filteredCommands.find((c) => c.command === trimmed)
-      if (exact) {
-        if (exact.local) {
-          onClear?.()
-          setValue('')
-          if (textareaRef.current) textareaRef.current.style.height = 'auto'
-          return
-        }
-        // Send as message to gateway
+    // Try local slash command interpreter first
+    if (trimmed.startsWith('/')) {
+      const handled = await runSlash(trimmed)
+      if (handled) {
+        setValue('')
+        if (textareaRef.current) textareaRef.current.style.height = 'auto'
+        return
       }
     }
 
-    // If streaming, abort first then send
-    if (isStreaming) {
-      onAbort()
-    }
+    // During streaming, just queue the message (don't abort)
 
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
@@ -181,7 +210,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       textareaRef.current.style.height = 'auto'
     }
     setTimeout(() => textareaRef.current?.focus(), 50)
-  }, [value, isStreaming, onSend, onAbort, pendingImages, showSlashPalette, filteredCommands, onClear])
+  }, [value, onSend, pendingImages, runSlash])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -196,7 +225,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           setSlashIndex((i) => (i < filteredCommands.length - 1 ? i + 1 : 0))
           return
         }
-        if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+        if (e.key === 'Tab') {
           e.preventDefault()
           selectSlashCommand(filteredCommands[slashIndex])
           return
@@ -206,6 +235,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           setValue('')
           return
         }
+        // Enter falls through to submit — runSlash handles execution.
       }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
@@ -313,6 +343,22 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     }
   }, [pendingImages.length])
 
+  const { selectedPresetId, setSelectedPresetId } = usePresetStore()
+  const currentPreset = MODEL_PRESETS.find((p) => p.id === selectedPresetId) || MODEL_PRESETS[0]
+
+  const menuVisible = menuState !== 'closed'
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (menuState !== 'open') return
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (menuRef.current && !menuRef.current.contains(t) && !menuBtnRef.current?.contains(t)) closeMenu()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuState, closeMenu])
+
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0
 
@@ -401,6 +447,14 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       <div className="max-w-[900px] mx-auto p-3">
 
         {/* Slash command palette */}
+        {/* Toast (slash command feedback) */}
+        {toast && (
+          <div className="mb-2 flex justify-center animate-[fadeSlideIn_0.2s_ease-out]" role="status" aria-live="polite">
+            <div className="px-3 py-1.5 rounded-full bg-accent/12 text-accent text-xs font-medium">
+              {toast}
+            </div>
+          </div>
+        )}
         {showSlashPalette && filteredCommands.length > 0 && (
           <div className="mb-2 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox">
             {filteredCommands.map((cmd, i) => (
@@ -416,7 +470,10 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                 }`}
               >
                 <span className="text-sm font-mono font-medium">{cmd.command}</span>
-                <span className="text-xs text-text-light-muted dark:text-text-dark-muted">{cmd.description}</span>
+                <span className="text-xs text-text-light-muted dark:text-text-dark-muted truncate">{cmd.description}</span>
+                {cmd.arg && (
+                  <span className="text-[10px] font-mono text-text-light-muted/60 dark:text-text-dark-muted/60 truncate">{cmd.arg}</span>
+                )}
                 {cmd.local && (
                   <span className="ml-auto text-[10px] text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-wide">local</span>
                 )}
@@ -429,6 +486,36 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         {voice.error && (
           <div className="flex items-center justify-center gap-2 text-red-400 text-xs mb-2 animate-[fadeSlideIn_0.2s_ease-out] px-3 py-1.5 rounded-lg bg-red-500/8" role="alert">
             <span className="text-center">{voice.error}</span>
+          </div>
+        )}
+
+        {/* Failed dictation retry prompt */}
+        {voice.hasFailedAudio && voice.state === 'idle' && (
+          <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 animate-[fadeSlideIn_0.2s_ease-out]" role="status">
+            <span className="text-xs text-amber-300/90 flex-shrink-0">Last dictation failed</span>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button
+                onClick={() => voice.retryLastTranscription()}
+                className="inline-btn px-2.5 py-1 rounded-full bg-accent/20 text-accent text-[11px] font-medium active:scale-95 transition-transform"
+                aria-label="Retry transcription of previous audio"
+              >
+                Retry
+              </button>
+              <button
+                onClick={() => voice.clearLastFailedAudio()}
+                className="inline-btn px-2.5 py-1 rounded-full bg-surface-light-3/40 dark:bg-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted text-[11px] font-medium active:scale-95 transition-transform"
+                aria-label="Discard previous audio"
+              >
+                Discard
+              </button>
+              <button
+                onClick={() => { voice.clearLastFailedAudio(); voice.start() }}
+                className="inline-btn px-2.5 py-1 rounded-full bg-surface-light-3/40 dark:bg-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted text-[11px] font-medium active:scale-95 transition-transform"
+                aria-label="Record new audio"
+              >
+                Record new
+              </button>
+            </div>
           </div>
         )}
 
@@ -458,16 +545,67 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           </div>
         )}
 
-        <div className="flex items-center gap-2">
-          {/* Attachment button */}
-          <button
-            onClick={handleAttachClick}
-            disabled={pendingImages.length >= MAX_IMAGES || isTranscribing}
-            className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full text-text-light-muted dark:text-text-dark-muted hover:text-accent active:scale-95 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Attach image"
-            title="Attach image"
+        {/* Options menu panel */}
+        {menuVisible && (
+          <div
+            ref={menuRef}
+            className={`mb-2 rounded-2xl bg-surface-light-2/90 dark:bg-surface-dark-2/90 backdrop-blur-xl border border-surface-light-3/20 dark:border-surface-dark-3/20 shadow-lg shadow-black/15 overflow-hidden ${
+              menuState === 'open' ? 'animate-[menuIn_0.2s_ease-out_both]' : 'animate-[menuOut_0.18s_ease-in_both]'
+            }`}
+            onAnimationEnd={() => { if (menuState === 'closing') setMenuState('closed') }}
           >
-            <PaperclipIcon />
+            <div className="flex items-center gap-2 p-2">
+              {/* Model selection pills */}
+              <div className="flex-1 flex items-center gap-1.5">
+                {MODEL_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onPointerDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      setSelectedPresetId(preset.id)
+                      closeMenu()
+                    }}
+                    className={`flex-1 px-2 py-2.5 rounded-xl text-[13px] font-medium text-center transition-all ${
+                      preset.id === selectedPresetId
+                        ? 'bg-accent/15 text-accent shadow-sm'
+                        : 'text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50'
+                    }`}
+                  >
+                    {preset.shortLabel}
+                  </button>
+                ))}
+              </div>
+              {/* Attach file button */}
+              <button
+                onPointerDown={(e) => e.preventDefault()}
+                onClick={() => { handleAttachClick(); closeMenu() }}
+                disabled={pendingImages.length >= MAX_IMAGES}
+                className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full text-text-light-muted dark:text-text-dark-muted hover:text-accent active:scale-95 transition-all disabled:opacity-30"
+                aria-label="Attach file"
+                title="Attach file"
+              >
+                <PaperclipIcon />
+              </button>
+            </div>
+            {/* Version info */}
+            <div className="flex items-center gap-1.5 px-3 pb-1.5 pt-0">
+              <span className="w-1 h-1 rounded-full bg-accent/50" />
+              <span className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40">Build {formatBuildTime(__CLAVUS_BUILD_TIME__)}{__CLAVUS_GIT_SHA__ && __CLAVUS_GIT_SHA__ !== 'dev' ? ` · ${__CLAVUS_GIT_SHA__}` : ''}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          {/* Menu / close button — always visible */}
+          <button
+            ref={menuBtnRef}
+            onPointerDown={(e) => e.preventDefault()}
+            onClick={toggleMenu}
+            className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all"
+            aria-label={menuVisible ? 'Close options' : 'Options'}
+            title={menuVisible ? 'Close' : `Options (${currentPreset.shortLabel})`}
+          >
+            {menuVisible ? <CloseIcon /> : <MenuIcon />}
           </button>
           <input
             ref={fileInputRef}
@@ -512,17 +650,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               onPaste={handlePaste}
               onFocus={() => {
                 onFocusInput?.()
-                // Scroll-into-view is a Safari-PWA workaround: iOS Safari
-                // shifts the visualViewport on focus which needs manual
-                // correction. Inside Capacitor WKWebView with
-                // `Keyboard.resize: 'native'` the webview resizes itself
-                // and the textarea is already in view — the delayed smooth
-                // scroll only adds visible lag.
-                if (!isHome && !isNative) {
-                  setTimeout(() => {
-                    textareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-                  }, 300)
-                }
               }}
               placeholder={isHome ? "Start new conversation" : "Message..."}
               rows={1}
@@ -566,21 +693,21 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           ) : (
           <div className="flex-none flex items-center gap-1.5">
             {isStreaming && hasContent ? (
-              /* Streaming + user typed text: show stop + send */
+              /* Streaming + user typed text: stop to interrupt, send to queue */
               <>
                 <button
                   onClick={onAbort}
-                  className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
                   aria-label="Stop generating"
-                  title="Stop"
+                  title="Stop generating"
                 >
                   <StopIcon />
                 </button>
                 <button
                   onClick={handleSubmit}
                   className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
-                  aria-label="Send message"
-                  title="Send"
+                  aria-label="Queue message"
+                  title="Send (queues after current response)"
                 >
                   <ArrowUpIcon />
                 </button>
@@ -616,16 +743,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                     <StopIcon />
                   </button>
                 )}
-                {!isStreaming && talkMode && (
-                  <button
-                    onClick={talkMode.toggle}
-                    className="w-9 h-9 flex items-center justify-center rounded-full text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-accent active:scale-95 transition-all"
-                    aria-label="Start Talk Mode"
-                    title="Talk Mode (continuous voice conversation)"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 18.5a6 6 0 0 0 6-6v-2"/><path d="M12 18.5a6 6 0 0 1-6-6v-2"/><path d="M12 18.5V22"/><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M2 10h2"/><path d="M20 10h2"/></svg>
-                  </button>
-                )}
                 <button
                   onClick={handleMicClick}
                   onPointerDown={handleMicPointerDown}
@@ -643,6 +760,41 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           )}
         </div>
       </div>
+      {helpOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeSlideIn_0.15s_ease-out]"
+          role="dialog"
+          aria-label="Slash commands"
+          onClick={() => setHelpOpen(false)}
+        >
+          <div
+            className="max-w-md w-[92vw] rounded-2xl bg-surface-light dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/40 shadow-xl shadow-black/30 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-text-light dark:text-text-dark">Slash commands</h2>
+              <button
+                onClick={() => setHelpOpen(false)}
+                className="inline-btn text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
+                aria-label="Close help"
+              >
+                ×
+              </button>
+            </div>
+            <ul className="divide-y divide-white/5 max-h-[60vh] overflow-y-auto">
+              {SLASH_COMMANDS.map((cmd) => (
+                <li key={cmd.command} className="px-5 py-2.5 flex items-baseline gap-3">
+                  <span className="text-sm font-mono font-medium text-text-light dark:text-text-dark">{cmd.command}</span>
+                  {cmd.arg && (
+                    <span className="text-[10px] font-mono text-text-light-muted/60 dark:text-text-dark-muted/60">{cmd.arg}</span>
+                  )}
+                  <span className="ml-auto text-xs text-text-light-muted dark:text-text-dark-muted text-right">{cmd.description}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -678,6 +830,31 @@ function StopIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <rect x="6" y="6" width="12" height="12" rx="2"/>
+    </svg>
+  )
+}
+
+function formatBuildTime(value: string): string {
+  if (!value || value === 'dev') return 'dev'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function CloseIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+    </svg>
+  )
+}
+
+function MenuIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+      <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>
     </svg>
   )
 }

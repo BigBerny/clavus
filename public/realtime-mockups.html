@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clavus Voice-First Bottom Bar Mockups</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', system-ui, sans-serif;
+    background: #0a0a0a;
+    color: #e5e5e5;
+    padding: 20px;
+    max-width: 430px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.4rem; margin-bottom: 8px; color: #fff; }
+  h2 { font-size: 1.1rem; margin: 40px 0 6px; color: #a78bfa; }
+  h3 { font-size: 0.85rem; margin: 24px 0 8px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  p.desc { font-size: 0.82rem; color: #777; margin-bottom: 14px; line-height: 1.4; }
+  .mockup-container {
+    background: #1a1a1a;
+    border-radius: 20px;
+    padding: 16px;
+    margin-bottom: 16px;
+    border: 1px solid #2a2a2a;
+    position: relative;
+  }
+  .label {
+    position: absolute;
+    top: 8px;
+    right: 12px;
+    font-size: 0.65rem;
+    color: #555;
+    font-weight: 600;
+  }
+
+  /* Common elements */
+  .bottom-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 8px 0;
+  }
+  .btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .btn:hover { transform: scale(1.05); }
+  .btn-accent { background: #7c3aed; color: white; }
+  .btn-accent-soft { background: rgba(124,58,237,0.15); color: #a78bfa; }
+  .btn-red { background: #dc2626; color: white; }
+  .btn-red-soft { background: rgba(220,38,38,0.12); color: #f87171; }
+  .btn-ghost { background: rgba(255,255,255,0.06); color: #999; }
+  .btn-ghost:hover { background: rgba(255,255,255,0.1); color: #ccc; }
+  .btn-large { width: 64px; height: 64px; }
+  .btn-xl { width: 80px; height: 80px; }
+
+  .input-field {
+    flex: 1;
+    background: #222;
+    border: 1px solid #333;
+    border-radius: 22px;
+    padding: 10px 16px;
+    color: #e5e5e5;
+    font-size: 0.9rem;
+    outline: none;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+  .input-field.minimal {
+    background: transparent;
+    border: 1px solid #333;
+    padding: 8px 14px;
+    min-height: 36px;
+    font-size: 0.82rem;
+    border-radius: 18px;
+  }
+  .input-field.collapsed {
+    flex: 0;
+    width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+  .placeholder { color: #555; }
+
+  /* SVG Icons */
+  .icon { width: 20px; height: 20px; }
+  .icon-sm { width: 16px; height: 16px; }
+  .icon-lg { width: 24px; height: 24px; }
+  .icon-xl { width: 28px; height: 28px; }
+
+  /* Waveform */
+  .waveform {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    height: 28px;
+  }
+  .waveform .bar {
+    width: 3px;
+    border-radius: 2px;
+    background: #f87171;
+    animation: wave 1s ease-in-out infinite;
+  }
+  .waveform .bar:nth-child(1) { height: 8px; animation-delay: 0s; }
+  .waveform .bar:nth-child(2) { height: 16px; animation-delay: 0.1s; }
+  .waveform .bar:nth-child(3) { height: 24px; animation-delay: 0.2s; }
+  .waveform .bar:nth-child(4) { height: 12px; animation-delay: 0.3s; }
+  .waveform .bar:nth-child(5) { height: 20px; animation-delay: 0.15s; }
+  .waveform .bar:nth-child(6) { height: 14px; animation-delay: 0.25s; }
+  .waveform .bar:nth-child(7) { height: 22px; animation-delay: 0.05s; }
+  .waveform .bar:nth-child(8) { height: 10px; animation-delay: 0.35s; }
+
+  @keyframes wave {
+    0%, 100% { transform: scaleY(0.5); }
+    50% { transform: scaleY(1); }
+  }
+
+  /* Recording timer */
+  .timer {
+    font-size: 0.75rem;
+    color: #f87171;
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', monospace;
+  }
+
+  /* Pulse ring animation */
+  .pulse-ring {
+    position: relative;
+  }
+  .pulse-ring::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid rgba(220, 38, 38, 0.4);
+    animation: pulse 1.5s ease-out infinite;
+  }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 1; }
+    100% { transform: scale(1.4); opacity: 0; }
+  }
+
+  /* Lock indicator */
+  .lock-indicator {
+    font-size: 0.65rem;
+    color: #666;
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  /* Mode toggle */
+  .mode-toggle {
+    display: flex;
+    gap: 2px;
+    background: #1a1a1a;
+    border-radius: 12px;
+    padding: 2px;
+    border: 1px solid #2a2a2a;
+  }
+  .mode-toggle .tab {
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    color: #777;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mode-toggle .tab.active {
+    background: #7c3aed;
+    color: white;
+  }
+
+  /* Divider */
+  .divider {
+    width: 100%;
+    height: 1px;
+    background: #2a2a2a;
+    margin: 12px 0;
+  }
+
+  /* Transcription preview */
+  .transcription-preview {
+    background: #1f1f1f;
+    border: 1px solid #333;
+    border-radius: 16px;
+    padding: 10px 14px;
+    font-size: 0.82rem;
+    color: #ccc;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  .transcription-preview .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 14px;
+    background: #7c3aed;
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+    margin-left: 2px;
+  }
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+
+  /* Section separator */
+  .section-sep {
+    border-top: 1px solid #222;
+    margin: 48px 0 16px;
+    padding-top: 16px;
+  }
+
+  /* Chip / pill */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    background: rgba(124,58,237,0.12);
+    color: #a78bfa;
+    cursor: pointer;
+  }
+
+  /* Action row */
+  .action-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  /* Floating toolbar */
+  .floating-toolbar {
+    display: flex;
+    gap: 4px;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 24px;
+    padding: 4px;
+  }
+  .floating-toolbar .btn { width: 36px; height: 36px; }
+
+  /* Progress ring */
+  .progress-ring {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: conic-gradient(#7c3aed 75%, #333 75%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .progress-ring-inner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Voice orb */
+  .voice-orb {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, #9333ea, #6b21a8, #4c1d95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px rgba(147, 51, 234, 0.3);
+    position: relative;
+  }
+  .voice-orb.recording {
+    background: radial-gradient(circle at 30% 30%, #ef4444, #dc2626, #991b1b);
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.3);
+    animation: orb-pulse 2s ease-in-out infinite;
+  }
+  @keyframes orb-pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 30px rgba(239, 68, 68, 0.3); }
+    50% { transform: scale(1.05); box-shadow: 0 0 50px rgba(239, 68, 68, 0.4); }
+  }
+
+  /* Swipe hint */
+  .swipe-hint {
+    font-size: 0.65rem;
+    color: #444;
+    text-align: center;
+    margin-top: 6px;
+  }
+
+  /* Inline badge */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 8px;
+    font-size: 0.65rem;
+    background: rgba(255,255,255,0.05);
+    color: #666;
+  }
+</style>
+</head>
+<body>
+
+<h1>Clavus Voice-First Bottom Bar</h1>
+<p class="desc">Mockups for a redesigned input bar optimized for voice-first interaction. Pick and combine: e.g. "1a layout + 2b recording + 3c send behavior"</p>
+
+<!-- ===== SECTION 1: IDLE STATE LAYOUTS ===== -->
+<div class="section-sep"></div>
+<h2>1. Idle State Layout</h2>
+<p class="desc">How the bar looks when you haven't started typing or recording yet.</p>
+
+<h3>1a — Voice-Dominant with Collapsed Input</h3>
+<p class="desc">Large central mic button. Input is a small pill that expands on tap. Options left, attach right.</p>
+<div class="mockup-container">
+  <span class="label">1a</span>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+    <div style="display:flex; align-items:center; gap:10px; width:100%;">
+      <!-- Options -->
+      <div class="btn btn-ghost">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </div>
+      <!-- Collapsed input -->
+      <div class="input-field collapsed">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2"><path d="M17 10H3M21 6H3M21 14H3M17 18H3"/></svg>
+      </div>
+      <!-- Spacer -->
+      <div style="flex:1"></div>
+      <!-- Voice button -->
+      <div class="voice-orb">
+        <svg class="icon-xl" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+      <!-- Spacer -->
+      <div style="flex:1"></div>
+      <!-- Attach -->
+      <div class="btn btn-ghost">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </div>
+    </div>
+    <div class="lock-indicator">Hold to talk · Tap to lock</div>
+  </div>
+</div>
+
+<h3>1b — Minimal Bar with Inline Mic</h3>
+<p class="desc">Compact single-row. Input field takes most space but is thin. Mic button right of input. Options as a small icon left.</p>
+<div class="mockup-container">
+  <span class="label">1b</span>
+  <div class="bottom-bar">
+    <div class="btn btn-ghost" style="width:36px;height:36px;">
+      <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+    </div>
+    <div class="input-field minimal">
+      <span class="placeholder">Message...</span>
+    </div>
+    <div class="btn btn-accent" style="width:40px;height:40px;">
+      <svg class="icon" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+    </div>
+  </div>
+</div>
+
+<h3>1c — Split Mode: Voice / Text Toggle</h3>
+<p class="desc">Mode toggle at top switches between voice-first and text-first views. Voice mode shows big mic, text mode shows full textarea.</p>
+<div class="mockup-container">
+  <span class="label">1c – voice mode</span>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="mode-toggle">
+        <div class="tab active">🎤 Voice</div>
+        <div class="tab">⌨️ Text</div>
+      </div>
+      <div class="action-row">
+        <div class="btn btn-ghost" style="width:32px;height:32px;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        </div>
+        <div class="btn btn-ghost" style="width:32px;height:32px;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex; justify-content:center; padding:8px 0;">
+      <div class="voice-orb">
+        <svg class="icon-xl" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+    </div>
+    <div class="lock-indicator">Hold to dictate · Tap to lock · Swipe up to insert</div>
+  </div>
+</div>
+
+<h3>1d — Floating Compact Bar</h3>
+<p class="desc">Everything in one tight floating pill. Mic dominates, other actions are contextual dots.</p>
+<div class="mockup-container">
+  <span class="label">1d</span>
+  <div style="display:flex; justify-content:center;">
+    <div style="display:flex; align-items:center; gap:6px; background:#222; border-radius:28px; padding:6px 8px; border:1px solid #333;">
+      <div class="btn btn-ghost" style="width:34px;height:34px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+      </div>
+      <div class="btn btn-ghost" style="width:34px;height:34px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </div>
+      <div class="btn btn-accent btn-large" style="margin:0 4px;">
+        <svg class="icon-lg" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+      <div class="btn btn-ghost" style="width:34px;height:34px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 10H3M21 6H3M21 14H3M17 18H3"/></svg>
+      </div>
+    </div>
+  </div>
+  <div class="lock-indicator" style="margin-top:8px;">Tap text icon to expand input</div>
+</div>
+
+<!-- ===== SECTION 2: RECORDING STATE ===== -->
+<div class="section-sep"></div>
+<h2>2. Recording State</h2>
+<p class="desc">How the bar looks while you're actively dictating.</p>
+
+<h3>2a — Inline Waveform with Timer</h3>
+<p class="desc">Waveform replaces input field. Stop/Insert/Send buttons on right. Minimal and stays compact.</p>
+<div class="mockup-container">
+  <span class="label">2a</span>
+  <div class="bottom-bar">
+    <div class="btn btn-red-soft pulse-ring" style="width:40px;height:40px;">
+      <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+    </div>
+    <div style="flex:1; display:flex; align-items:center; gap:10px; background:#1f1f1f; border:1px solid rgba(220,38,38,0.2); border-radius:22px; padding:8px 14px;">
+      <div class="waveform">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+      <span class="timer">0:12</span>
+    </div>
+    <div class="btn btn-ghost" style="width:40px;height:40px;" title="Insert text">
+      <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+    </div>
+  </div>
+</div>
+
+<h3>2b — Full-Width Orb with Live Transcription</h3>
+<p class="desc">Recording state takes over with a glowing orb. Live transcription appears above. Two action buttons below: Insert / Send.</p>
+<div class="mockup-container">
+  <span class="label">2b</span>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div class="transcription-preview">
+      Ich möchte gerne das Layout der Bottom Bar anpassen<span class="cursor"></span>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:center; gap:16px; padding:4px 0;">
+      <div class="btn btn-ghost" style="width:40px;height:40px;" title="Insert into field">
+        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      </div>
+      <div class="voice-orb recording">
+        <svg class="icon-xl" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+      <div class="btn btn-accent" style="width:40px;height:40px;" title="Stop & Send">
+        <svg class="icon" viewBox="0 0 24 24" fill="white"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </div>
+    </div>
+    <div class="lock-indicator">Recording locked · Tap orb to stop · 0:12</div>
+  </div>
+</div>
+
+<h3>2c — Compact Recording Strip</h3>
+<p class="desc">Slim recording indicator with auto-send countdown. Clean and unobtrusive. Shows pause/send on silence detection.</p>
+<div class="mockup-container">
+  <span class="label">2c</span>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div style="display:flex; align-items:center; gap:8px; background:rgba(220,38,38,0.06); border:1px solid rgba(220,38,38,0.15); border-radius:16px; padding:8px 12px;">
+      <div style="width:8px; height:8px; border-radius:50%; background:#ef4444; animation: blink 1.2s step-end infinite;"></div>
+      <div class="waveform" style="flex:1;">
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      </div>
+      <span class="timer">0:12</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="badge">
+        <svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Auto-send on pause (2s)
+      </div>
+      <div class="action-row">
+        <div class="btn btn-ghost" style="width:32px;height:32px;" title="Insert instead">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        </div>
+        <div class="btn btn-red-soft" style="width:32px;height:32px;" title="Stop">
+          <svg style="width:12px;height:12px;" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+        </div>
+        <div class="btn btn-accent" style="width:32px;height:32px;" title="Send now">
+          <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="white"><path d="M5 12l14-9v18L5 12z"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECTION 3: SEND BEHAVIOR ===== -->
+<div class="section-sep"></div>
+<h2>3. Send Behavior After Dictation</h2>
+<p class="desc">What happens when you stop talking or release the button.</p>
+
+<h3>3a — Auto-Send with Cancel Window</h3>
+<p class="desc">After pause detection, a 2-second countdown shows before sending. Tap "Edit" to cancel auto-send and insert into field instead.</p>
+<div class="mockup-container">
+  <span class="label">3a</span>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div class="transcription-preview">
+      Kannst du mir bitte die aktuelle Version des Deployments zeigen?
+    </div>
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <div class="progress-ring">
+          <div class="progress-ring-inner">
+            <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="#7c3aed"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:0.78rem; color:#ccc;">Sending in 2s...</div>
+          <div style="font-size:0.65rem; color:#666;">Tap to send now</div>
+        </div>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <div class="btn btn-ghost" style="width:36px;height:36px;border-radius:12px;width:auto;padding:0 12px;" title="Edit text">
+          <span style="font-size:0.75rem;">Edit</span>
+        </div>
+        <div class="btn btn-ghost" style="width:36px;height:36px;" title="Cancel">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>3b — Review & Choose</h3>
+<p class="desc">After dictation stops, transcription appears in the input field. You choose: Send, Continue Dictating, or Edit. No auto-send.</p>
+<div class="mockup-container">
+  <span class="label">3b</span>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div style="background:#222; border:1px solid #444; border-radius:18px; padding:10px 14px; font-size:0.85rem; color:#e5e5e5; line-height:1.4;">
+      Kannst du mir bitte die aktuelle Version des Deployments zeigen?
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="action-row">
+        <div class="btn btn-accent-soft" style="width:auto; border-radius:14px; padding:0 14px; height:36px; gap:6px;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+          <span style="font-size:0.72rem;">+ More</span>
+        </div>
+      </div>
+      <div class="btn btn-accent" style="width:40px; height:40px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="white"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>3c — Smart Auto-Send (Configurable)</h3>
+<p class="desc">Toggle between "auto-send on silence" and "insert mode". The toggle persists between sessions. Visual indicator shows current mode.</p>
+<div class="mockup-container">
+  <span class="label">3c</span>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:0 4px;">
+      <div class="chip">
+        <svg style="width:10px;height:10px;" viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+        Auto-send on pause
+      </div>
+      <div style="width:36px; height:20px; background:#7c3aed; border-radius:10px; position:relative; cursor:pointer;">
+        <div style="width:16px; height:16px; background:white; border-radius:50%; position:absolute; top:2px; right:2px;"></div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div style="display:flex; gap:8px; font-size:0.72rem; color:#666;">
+      <div style="flex:1; text-align:center; padding:6px; border-radius:10px; background:rgba(124,58,237,0.08); color:#a78bfa; border:1px solid rgba(124,58,237,0.2);">
+        🚀 Auto-send<br><span style="font-size:0.62rem; color:#888;">Send after 2s silence</span>
+      </div>
+      <div style="flex:1; text-align:center; padding:6px; border-radius:10px; background:rgba(255,255,255,0.03); border:1px solid #333;">
+        ✏️ Insert<br><span style="font-size:0.62rem; color:#888;">Add to input field</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECTION 4: OPTIONS MENU ===== -->
+<div class="section-sep"></div>
+<h2>4. Options Menu</h2>
+<p class="desc">How to access model selection, version, and settings.</p>
+
+<h3>4a — Tap Model Chip to Open</h3>
+<p class="desc">Model shown as a small chip above input. Tap it to open model picker + version info. Replaces the dots button.</p>
+<div class="mockup-container">
+  <span class="label">4a</span>
+  <div style="display:flex; flex-direction:column; gap:6px;">
+    <div style="display:flex; align-items:center; gap:6px; padding:0 4px;">
+      <div class="chip" style="background:rgba(124,58,237,0.1);">
+        <span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+        Sonnet 4.6
+      </div>
+      <div style="flex:1;"></div>
+      <div class="badge">v2.4.1</div>
+    </div>
+    <div class="bottom-bar" style="padding:4px 0;">
+      <div class="btn btn-ghost" style="width:36px;height:36px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </div>
+      <div class="input-field minimal">
+        <span class="placeholder">Message...</span>
+      </div>
+      <div class="btn btn-accent" style="width:40px;height:40px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>4b — Long-Press Options on Mic</h3>
+<p class="desc">No visible options button. Long-press the mic to open settings/model picker. Version shown at top of popup. Cleaner default view.</p>
+<div class="mockup-container">
+  <span class="label">4b – popup open</span>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div style="background:#222; border:1px solid #333; border-radius:16px; padding:12px; display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom:6px; border-bottom:1px solid #2a2a2a;">
+        <span style="font-size:0.72rem; color:#888;">Model</span>
+        <span style="font-size:0.65rem; color:#555;">v2.4.1 · abc123</span>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:4px;">
+        <span style="padding:5px 10px; border-radius:10px; font-size:0.7rem; background:#7c3aed; color:white;">Sonnet 4.6</span>
+        <span style="padding:5px 10px; border-radius:10px; font-size:0.7rem; background:rgba(255,255,255,0.06); color:#999;">Opus 4.6</span>
+        <span style="padding:5px 10px; border-radius:10px; font-size:0.7rem; background:rgba(255,255,255,0.06); color:#999;">Haiku 4.5</span>
+        <span style="padding:5px 10px; border-radius:10px; font-size:0.7rem; background:rgba(255,255,255,0.06); color:#999;">GPT-4.1</span>
+      </div>
+      <div style="display:flex; gap:6px; padding-top:4px;">
+        <div class="chip">📎 Attach file</div>
+        <div class="chip">⚙️ Settings</div>
+      </div>
+    </div>
+    <div class="lock-indicator">Long-press mic to open · Tap to dismiss</div>
+  </div>
+</div>
+
+<h3>4c — Swipe-Up Drawer</h3>
+<p class="desc">Swipe up on the bottom bar to reveal a settings drawer with model, version, voice config, and attach.</p>
+<div class="mockup-container">
+  <span class="label">4c – drawer open</span>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <div style="background:#1c1c1c; border:1px solid #2a2a2a; border-radius:20px; padding:14px;">
+      <div style="width:32px; height:3px; background:#444; border-radius:2px; margin:0 auto 12px;"></div>
+      <div style="display:flex; flex-direction:column; gap:10px;">
+        <div>
+          <div style="font-size:0.68rem; color:#666; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Model</div>
+          <div style="display:flex; flex-wrap:wrap; gap:4px;">
+            <span style="padding:6px 12px; border-radius:12px; font-size:0.72rem; background:#7c3aed; color:white;">Sonnet 4.6</span>
+            <span style="padding:6px 12px; border-radius:12px; font-size:0.72rem; background:rgba(255,255,255,0.06); color:#999;">Opus 4.6</span>
+            <span style="padding:6px 12px; border-radius:12px; font-size:0.72rem; background:rgba(255,255,255,0.06); color:#999;">Haiku 4.5</span>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div>
+          <div style="font-size:0.68rem; color:#666; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Voice</div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <div class="chip">🚀 Auto-send</div>
+            <div class="chip" style="background:rgba(255,255,255,0.05); color:#888;">✏️ Insert mode</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; gap:8px;">
+            <div class="chip">📎 Attach</div>
+          </div>
+          <div class="badge">v2.4.1</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECTION 5: TEXT EDITING STATE ===== -->
+<div class="section-sep"></div>
+<h2>5. Text Input (Expanded)</h2>
+<p class="desc">When you tap the input field to type or edit transcription.</p>
+
+<h3>5a — Click-to-Expand Inline</h3>
+<p class="desc">Tapping the collapsed field expands it in place. Mic button moves below. Keyboard-friendly with send button.</p>
+<div class="mockup-container">
+  <span class="label">5a – expanded</span>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div style="background:#222; border:1px solid #7c3aed; border-radius:18px; padding:10px 14px; min-height:80px;">
+      <div style="font-size:0.85rem; color:#e5e5e5; line-height:1.5;">Kannst du mir bitte die aktuelle Version<span class="cursor"></span></div>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div class="action-row">
+        <div class="btn btn-ghost" style="width:34px;height:34px;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+        </div>
+        <div class="btn btn-ghost" style="width:34px;height:34px;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+        </div>
+      </div>
+      <div class="action-row">
+        <div class="btn btn-accent-soft" style="width:34px;height:34px;">
+          <svg class="icon-sm" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        </div>
+        <div class="btn btn-accent" style="width:40px;height:40px;">
+          <svg class="icon" viewBox="0 0 24 24" fill="white"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>5b — Overlay Expansion</h3>
+<p class="desc">Input expands as a card overlay above the bar. Original bar stays visible below with mic + send. Good for longer edits.</p>
+<div class="mockup-container">
+  <span class="label">5b – overlay</span>
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div style="background:#1f1f1f; border:1px solid #333; border-radius:20px; padding:14px; box-shadow: 0 -4px 20px rgba(0,0,0,0.3);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <span style="font-size:0.68rem; color:#666; text-transform:uppercase; letter-spacing:0.5px;">Edit message</span>
+        <div class="btn btn-ghost" style="width:28px;height:28px;">
+          <svg style="width:14px;height:14px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </div>
+      </div>
+      <div style="background:#222; border:1px solid #444; border-radius:14px; padding:10px 12px; min-height:60px; font-size:0.85rem; color:#e5e5e5; line-height:1.5;">
+        Kannst du mir bitte die aktuelle Version des Deployments zeigen?<span class="cursor"></span>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; justify-content:center; gap:10px; padding:4px 0;">
+      <div class="btn btn-accent-soft" style="width:40px;height:40px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+      <div class="btn btn-accent" style="width:44px;height:44px;">
+        <svg class="icon-lg" viewBox="0 0 24 24" fill="white"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SECTION 6: COMBINED FLOWS ===== -->
+<div class="section-sep"></div>
+<h2>6. Full Flow Combinations</h2>
+<p class="desc">Complete experiences combining the above. These show my recommended combos.</p>
+
+<h3>6a — "The GPT-Style" (1a + 2b + 3a + 4a)</h3>
+<p class="desc">Voice orb centered, live transcription, auto-send with cancel window, model chip visible. Most voice-forward option.</p>
+<div class="mockup-container">
+  <span class="label">6a – recommended</span>
+  <div style="display:flex; flex-direction:column; gap:6px;">
+    <div style="display:flex; align-items:center; gap:6px; padding:0 4px;">
+      <div class="chip"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span> Sonnet 4.6</div>
+      <div style="flex:1;"></div>
+      <div class="badge">v2.4.1</div>
+    </div>
+    <div style="display:flex; align-items:center; gap:10px; width:100%;">
+      <div class="btn btn-ghost" style="width:36px;height:36px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </div>
+      <div class="input-field collapsed">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="1.5"><path d="M17 10H3M21 6H3M21 14H3M17 18H3"/></svg>
+      </div>
+      <div style="flex:1;"></div>
+      <div class="voice-orb" style="width:56px;height:56px;">
+        <svg class="icon-lg" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+      <div style="flex:1;"></div>
+    </div>
+    <div class="lock-indicator">Hold to talk · Tap to lock · Tap text to type</div>
+  </div>
+</div>
+
+<h3>6b — "The Minimal" (1b + 2a + 3b + 4a)</h3>
+<p class="desc">Compact single row, inline waveform when recording, review-then-send. Closest to current UI but voice-optimized.</p>
+<div class="mockup-container">
+  <span class="label">6b – minimal</span>
+  <div style="display:flex; flex-direction:column; gap:6px;">
+    <div style="display:flex; align-items:center; gap:6px; padding:0 4px;">
+      <div class="chip"><span style="width:6px;height:6px;border-radius:50%;background:#22c55e;display:inline-block;"></span> Sonnet 4.6</div>
+      <div style="flex:1;"></div>
+    </div>
+    <div class="bottom-bar" style="padding:4px 0;">
+      <div class="btn btn-ghost" style="width:36px;height:36px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </div>
+      <div class="input-field minimal" style="flex:1;">
+        <span class="placeholder">Message...</span>
+      </div>
+      <div class="btn btn-accent" style="width:40px;height:40px;">
+        <svg class="icon" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>6c — "The Hybrid" (1d + 2c + 3c + 4c)</h3>
+<p class="desc">Floating pill bar, compact recording strip, configurable auto-send, swipe-up drawer for settings. Most modern/app-like.</p>
+<div class="mockup-container">
+  <span class="label">6c – hybrid</span>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+    <div style="display:flex; align-items:center; gap:6px; background:#222; border-radius:28px; padding:6px 8px; border:1px solid #333;">
+      <div class="btn btn-ghost" style="width:34px;height:34px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+      </div>
+      <div class="btn btn-ghost" style="width:34px;height:34px;">
+        <svg class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 10H3M21 6H3M21 14H3M17 18H3"/></svg>
+      </div>
+      <div class="btn btn-accent" style="width:52px;height:52px; margin:0 2px;">
+        <svg class="icon-lg" viewBox="0 0 24 24" fill="white"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </div>
+      <div class="chip" style="font-size:0.62rem; padding:3px 8px;">S4.6</div>
+    </div>
+    <div class="swipe-hint">↑ Swipe up for settings</div>
+  </div>
+</div>
+
+<!-- ===== NOTES ===== -->
+<div class="section-sep"></div>
+<h2>Picking Guide</h2>
+<div style="font-size:0.8rem; color:#999; line-height:1.6;">
+  <p><strong>Layout:</strong> 1a (voice-dominant) vs 1b (minimal) vs 1d (floating pill)</p>
+  <p><strong>Recording:</strong> 2a (inline compact) vs 2b (orb + live text) vs 2c (strip + auto-send badge)</p>
+  <p><strong>Send:</strong> 3a (auto-send + cancel) vs 3b (review first) vs 3c (configurable toggle)</p>
+  <p><strong>Options:</strong> 4a (visible chip) vs 4b (long-press) vs 4c (swipe drawer)</p>
+  <p><strong>Text editing:</strong> 5a (expand inline) vs 5b (overlay card)</p>
+  <p style="margin-top:12px; color:#777;">Mix and match: e.g. "1a + 2c + 3c + 4a + 5a"</p>
+</div>
+
+</body>
+</html>

@@ -11,6 +11,15 @@ import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, search
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
 
+// Read OPENAI_API_KEY from .env for server-side proxy
+const OPENAI_KEY = (() => {
+  try {
+    const envContent = fs.readFileSync(nodePath.join(import.meta.dirname, '.env'), 'utf-8')
+    const match = envContent.match(/VITE_OPENAI_API_KEY=(.+)/)
+    return match?.[1]?.trim() || ''
+  } catch { return '' }
+})()
+
 const THREADS_DATA_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus-data')
 const VAPID_FILE = nodePath.join(THREADS_DATA_DIR, 'vapid.json')
 const PUSH_SUBS_FILE = nodePath.join(THREADS_DATA_DIR, 'push-subscriptions.json')
@@ -68,6 +77,11 @@ const phoneServerOptions = {
       target: 'http://127.0.0.1:3700',
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/marksense/, ''),
+    },
+    '/hermes-api': {
+      target: process.env.HERMES_WEBUI_URL || 'http://127.0.0.1:7860',
+      changeOrigin: true,
+      rewrite: (path: string) => path.replace(/^\/hermes-api/, '/api'),
     },
   },
 }
@@ -361,6 +375,51 @@ function elevenLabsProxy() {
   }
 }
 
+function openaiRealtimeProxy() {
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (req.url !== '/openai-realtime/session' || req.method !== 'POST') return next()
+      if (!OPENAI_KEY) {
+        res.statusCode = 500
+        res.end(JSON.stringify({ error: 'VITE_OPENAI_API_KEY not set' }))
+        return
+      }
+      try {
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(Buffer.from(chunk))
+        const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf-8')) : {}
+
+        const resp = await fetch('https://api.openai.com/v1/realtime/sessions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${OPENAI_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: body.model || 'gpt-4o-realtime-preview',
+            voice: body.voice || 'alloy',
+            modalities: ['audio', 'text'],
+            input_audio_transcription: { model: 'whisper-1', language: 'en' },
+            instructions: body.instructions || 'You are a helpful voice assistant. The user speaks English and German — respond in whichever language they use. Be concise and conversational. When asked about topics, give direct, practical answers. The user is a software engineer named Janis based in Switzerland.',
+          }),
+        })
+        res.statusCode = resp.status
+        res.setHeader('Content-Type', 'application/json')
+        const data = await resp.text()
+        res.end(data)
+      } catch (err: any) {
+        res.statusCode = 502
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+  }
+  return {
+    name: 'openai-realtime-proxy',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
 function recipesApiPlugin() {
   async function readBody(req: any): Promise<string> {
     const chunks: Buffer[] = []
@@ -617,6 +676,7 @@ export default defineConfig({
     threadsApiPlugin(),
     recipesApiPlugin(),
     elevenLabsProxy(),
+    openaiRealtimeProxy(),
     workspacePlugin(),
     pushApiPlugin(),
     react(),

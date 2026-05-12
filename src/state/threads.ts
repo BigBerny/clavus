@@ -186,14 +186,15 @@ export async function syncFromServer(): Promise<boolean> {
       activeThreadId: mergedThreads.find(t => t.id === currentActiveId) ? currentActiveId : mergedThreads[0]?.id || '',
     })
 
-    // Ensure tabs exist for all threads that have messages
-    const { ensureChatTab } = await import('./tabs')
-    for (const t of mergedThreads) {
+    // Auto-open tabs only for recent threads (last 24h) to keep startup fast
+    const { ensureChatTabsBatch } = await import('./tabs')
+    const recentCutoff = Date.now() - 24 * 60 * 60 * 1000
+    const recentWithMessages = mergedThreads.filter(t => {
+      if (t.updatedAt < recentCutoff) return false
       const msgs = loadThreadMessages(t.id)
-      if (msgs.length > 0) {
-        ensureChatTab(t.id, t.title)
-      }
-    }
+      return msgs.length > 0
+    })
+    ensureChatTabsBatch(recentWithMessages.map(t => ({ threadId: t.id, title: t.title })))
 
     return true
   } catch {

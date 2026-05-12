@@ -15,24 +15,14 @@ function relativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
-function formatBuildTime(value: string): string {
-  if (!value || value === 'dev') return 'local dev'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 interface QuickActionsProps {
   onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
   onOpenTab?: (tab: Tab) => void
+  onOpenRealtime?: () => void
 }
 
-function QuickActions({ onCompose, onOpenTab }: QuickActionsProps) {
+function QuickActions({ onCompose, onOpenTab, onOpenRealtime }: QuickActionsProps) {
   const openMarksense = useCallback(() => {
     const tabId = 'marksense-home'
     const tab: MarksenseTab = {
@@ -87,6 +77,19 @@ function QuickActions({ onCompose, onOpenTab }: QuickActionsProps) {
         <div className="min-w-0">
           <p className="text-[14px] font-semibold leading-tight">Recipes</p>
           <p className="text-[12px] text-white/70 leading-snug">Browse & search recipes</p>
+        </div>
+      </button>
+
+      <button
+        onClick={onOpenRealtime}
+        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:scale-[1.01] active:scale-[0.98] transition-all duration-200 text-left"
+      >
+        <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        </div>
+        <div className="min-w-0">
+          <p className="text-[14px] font-semibold leading-tight">GPT Realtime</p>
+          <p className="text-[12px] text-white/70 leading-snug">Voice chat with GPT</p>
         </div>
       </button>
 
@@ -278,11 +281,12 @@ function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; 
   )
 }
 
-export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush }: {
+export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, onOpenRealtime }: {
   onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
   onSelectTab?: (tabId: string) => void
   pushState?: string
   onEnablePush?: () => void
+  onOpenRealtime?: () => void
 }) {
   const tabs = useTabsStore((s) => s.tabs)
   const closeTab = useTabsStore((s) => s.closeTab)
@@ -301,9 +305,6 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush }: 
   }, [sortedTabs, showAll, twentyFourHoursAgo])
 
   const hasMore = sortedTabs.length > recentTabs.length
-  const buildTime = formatBuildTime(__CLAVUS_BUILD_TIME__)
-  const buildSha = __CLAVUS_GIT_SHA__ && __CLAVUS_GIT_SHA__ !== 'dev' ? __CLAVUS_GIT_SHA__ : ''
-
   const handleDelete = useCallback((tabId: string) => {
     // For chat tabs, also clean up thread data
     const tab = tabs.find(t => t.id === tabId)
@@ -354,7 +355,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush }: 
         )}
 
         <div className="pt-10">
-          <QuickActions onCompose={onCompose} onOpenTab={handleOpenTab} />
+          <QuickActions onCompose={onCompose} onOpenTab={handleOpenTab} onOpenRealtime={onOpenRealtime} />
         </div>
 
         {recentTabs.length > 0 && (
@@ -385,13 +386,6 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush }: 
           </div>
         )}
 
-        <div className="px-5 pt-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-surface-light-3/20 dark:border-surface-dark-3/20 bg-surface-light-2/40 dark:bg-surface-dark-2/40 px-3 py-1.5 text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent/60" />
-            <span>Build {buildTime}</span>
-            {buildSha && <span className="text-text-light-muted/35 dark:text-text-dark-muted/35">{buildSha}</span>}
-          </div>
-        </div>
       </div>
     </div>
   )

@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
-import type { Message } from '../../state/chat'
+import type { Message, MessageUsage } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
 import { ButtonGroup, SelectBlock, ConfirmBlock, parseButtonsLine, parseSelectLine, type ButtonAction, type SelectOption } from './InteractiveBlock.tsx'
 import { haptic } from '../../lib/native'
@@ -293,6 +293,43 @@ function extractReplyQuote(content: string): { quote: string | null; rest: strin
   }
 }
 
+// ─── Message Info Badge ──────────────────────────────────────────────────────
+
+function MessageInfoPopover({ open, onClose, model, usage }: { open: boolean; onClose: () => void; model?: string; usage?: MessageUsage }) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open, onClose])
+
+  if (!open) return null
+
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label="Message info"
+      className="absolute right-full top-1/2 -translate-y-1/2 mr-1.5 px-3 py-2 rounded-lg bg-[#1a1b26] border border-white/10 shadow-lg shadow-black/30 text-[11px] text-text-dark-muted whitespace-nowrap z-50 animate-[fadeSlideIn_0.1s_ease-out]"
+    >
+      {model && <div className="font-medium text-text-dark mb-0.5">{model}</div>}
+      {usage && (
+        <div className="space-y-0.5 text-text-dark-muted/70">
+          <div>Input: {usage.inputTokens.toLocaleString()} tokens</div>
+          <div>Output: {usage.outputTokens.toLocaleString()} tokens</div>
+          <div>Total: {usage.totalTokens.toLocaleString()} tokens</div>
+        </div>
+      )}
+      {!usage && !model && <div className="text-text-dark-muted/50">No data available</div>}
+    </div>
+  )
+}
+
 interface Props {
   message: Message
   isSpeaking?: boolean
@@ -342,6 +379,8 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const [copied, setCopied] = useState(false)
   const [showFullTime, setShowFullTime] = useState(false)
   const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
+  const [infoUnlocked, setInfoUnlocked] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Update relative time periodically
@@ -357,11 +396,12 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     setTimeout(() => setCopied(false), 1500)
   }, [message.content])
 
-  // Long-press to copy on mobile
+  // Long-press to copy + unlock info button on mobile
   const handleTouchStart = useCallback(() => {
     if (!message.content || message.streaming) return
     longPressTimer.current = setTimeout(() => {
       handleCopy()
+      setInfoUnlocked(true)
     }, 500)
   }, [message.content, message.streaming, handleCopy])
 
@@ -371,6 +411,13 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       longPressTimer.current = null
     }
   }, [])
+
+  // Desktop: right-click to unlock info button
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!message.content || message.streaming || !isAssistant) return
+    e.preventDefault()
+    setInfoUnlocked(true)
+  }, [message.content, message.streaming, isAssistant])
 
   const handleSpeak = useCallback(() => {
     onSpeak?.(message.id, message.content)
@@ -389,6 +436,17 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             <div className="flex items-center justify-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 opacity-80"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
               <span>{message.content.replace(/^Error:\s*/, '')}</span>
+              <button
+                onClick={() => handleCopy()}
+                className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity p-0.5 -mr-1"
+                title="Copy error message"
+              >
+                {copied ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                )}
+              </button>
             </div>
           ) : (
             message.content
@@ -404,6 +462,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchEnd}
+      onContextMenu={handleContextMenu}
       role="article"
       aria-label={`${isUser ? 'You' : 'Jane'}: ${message.content.slice(0, 80)}`}
     >
@@ -515,12 +574,6 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           </>
           )}
           {/* Streaming cursor rendered via CSS ::after on .streaming-bubble .prose */}
-          {/* Model info */}
-          {isAssistant && !message.streaming && message.model && (
-            <div className="mt-1 text-[10px] text-text-light-muted/30 dark:text-text-dark-muted/30 truncate">
-              {message.model}
-            </div>
-          )}
         </div>
         {/* Copied toast */}
         {copied && (
@@ -529,7 +582,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           </div>
         )}
         {/* Action buttons — next to bubble */}
-        {isAssistant && !message.streaming && message.content && isLastInGroup && (
+        {isAssistant && message.content && isLastInGroup && (
           <div className="flex flex-col gap-0.5 flex-shrink-0 mb-0.5">
             <button
               onClick={handleCopy}
@@ -567,7 +620,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 )}
               </button>
             )}
-            {onRegenerate && (
+            {!message.streaming && onRegenerate && (
               <button
                 onClick={() => onRegenerate(message.id)}
                 className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted"
@@ -576,6 +629,20 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
               </button>
+            )}
+            {!message.streaming && infoUnlocked && (message.model || message.usage) && (
+              <div className="relative">
+                <button
+                  onClick={() => setInfoOpen((v) => !v)}
+                  className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted"
+                  aria-label="Message info"
+                  aria-expanded={infoOpen}
+                  title="Message info"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                </button>
+                <MessageInfoPopover open={infoOpen} onClose={() => setInfoOpen(false)} model={message.model} usage={message.usage} />
+              </div>
             )}
           </div>
         )}

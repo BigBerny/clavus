@@ -161,4 +161,27 @@ export async function setupNativeShell(): Promise<void> {
   } catch {
     /* noop */
   }
+
+  // Sync Hermes config to App Group so the keyboard extension can use it
+  syncKeyboardConfig()
+}
+
+async function syncKeyboardConfig(): Promise<void> {
+  try {
+    const { Capacitor, registerPlugin } = await import('@capacitor/core')
+    if (!Capacitor.isNativePlatform()) return
+
+    const { getConfig } = await import('../gateway/config')
+    const config = getConfig()
+    if (!config.url) return
+
+    const AppGroup = registerPlugin<{
+      syncConfig(opts: { url: string; token: string }): Promise<{ synced: boolean }>
+    }>('AppGroup')
+
+    await AppGroup.syncConfig({ url: config.url, token: config.token })
+    console.log('[native] Keyboard config synced to App Group')
+  } catch (e) {
+    console.warn('[native] Failed to sync keyboard config:', e)
+  }
 }

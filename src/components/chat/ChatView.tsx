@@ -96,9 +96,10 @@ export function ChatView({ messages, title, threadId }: Props) {
       // Double rAF ensures DOM is fully laid out (critical for iOS)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
+          // Scroll only this container — scrollIntoView would propagate
+          // to the horizontal scroll-snap ancestor and cause panel jumps.
           if (containerRef.current) {
-            // Use bottom sentinel to avoid iOS off-by-padding issues
-            bottomRef.current?.scrollIntoView({ block: 'end' })
+            containerRef.current.scrollTop = containerRef.current.scrollHeight
           }
         })
       })
@@ -131,13 +132,20 @@ export function ChatView({ messages, title, threadId }: Props) {
         if (m.attributeName === 'data-keyboard-open') {
           const isOpen = document.documentElement.getAttribute('data-keyboard-open') === 'true'
           if (isOpen && autoScroll) {
+            // Only scroll if the user was actually scrolled down into
+            // the conversation. When scrollTop is near zero the messages
+            // are at the top of the container — scrolling to bottom
+            // would push them off screen rather than reveal hidden ones.
+            const el = containerRef.current
+            if (!el || el.scrollTop < 10) break
+
             if (isNative) {
-              // Capacitor fires `keyboardWillShow` before the iOS animation
-              // starts, and WKWebView resizes in lockstep. A single rAF is
-              // enough to scroll alongside the keyboard lift.
-              requestAnimationFrame(() => {
-                bottomRef.current?.scrollIntoView({ block: 'end' })
-              })
+              // MainViewController animates WKWebView frame over ~250ms.
+              // Wait for the animation to complete before scrolling to avoid
+              // bouncing during the resize.
+              setTimeout(() => {
+                if (containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight
+              }, 280)
             } else {
               // Safari PWA: visualViewport resize lags the keyboard
               // animation. Double-rAF + 120ms lets it settle before we
@@ -145,7 +153,7 @@ export function ChatView({ messages, title, threadId }: Props) {
               requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                   setTimeout(() => {
-                    bottomRef.current?.scrollIntoView({ block: 'end' })
+                    if (containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight
                   }, 120)
                 })
               })

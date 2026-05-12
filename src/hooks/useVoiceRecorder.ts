@@ -48,8 +48,12 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
   const [warning, setWarning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [levels, setLevels] = useState<number[]>([])
+  const [hasFailedAudio, setHasFailedAudio] = useState(false)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const insertModeRef = useRef(false)
+  // Last failed transcription's audio blob — kept in memory so the user can retry
+  // without re-recording. Cleared on successful retry, explicit discard, or page reload.
+  const lastFailedBlobRef = useRef<Blob | null>(null)
 
   // Auto-dismiss errors after 5 seconds
   const setErrorWithAutoDismiss = useCallback((msg: string) => {
@@ -111,6 +115,8 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
         formData.append('tag_audio_events', 'false')
         formData.append('additional_languages', JSON.stringify(['eng']))
         formData.append('additional_formats', JSON.stringify([]))
+        formData.append('no_verbatim', 'true')
+        formData.append('num_speakers', '1')
         const keyterms = [
           'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
           'Typewise', 'David Eberle',
@@ -155,15 +161,34 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
             onTranscription(text)
           }
           insertModeRef.current = false
+          // Successful transcription — discard the previously kept blob if any.
+          lastFailedBlobRef.current = null
+          setHasFailedAudio(false)
         }
       } catch (err) {
+        // Keep the blob so the user can retry without re-recording.
+        lastFailedBlobRef.current = blob
+        setHasFailedAudio(true)
         setErrorWithAutoDismiss(err instanceof Error ? err.message : 'Transcription failed')
       } finally {
         setState('idle')
       }
     },
-    [onTranscription],
+    [onTranscription, onInsertTranscription, setErrorWithAutoDismiss],
   )
+
+  /** Re-run transcription against the previously failed blob. */
+  const retryLastTranscription = useCallback(() => {
+    const blob = lastFailedBlobRef.current
+    if (!blob) return
+    void transcribe(blob)
+  }, [transcribe])
+
+  /** Discard the kept failed-audio blob without retrying. */
+  const clearLastFailedAudio = useCallback(() => {
+    lastFailedBlobRef.current = null
+    setHasFailedAudio(false)
+  }, [])
 
   const startAnalyser = useCallback((stream: MediaStream) => {
     // Use webkitAudioContext for older iOS Safari
@@ -359,5 +384,8 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
     stop,
     stopAndInsert,
     cancel,
+    hasFailedAudio,
+    retryLastTranscription,
+    clearLastFailedAudio,
   }
 }

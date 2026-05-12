@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { getConfig } from '../../gateway/config'
 import { sendChatCompletion } from '../../gateway/chat'
+import { usePresetStore } from '../../state/preset'
+import { MODEL_PRESETS } from '../../gateway/presets'
 import { haptic } from '../../lib/native'
+import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 
 type ComposeChannel = 'messaging' | 'slack' | 'email'
 
@@ -55,9 +58,28 @@ export function ComposeFlow({ channel, onClose }: Props) {
   const [composedText, setComposedText] = useState('')
   const [error, setError] = useState('')
   const [toast, setToast] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [allTranscriptions, setAllTranscriptions] = useState<string[]>([])
   const closingRef = useRef(false)
   const startedRef = useRef(false)
   const transcriptionProcessedRef = useRef(false)
+
+  // Gather recent messages (last 24h) across all threads for context picking
+  const threads = useThreadsStore((s) => s.threads)
+  const recentMessages = useMemo(() => {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    const recent: { threadTitle: string; content: string; timestamp: number }[] = []
+    for (const thread of threads) {
+      if (thread.updatedAt < cutoff) continue
+      const msgs = loadThreadMessages(thread.id)
+      for (const m of msgs) {
+        if (m.timestamp >= cutoff && m.role === 'assistant' && m.content.length > 10) {
+          recent.push({ threadTitle: thread.title, content: m.content, timestamp: m.timestamp })
+        }
+      }
+    }
+    return recent.sort((a, b) => b.timestamp - a.timestamp).slice(0, 20)
+  }, [threads])
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
@@ -65,6 +87,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
       // Prevent duplicate processing from StrictMode double-mount
       if (transcriptionProcessedRef.current) return
       transcriptionProcessedRef.current = true
+      setAllTranscriptions(prev => [...prev, text])
       setTranscription(text)
       setComposeState('composing')
     },
@@ -126,11 +149,24 @@ export function ComposeFlow({ channel, onClose }: Props) {
     async function reformulate() {
       try {
         const gwConfig = getConfig()
+        // Apply selected model preset (same as useChat.ts)
+        const selectedPresetId = usePresetStore.getState().selectedPresetId
+        const preset = MODEL_PRESETS.find((p) => p.id === selectedPresetId)
+        if (preset) {
+          gwConfig.model = preset.model
+        }
+        // Build messages: if there are multiple recordings, include previous
+        // ones as context so the LLM can refine based on all input
+        const userContent = allTranscriptions.length > 1
+          ? allTranscriptions.map((t, i) =>
+              i === 0 ? `Original message: ${t}` : `Additional context: ${t}`
+            ).join('\n\n')
+          : transcription
         const text = await sendChatCompletion(
           gwConfig,
           [
             { role: 'system', content: config.prompt },
-            { role: 'user', content: transcription },
+            { role: 'user', content: userContent },
           ],
           abortController.signal,
         )
@@ -156,7 +192,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
 
     reformulate()
     return () => abortController.abort()
-  }, [composeState, transcription, config.prompt])
+  }, [composeState, transcription, allTranscriptions, config.prompt])
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -169,12 +205,33 @@ export function ComposeFlow({ channel, onClose }: Props) {
     if (!composedText) return
     try {
       await navigator.clipboard.writeText(composedText)
-      setToast('Copied!')
+      setCopied(true)
       haptic.tap()
+      setTimeout(() => setCopied(false), 2000)
     } catch {
       setToast('Copy failed')
     }
   }, [composedText])
+
+  const handleAddContext = useCallback(() => {
+    // Reset recording state to allow a new recording
+    transcriptionProcessedRef.current = false
+    reformulatingRef.current = false
+    setComposeState('recording')
+    setCopied(false)
+    setTimeout(() => voice.start(), 50)
+  }, [voice])
+
+  const handleAddMessageContext = useCallback((msgContent: string) => {
+    // Add an existing message as context and re-compose
+    setAllTranscriptions(prev => [...prev, `Reference message:\n${msgContent}`])
+    transcriptionProcessedRef.current = false
+    reformulatingRef.current = false
+    setComposeState('recording')
+    setCopied(false)
+    // Go straight to recording so the user can say what to do with this context
+    setTimeout(() => voice.start(), 50)
+  }, [voice])
 
   const handleClose = useCallback(() => {
     if (closingRef.current) return
@@ -212,7 +269,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
+      <div className={`flex-1 flex flex-col items-center px-6 ${composeState === 'done' ? 'justify-start pt-8 overflow-y-auto' : 'justify-center'}`}>
         {composeState === 'recording' && (
           <div className="flex flex-col items-center gap-6 animate-[fadeSlideIn_0.3s_ease-out]">
             {/* Recording waveform */}
@@ -232,7 +289,9 @@ export function ComposeFlow({ channel, onClose }: Props) {
                 )
               })}
             </div>
-            <p className="text-sm text-text-dark-muted">Speak your message...</p>
+            <p className="text-sm text-text-dark-muted">
+              {allTranscriptions.length > 0 ? 'Add more context...' : 'Speak your message...'}
+            </p>
             <span className="text-xs font-mono tabular-nums text-text-dark-muted/60">{voice.formattedDuration}</span>
             
             {/* Stop button */}
@@ -267,26 +326,60 @@ export function ComposeFlow({ channel, onClose }: Props) {
 
         {composeState === 'done' && composedText && (
           <div className="w-full max-w-md animate-[fadeSlideIn_0.3s_ease-out]">
-            <div
-              onClick={handleCopy}
-              className="rounded-2xl bg-surface-dark-2 border border-surface-dark-3/50 p-4 cursor-pointer hover:bg-surface-dark-3/50 active:scale-[0.98] transition-all"
-            >
+            <div className="rounded-2xl bg-surface-dark-2 border border-surface-dark-3/50 p-4">
               <p className="text-sm text-text-dark whitespace-pre-wrap leading-relaxed select-text">{composedText}</p>
             </div>
-            <div className="flex items-center justify-center gap-3 mt-4">
+            <div className="flex items-center justify-center gap-2 mt-4">
+              {/* Copy */}
               <button
                 onClick={handleCopy}
-                className="inline-btn flex items-center gap-2 px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium hover:bg-accent-hover active:scale-95 transition-all"
+                className={`inline-btn w-11 h-11 flex items-center justify-center rounded-full active:scale-95 transition-all ${
+                  copied
+                    ? 'text-emerald-400 bg-emerald-500/15'
+                    : 'text-text-dark-muted hover:text-accent hover:bg-accent/10'
+                }`}
+                title="Copy"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-                Copy
+                {copied ? (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                ) : (
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+                )}
               </button>
+              {/* Add context */}
+              <button
+                onClick={handleAddContext}
+                className="inline-btn w-11 h-11 flex items-center justify-center rounded-full text-text-dark-muted hover:text-accent hover:bg-accent/10 active:scale-95 transition-all"
+                title="Add context"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+              </button>
+              {/* Done */}
               <button
                 onClick={handleClose}
-                className="inline-btn px-4 py-2 rounded-xl text-text-dark-muted text-sm font-medium hover:text-text-dark hover:bg-surface-dark-2 transition-all"
+                className="inline-btn w-11 h-11 flex items-center justify-center rounded-full text-text-dark-muted hover:text-emerald-400 hover:bg-emerald-500/10 active:scale-95 transition-all"
+                title="Done"
               >
-                Done
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
               </button>
+            </div>
+          </div>
+        )}
+
+        {composeState === 'done' && recentMessages.length > 0 && (
+          <div className="w-full max-w-md mt-6 animate-[fadeSlideIn_0.4s_ease-out]">
+            <p className="text-xs text-text-dark-muted/50 mb-2 px-1">Add context from recent conversations</p>
+            <div className="max-h-48 overflow-y-auto space-y-1.5 scrollbar-thin">
+              {recentMessages.map((msg, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleAddMessageContext(msg.content)}
+                  className="inline-btn w-full text-left rounded-xl bg-surface-dark-2/60 border border-surface-dark-3/30 px-3 py-2.5 hover:bg-surface-dark-2 active:scale-[0.98] transition-all"
+                >
+                  <p className="text-[11px] text-text-dark-muted/40 mb-0.5 truncate">{msg.threadTitle}</p>
+                  <p className="text-xs text-text-dark-muted line-clamp-2 leading-relaxed">{msg.content}</p>
+                </button>
+              ))}
             </div>
           </div>
         )}
