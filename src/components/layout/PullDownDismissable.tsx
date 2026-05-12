@@ -25,6 +25,7 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
   const startYRef = useRef(0)
   const startXRef = useRef(0)
   const currentTranslateRef = useRef(0)
+  const rawDyRef = useRef(0)
   const animFrameRef = useRef(0)
   const [pastThreshold, setPastThreshold] = useState(false)
   const pastThresholdRef = useRef(false)
@@ -89,7 +90,8 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
         const rawDy = Math.max(0, t.clientY - startYRef.current)
         const translated = rubberBand(rawDy)
         currentTranslateRef.current = translated
-        const isPast = translated > DISMISS_THRESHOLD
+        rawDyRef.current = rawDy
+        const isPast = rawDy > DISMISS_THRESHOLD
         setPastThreshold(isPast)
 
         // Haptic feedback when crossing threshold
@@ -117,7 +119,7 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
       if (phaseRef.current === 'pulling-down') {
         const translated = currentTranslateRef.current
 
-        if (translated > DISMISS_THRESHOLD) {
+        if (rawDyRef.current > DISMISS_THRESHOLD) {
           // Dismiss animation
           container.style.transition = 'transform 0.3s ease-in, opacity 0.3s ease-in'
           container.style.transform = `translateY(${window.innerHeight * 0.4}px) scale(0.7)`
@@ -148,6 +150,7 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
 
       phaseRef.current = 'idle'
       currentTranslateRef.current = 0
+      rawDyRef.current = 0
       setPastThreshold(false)
       pastThresholdRef.current = false
     }
@@ -168,14 +171,16 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
   }, [enabled, tabId, onDismiss, findScrollableAncestor])
 
   return (
-    <div ref={containerRef} className="h-full flex flex-col min-h-0 relative" style={{ willChange: 'transform' }}>
-      {/* "Release to close" indicator */}
+    <div className="h-full flex flex-col min-h-0 relative">
+      {/* "Release to close" indicator — outside transformed container so it stays in place */}
       {pastThreshold && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded-full bg-red-500/80 text-white text-[11px] font-medium animate-[fadeSlideIn_0.15s_ease-out] pointer-events-none">
           Release to close
         </div>
       )}
-      {children}
+      <div ref={containerRef} className="h-full flex flex-col min-h-0" style={{ willChange: 'transform' }}>
+        {children}
+      </div>
     </div>
   )
 }
