@@ -134,7 +134,9 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
             onDismiss(tabId)
           }, { once: true })
         } else {
-          // Spring back
+          // Spring back — cancel any pending rAF first so it doesn't
+          // overwrite styles after we reset them
+          cancelAnimationFrame(animFrameRef.current)
           container.classList.add('panel-spring-back')
           container.style.transform = ''
           container.style.opacity = ''
