@@ -6,6 +6,7 @@ import fs from 'fs'
 import nodePath from 'path'
 import { execSync } from 'node:child_process'
 import webpush from 'web-push'
+import Database from 'better-sqlite3'
 import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, markOpened, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
@@ -610,6 +611,121 @@ function recipesApiPlugin() {
   }
 }
 
+function hermesResponsesPlugin() {
+  const RESPONSE_STORE_DB = nodePath.join(process.env.HOME || '', '.hermes/response_store.db')
+  let db: InstanceType<typeof Database> | null = null
+
+  function getDb() {
+    if (db) return db
+    db = new Database(RESPONSE_STORE_DB, { readonly: true, fileMustExist: true })
+    db.pragma('journal_mode = WAL')
+    return db
+  }
+
+  function extractResponseData(data: string) {
+    const parsed = JSON.parse(data)
+    const resp = parsed.response || {}
+    const history = parsed.conversation_history || []
+    // Find assistant text: first check conversation_history, then output items
+    const lastAssistant = [...history].reverse().find((m: any) => m.role === 'assistant')
+    let text = typeof lastAssistant?.content === 'string' ? lastAssistant.content : ''
+    // Extract text and thinking from output items
+    let thinking = ''
+    for (const item of resp.output || []) {
+      if (item.type === 'message' && item.role === 'assistant' && !text) {
+        const contentArr = Array.isArray(item.content) ? item.content : []
+        for (const c of contentArr) {
+          if (c.type === 'output_text' || c.type === 'text') text += c.text || ''
+        }
+      }
+      if (item.type === 'reasoning' && item.content) {
+        for (const c of Array.isArray(item.content) ? item.content : []) {
+          if (c.type === 'text') thinking += c.text
+        }
+      }
+    }
+    const usage = resp.usage ? {
+      inputTokens: resp.usage.input_tokens || 0,
+      outputTokens: resp.usage.output_tokens || 0,
+      totalTokens: resp.usage.total_tokens || 0,
+    } : undefined
+    return {
+      responseId: resp.id,
+      status: resp.status || 'unknown',
+      text,
+      thinking: thinking || undefined,
+      model: resp.model,
+      usage,
+      createdAt: resp.created_at,
+    }
+  }
+
+  const attach = (server: any) => {
+    server.middlewares.use((req: any, res: any, next: any) => {
+      if (!req.url?.startsWith('/api/hermes/')) return next()
+      res.setHeader('Content-Type', 'application/json')
+
+      try {
+        const database = getDb()
+
+        // GET /api/hermes/conversation/:threadId
+        const convMatch = req.url.match(/^\/api\/hermes\/conversation\/([^/?]+)/)
+        if (convMatch && req.method === 'GET') {
+          const threadId = decodeURIComponent(convMatch[1])
+          const row = database.prepare(
+            'SELECT c.response_id, r.data FROM conversations c JOIN responses r ON c.response_id = r.response_id WHERE c.name = ?'
+          ).get(`clavus:${threadId}`) as { response_id: string; data: string } | undefined
+          if (!row) {
+            res.statusCode = 404
+            res.end(JSON.stringify({ error: 'Not found' }))
+            return
+          }
+          res.end(JSON.stringify(extractResponseData(row.data)))
+          return
+        }
+
+        // GET /api/hermes/conversations
+        if (req.url.startsWith('/api/hermes/conversations') && req.method === 'GET') {
+          const rows = database.prepare(
+            `SELECT c.name, c.response_id, r.data, r.accessed_at
+             FROM conversations c
+             JOIN responses r ON c.response_id = r.response_id
+             WHERE c.name LIKE 'clavus:%'
+             ORDER BY r.accessed_at DESC`
+          ).all() as { name: string; response_id: string; data: string; accessed_at: number }[]
+          const result = rows.map(row => {
+            const parsed = JSON.parse(row.data)
+            const resp = parsed.response || {}
+            const history = parsed.conversation_history || []
+            const lastUser = [...history].reverse().find((m: any) => m.role === 'user')
+            return {
+              threadId: row.name.replace(/^clavus:/, ''),
+              responseId: row.response_id,
+              status: resp.status || 'unknown',
+              createdAt: resp.created_at,
+              lastUserMessage: typeof lastUser?.content === 'string' ? lastUser.content.slice(0, 100) : '',
+            }
+          })
+          res.end(JSON.stringify(result))
+          return
+        }
+
+        res.statusCode = 404
+        res.end(JSON.stringify({ error: 'Not found' }))
+      } catch (e: any) {
+        res.statusCode = 500
+        res.end(JSON.stringify({ error: e.message }))
+      }
+    })
+  }
+
+  return {
+    name: 'hermes-responses-api',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
 function pushApiPlugin() {
   async function readBody(req: any): Promise<string> {
     const chunks: Buffer[] = []
@@ -690,6 +806,7 @@ export default defineConfig({
     openaiRealtimeProxy(),
     workspacePlugin(),
     pushApiPlugin(),
+    hermesResponsesPlugin(),
     react(),
     tailwindcss(),
     VitePWA({

@@ -22,6 +22,7 @@ export interface StreamCallbacks {
   onThinkingDone?: () => void
   onToolCall?: (toolCall: ToolCallEvent) => void
   onUsage?: (usage: UsageData) => void
+  onResponseId?: (responseId: string) => void
   onDone: () => void
   onError: (error: Error) => void
 }
@@ -296,6 +297,13 @@ async function sendResponsesStream(
       return
     }
 
+    if (parsed.type === 'response.created') {
+      const resp = parsed.response as Record<string, unknown> | undefined
+      const id = resp?.id
+      if (typeof id === 'string') callbacks.onResponseId?.(id)
+      return
+    }
+
     if (eventName === 'reasoning') {
       const text = typeof parsed.text === 'string' ? parsed.text : ''
       if (text) {
@@ -521,6 +529,38 @@ export async function generateTitleViaOpenRouter(
     const data = await res.json()
     const title = data.choices?.[0]?.message?.content?.trim()
     return title && title.length > 0 && title.length < 80 ? title : null
+  } catch {
+    return null
+  }
+}
+
+// --- Response recovery ---
+
+export interface RecoveredResponse {
+  responseId: string
+  status: string
+  text: string
+  thinking?: string
+  model?: string
+  usage?: UsageData
+}
+
+export async function recoverResponse(threadId: string): Promise<RecoveredResponse | null> {
+  try {
+    const res = await fetch(`/api/hermes/conversation/${encodeURIComponent(threadId)}`, {
+      signal: AbortSignal.timeout(5000),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (!data.text && data.status !== 'in_progress') return null
+    return {
+      responseId: data.responseId,
+      status: data.status,
+      text: data.text,
+      thinking: data.thinking,
+      model: data.model,
+      usage: data.usage,
+    }
   } catch {
     return null
   }

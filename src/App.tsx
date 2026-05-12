@@ -11,6 +11,7 @@ import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
 import { useTalkMode } from './hooks/useTalkMode.ts'
+import { useResponseRecovery } from './hooks/useResponseRecovery.ts'
 import { DesktopSidebar } from './components/layout/DesktopSidebar.tsx'
 import { CanvasPanel } from './components/canvas/CanvasPanel.tsx'
 import { consumePendingThread } from './lib/pendingThread.ts'
@@ -89,6 +90,7 @@ function waitForScrollSettle(container: HTMLElement, onSettled: () => void): () 
 export function App() {
   useVisualViewport()
   const { send, abort } = useChat()
+  const { checkRecovery } = useResponseRecovery()
   const { state: pushState, requestPermission } = usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
@@ -167,6 +169,13 @@ export function App() {
       talkMode.toggle()
     }
   }, [talkMode, talkModeThreadId, visiblePanel, switchThread])
+
+  // Check for interrupted responses when switching to a chat thread
+  useEffect(() => {
+    if (visiblePanel !== 'home' && visiblePanel.startsWith('thread-')) {
+      checkRecovery(visiblePanel)
+    }
+  }, [visiblePanel, checkRecovery])
 
   // Desktop detection (>= 768px)
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768)
@@ -395,9 +404,18 @@ export function App() {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         checkPendingNavigation()
+        // Recover interrupted responses when app becomes visible
+        const activeId = useThreadsStore.getState().getActiveThread()?.id
+        if (activeId) checkRecovery(activeId)
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
+
+    const handleAppResume = () => {
+      const activeId = useThreadsStore.getState().getActiveThread()?.id
+      if (activeId) checkRecovery(activeId)
+    }
+    window.addEventListener('clavus:app-resume', handleAppResume)
 
     // Handle inline Marksense doc opening from chat
     const handleOpenMarksense = (e: Event) => {
@@ -444,6 +462,7 @@ export function App() {
     return () => {
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('clavus:app-resume', handleAppResume)
       window.removeEventListener('clavus:open-marksense', handleOpenMarksense)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }

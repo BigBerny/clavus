@@ -196,6 +196,35 @@ export async function syncFromServer(): Promise<boolean> {
     })
     ensureChatTabsBatch(recentWithMessages.map(t => ({ threadId: t.id, title: t.title })))
 
+    // Discover conversations from Hermes that don't exist locally (cross-device sync)
+    try {
+      const hermesRes = await fetch('/api/hermes/conversations')
+      if (hermesRes.ok) {
+        const conversations = await hermesRes.json() as { threadId: string; responseId: string; status: string; createdAt: number; lastUserMessage: string }[]
+        const existingIds = new Set(mergedThreads.map(t => t.id))
+        const newThreads: Thread[] = []
+        for (const conv of conversations) {
+          if (existingIds.has(conv.threadId) || conv.status === 'failed') continue
+          newThreads.push({
+            id: conv.threadId,
+            title: conv.lastUserMessage?.slice(0, 60) || 'Recovered conversation',
+            createdAt: (conv.createdAt || 0) * 1000,
+            updatedAt: (conv.createdAt || 0) * 1000,
+            lastMessagePreview: conv.lastUserMessage?.slice(0, 80) || '',
+          })
+        }
+        if (newThreads.length > 0) {
+          const allThreads = [...mergedThreads, ...newThreads]
+          try { localStorage.setItem(THREADS_KEY, JSON.stringify(allThreads)) } catch { /* ignore */ }
+          useThreadsStore.setState({ threads: allThreads })
+          syncThreadsToServer(allThreads)
+          ensureChatTabsBatch(newThreads
+            .filter(t => t.createdAt > recentCutoff)
+            .map(t => ({ threadId: t.id, title: t.title })))
+        }
+      }
+    } catch { /* Hermes unavailable — skip discovery */ }
+
     return true
   } catch {
     return false

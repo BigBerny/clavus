@@ -36,6 +36,7 @@ export interface Message {
   model?: string
   usage?: MessageUsage
   media?: MediaAttachment[]
+  hermesResponseId?: string
 }
 
 export interface ThreadStreamState {
@@ -66,6 +67,7 @@ interface ChatState {
   updateToolCalls: (threadId: string, id: string, toolCalls: ToolCall[]) => void
   setMessageModel: (threadId: string, id: string, model: string) => void
   setMessageUsage: (threadId: string, id: string, usage: MessageUsage) => void
+  setHermesResponseId: (threadId: string, id: string, responseId: string) => void
   addMedia: (threadId: string, id: string, media: MediaAttachment[]) => void
   clearMessages: (threadId: string) => void
   removeMessage: (threadId: string, messageId: string) => void
@@ -303,6 +305,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ...ts,
             messages: ts.messages.map((m) =>
               m.id === id ? { ...m, usage } : m,
+            ),
+          },
+        },
+      }
+    }),
+
+  setHermesResponseId: (threadId, id, responseId) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id ? { ...m, hermesResponseId: responseId } : m,
             ),
           },
         },

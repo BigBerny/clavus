@@ -160,6 +160,9 @@ export function useChat() {
           onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
           onToken: (token) => store.getState().appendToMessage(threadId, assistantId, token),
           onToolCall: handleToolCall,
+          onResponseId: (responseId) => {
+            store.getState().setHermesResponseId(threadId, assistantId, responseId)
+          },
           onUsage: (usage) => {
             store.getState().setMessageUsage(threadId, assistantId, {
               inputTokens: usage.inputTokens,
