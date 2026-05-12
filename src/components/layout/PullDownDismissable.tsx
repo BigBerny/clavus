@@ -11,12 +11,13 @@ interface PullDownDismissableProps {
 type Phase = 'idle' | 'undecided' | 'pulling-down' | 'horizontal' | 'vertical-scroll'
 
 const THRESHOLD = 8       // px before committing to a direction
-const DISMISS_THRESHOLD = 120 // px of pull to trigger dismiss
-const DAMPING = 0.45      // rubber band damping factor
+const DISMISS_THRESHOLD = 200 // raw px of finger pull to trigger dismiss
 
 function rubberBand(distance: number): number {
-  // Logarithmic rubber band for natural iOS-like feel
-  return Math.log(distance * DAMPING + 1) * 80
+  // Content follows finger at ~60% speed initially, decelerating further out.
+  // At 200px raw the visual is ~140px — content always trails the finger.
+  const dim = window.innerHeight
+  return dim * (1 - Math.exp(-distance / dim)) * 0.6
 }
 
 export function PullDownDismissable({ children, tabId, onDismiss, enabled = true }: PullDownDismissableProps) {
