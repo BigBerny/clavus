@@ -23,6 +23,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
+// Startup log — verifies dashboard-logger pipeline is working
+console.log('[Clavus] App starting', { ts: new Date().toISOString(), ua: navigator.userAgent.slice(0, 80) })
+
 // Catch unhandled errors globally
 window.addEventListener('error', (e) => {
   console.error('[Clavus Global Error]', e.error || e.message)

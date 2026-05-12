@@ -83,6 +83,17 @@ const phoneServerOptions = {
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/hermes-api/, '/api'),
     },
+    '/dashboard-logger.js': {
+      target: 'https://localhost:4000',
+      changeOrigin: true,
+      secure: false,
+    },
+    '/browser-logs': {
+      target: 'https://localhost:4000',
+      changeOrigin: true,
+      secure: false,
+      ws: true,
+    },
   },
 }
 

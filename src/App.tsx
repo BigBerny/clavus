@@ -109,7 +109,7 @@ export function App() {
   const setVisiblePanel = useCallback((next: string) => {
     _setVisiblePanel(prev => {
       if (next === 'home' && prev !== 'home') {
-        console.warn('[CLAVUS-DEBUG] visiblePanel → home (was:', prev, ')', new Error().stack)
+        // console.warn('[CLAVUS-DEBUG] visiblePanel → home (was:', prev, ')', new Error().stack)
       }
       return next
     })
@@ -188,24 +188,10 @@ export function App() {
     [tabs]
   )
 
-  const logKeyboardScroll = useCallback((event: string, details: Record<string, unknown> = {}) => {
-    const container = scrollContainerRef.current
-    const active = document.activeElement as HTMLElement | null
-    console.log('[CLAVUS-KB-SCROLL]', event, {
-      visiblePanel,
-      tabCount: sortedTabs.length,
-      keyboardOpen: document.documentElement.hasAttribute('data-keyboard-open'),
-      guardMsRemaining: Math.max(0, keyboardScrollGuardUntil.current - Date.now()),
-      isProgrammaticScroll: isProgrammaticScroll.current,
-      isUserHorizontalGesture: isUserHorizontalGesture.current,
-      activeTag: active?.tagName ?? null,
-      activeLabel: active?.getAttribute('aria-label') ?? active?.getAttribute('placeholder') ?? null,
-      scrollLeft: container?.scrollLeft ?? null,
-      clientWidth: container?.clientWidth ?? null,
-      scrollWidth: container?.scrollWidth ?? null,
-      ...details,
-    })
-  }, [sortedTabs.length, visiblePanel])
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const logKeyboardScroll = useCallback((_event: string, _details: Record<string, unknown> = {}) => {
+    // Disabled to reduce log noise — re-enable for scroll debugging
+  }, [])
 
   const preserveVisiblePanelDuringKeyboard = useCallback((reason: string) => {
     keyboardScrollGuardUntil.current = Date.now() + 400

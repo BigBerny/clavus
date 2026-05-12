@@ -183,6 +183,7 @@ export function useChat() {
             store.getState().setAbortController(threadId, null)
           },
           onError: (error) => {
+            console.error(`[Chat] Stream error (onError):`, error.name, error.message, error)
             store.getState().finalizeMessage(threadId, assistantId)
             store.getState().setStreaming(threadId, false)
             store.getState().setAbortController(threadId, null)
