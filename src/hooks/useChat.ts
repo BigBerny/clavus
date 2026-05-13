@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, generateTitleViaOpenRouter } from '../gateway/chat.ts'
+import { sendChatStream, generateTitleViaOpenRouter, recoverResponse } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import { usePresetStore } from '../state/preset.ts'
@@ -212,11 +212,83 @@ export function useChat() {
       const errMsg = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       console.error(`[Chat] Send failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, errMsg, error)
 
-      store.getState().finalizeMessage(threadId, assistantId)
-      store.getState().setStreaming(threadId, false)
       store.getState().setAbortController(threadId, null)
 
-      if (error instanceof Error && error.name === 'AbortError') return
+      if (error instanceof Error && error.name === 'AbortError') {
+        store.getState().finalizeMessage(threadId, assistantId)
+        store.getState().setStreaming(threadId, false)
+        return
+      }
+
+      // Check if Hermes is still processing server-side before showing an error
+      const hermesState = await recoverResponse(threadId).catch(() => null)
+
+      if (hermesState?.status === 'in_progress') {
+        // Hermes is still working — keep the streaming bubble visible
+        // Poll every 3s while visible, check immediately on foreground
+        console.log('[Chat] Connection lost but Hermes still processing, polling...')
+        setConnectionStatus('reconnecting')
+
+        let stopped = false
+
+        const finishWith = (result: NonNullable<Awaited<ReturnType<typeof recoverResponse>>>) => {
+          stopped = true
+          document.removeEventListener('visibilitychange', onVisible)
+          window.removeEventListener('clavus:app-resume', onVisible)
+          store.getState().updateMessage(threadId, assistantId, result.text)
+          if (result.model) store.getState().setMessageModel(threadId, assistantId, result.model)
+          if (result.usage) store.getState().setMessageUsage(threadId, assistantId, result.usage)
+          store.getState().setHermesResponseId(threadId, assistantId, result.responseId)
+          store.getState().finalizeMessage(threadId, assistantId)
+          store.getState().setStreaming(threadId, false)
+          setConnectionStatus('connected')
+          console.log('[Chat] Response recovered via polling', result.responseId)
+        }
+
+        const poll = async () => {
+          if (stopped) return
+          const result = await recoverResponse(threadId).catch(() => null)
+          if (stopped) return
+          if (result?.text && (result.status === 'completed' || result.status === 'incomplete' || result.status === 'failed')) {
+            finishWith(result)
+          } else if (!result || result.status !== 'in_progress') {
+            // Genuinely failed with no text
+            stopped = true
+            document.removeEventListener('visibilitychange', onVisible)
+            window.removeEventListener('clavus:app-resume', onVisible)
+            store.getState().finalizeMessage(threadId, assistantId)
+            store.getState().setStreaming(threadId, false)
+            setConnectionStatus('disconnected')
+          } else if (document.visibilityState === 'visible') {
+            setTimeout(poll, 3000)
+          }
+        }
+
+        const onVisible = () => {
+          if (document.visibilityState === 'visible' && !stopped) poll()
+        }
+        document.addEventListener('visibilitychange', onVisible)
+        window.addEventListener('clavus:app-resume', onVisible)
+        poll()
+        return
+      }
+
+      if (hermesState?.status === 'completed' && hermesState.text) {
+        // Already completed — just use it
+        console.log('[Chat] Response already completed on Hermes, recovering')
+        store.getState().updateMessage(threadId, assistantId, hermesState.text)
+        if (hermesState.model) store.getState().setMessageModel(threadId, assistantId, hermesState.model)
+        if (hermesState.usage) store.getState().setMessageUsage(threadId, assistantId, hermesState.usage)
+        store.getState().setHermesResponseId(threadId, assistantId, hermesState.responseId)
+        store.getState().finalizeMessage(threadId, assistantId)
+        store.getState().setStreaming(threadId, false)
+        setConnectionStatus('connected')
+        return
+      }
+
+      // Genuine failure — show error
+      store.getState().finalizeMessage(threadId, assistantId)
+      store.getState().setStreaming(threadId, false)
 
       const ts = store.getState().getThreadState(threadId)
       const msg = ts.messages.find((m) => m.id === assistantId)

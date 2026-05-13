@@ -2,7 +2,6 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
 import { useTTS } from '../../hooks/useTTS'
 import type { Message } from '../../state/chat'
-import { isNative } from '../../lib/native'
 
 interface Props {
   messages: Message[]
@@ -125,46 +124,33 @@ export function ChatView({ messages, title, threadId }: Props) {
     setAutoScroll(atBottom)
   }, [])
 
-  // Scroll to bottom when keyboard opens (data-keyboard-open changes)
+  // Keep autoScroll readable inside the ResizeObserver without re-subscribing
+  const autoScrollRef = useRef(autoScroll)
   useEffect(() => {
-    const observer = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        if (m.attributeName === 'data-keyboard-open') {
-          const isOpen = document.documentElement.getAttribute('data-keyboard-open') === 'true'
-          if (isOpen && autoScroll) {
-            // Only scroll if the user was actually scrolled down into
-            // the conversation. When scrollTop is near zero the messages
-            // are at the top of the container — scrolling to bottom
-            // would push them off screen rather than reveal hidden ones.
-            const el = containerRef.current
-            if (!el || el.scrollTop < 10) break
-
-            if (isNative) {
-              // MainViewController animates WKWebView frame over ~250ms.
-              // Wait for the animation to complete before scrolling to avoid
-              // bouncing during the resize.
-              setTimeout(() => {
-                if (containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight
-              }, 280)
-            } else {
-              // Safari PWA: visualViewport resize lags the keyboard
-              // animation. Double-rAF + 120ms lets it settle before we
-              // scroll, avoiding a mid-animation jump.
-              requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                  setTimeout(() => {
-                    if (containerRef.current) containerRef.current.scrollTop = containerRef.current.scrollHeight
-                  }, 120)
-                })
-              })
-            }
-          }
-        }
-      }
-    })
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-keyboard-open'] })
-    return () => observer.disconnect()
+    autoScrollRef.current = autoScroll
   }, [autoScroll])
+
+  // Keep the conversation glued to the bottom while the messages container
+  // shrinks during keyboard expansion. ResizeObserver fires before paint, so
+  // setting scrollTop here happens in the SAME visual frame as the height
+  // change — making the input bar and the bottom of the conversation appear
+  // to move together (instead of the input bar racing ahead).
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    let prevHeight = el.clientHeight
+    const observer = new ResizeObserver(() => {
+      const newHeight = el.clientHeight
+      if (newHeight !== prevHeight && autoScrollRef.current && el.scrollTop > 10) {
+        // Pin to bottom whenever the container resizes while user was at
+        // bottom — works for both keyboard open (shrink) and close (grow).
+        el.scrollTop = el.scrollHeight
+      }
+      prevHeight = newHeight
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0

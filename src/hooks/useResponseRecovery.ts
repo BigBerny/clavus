@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { recoverResponse } from '../gateway/chat.ts'
+import { useThreadsStore } from '../state/threads.ts'
 
 /**
  * Detects interrupted/missing assistant responses and recovers them from Hermes.
@@ -38,22 +39,35 @@ function needsRecovery(threadId: string): boolean {
 const POLL_DELAYS = [3000, 6000, 12000]
 
 async function attemptRecovery(threadId: string, pollAttempt = 0): Promise<void> {
+  console.log('[Recovery] Attempting recovery for', threadId, 'poll attempt', pollAttempt)
+
   const store = useChatStore.getState()
   const ts = store.getThreadState(threadId)
 
   // Re-check: don't interfere with active streams
-  if (ts.isStreaming) return
+  if (ts.isStreaming) {
+    console.log('[Recovery] Skipping — thread is actively streaming')
+    return
+  }
 
   const recovered = await recoverResponse(threadId)
-  if (!recovered) return
+  if (!recovered) {
+    console.log('[Recovery] No response found in Hermes for', threadId)
+    return
+  }
+
+  console.log('[Recovery] Hermes response:', recovered.status, 'text length:', recovered.text?.length || 0)
 
   // Dedup: check if we already have this response
   if (recovered.responseId) {
     const existing = ts.messages.find(m => m.hermesResponseId === recovered.responseId)
-    if (existing) return
+    if (existing) {
+      console.log('[Recovery] Already have this response, skipping')
+      return
+    }
   }
 
-  if (recovered.status === 'completed' && recovered.text) {
+  if ((recovered.status === 'completed' || recovered.status === 'incomplete') && recovered.text) {
     // Remove error system messages and empty assistant messages from the end
     const messages = [...ts.messages]
     while (messages.length > 0) {
@@ -100,12 +114,23 @@ async function attemptRecovery(threadId: string, pollAttempt = 0): Promise<void>
   }
 
   if (recovered.status === 'in_progress' && pollAttempt < POLL_DELAYS.length) {
-    // Still processing — poll again after delay
+    console.log('[Recovery] Still in progress, polling again in', POLL_DELAYS[pollAttempt], 'ms')
     setTimeout(() => attemptRecovery(threadId, pollAttempt + 1), POLL_DELAYS[pollAttempt])
     return
   }
 
-  // incomplete/failed — nothing to recover
+  console.log('[Recovery] Cannot recover — status:', recovered.status, 'text:', recovered.text?.length || 0)
+}
+
+/** Check all threads that might need recovery (e.g., on startup) */
+export function checkAllThreadsRecovery() {
+  const threads = useThreadsStore.getState().threads
+  for (const thread of threads) {
+    if (needsRecovery(thread.id)) {
+      console.log('[Recovery] Thread needs recovery:', thread.id)
+      attemptRecovery(thread.id)
+    }
+  }
 }
 
 export function useResponseRecovery() {
@@ -116,14 +141,17 @@ export function useResponseRecovery() {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       if (needsRecovery(threadId)) {
+        console.log('[Recovery] Thread needs recovery:', threadId)
         attemptRecovery(threadId)
       }
     }, 500)
   }, [])
 
-  // Clean up on unmount
+  // On mount, check all threads for recovery
   useEffect(() => {
+    const timer = setTimeout(checkAllThreadsRecovery, 2000)
     return () => {
+      clearTimeout(timer)
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
   }, [])

@@ -323,6 +323,7 @@ async function sendResponsesStream(
     }
 
     if (eventName === 'response.output_item.added' || eventName === 'response.output_item.done') {
+      console.log('[Chat] Tool event:', eventName, (parsed.item as any)?.type, (parsed.item as any)?.name || '')
       const item = parsed.item as Record<string, unknown> | undefined
       if (!item) return
 

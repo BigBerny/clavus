@@ -51,22 +51,39 @@ body {
   left: 0;
   right: 0;
   width: 100%;
-  /* `100dvh` only shrinks at the END of the iOS keyboard animation. To make
-     layout follow the keyboard smoothly during its slide-in, subtract the
-     live `--kb-inset` (driven by visualViewport in useVisualViewport.ts). */
-  height: calc(100dvh - var(--kb-inset, 0px));
+  /* Single source of truth: `--app-height` is set to `visualViewport.height`
+     by useVisualViewport.ts every frame during keyboard animation.
+     `100dvh` is a fallback for the very first paint before JS runs.
+
+     Old formula was `calc(100dvh - --kb-inset)` which had a race condition:
+     `100dvh` and `--kb-inset` could update one frame apart at the end of
+     the keyboard animation, causing visible jitter. A single variable
+     eliminates that. */
+  height: var(--app-height, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
   background-color: var(--color-surface-dark, #111318);
   scrollbar-width: none;
+  /* Limit reflow scope: height changes don't propagate outside #root. */
+  contain: layout style paint;
 }
 
-/* In the Capacitor native shell, --kb-inset is set instantly to the final
-   keyboard height on willShow (the plugin doesn't stream intermediate values
-   like visualViewport does in the PWA). Transition the height to match the
+/* In the Capacitor native shell, --app-height is set instantly to the final
+   value on willShow (the plugin doesn't stream intermediate values like
+   visualViewport does in the PWA). Transition the height to match the
    iOS keyboard slide-in duration/curve so layout follows the keyboard. */
 html[data-native] #root {
   transition: height 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* On the web (iOS Safari PWA), visualViewport events fire at irregular
+   intervals — sometimes every frame, sometimes with 50–80ms gaps. A short
+   transition smooths between these discrete values without lagging
+   noticeably behind the keyboard.
+   Only enabled while data-vv-animating is set (during keyboard animation),
+   so stray post-animation events don't cause visible micro-bounces. */
+html:not([data-native])[data-vv-animating] #root {
+  transition: height 0.08s linear;
 }
 #root::-webkit-scrollbar {
   display: none;
@@ -125,9 +142,11 @@ body {
 .safe-area-bottom {
   /* As the keyboard rises into the home-indicator strip, fade out the
      safe-area padding smoothly. When kb-inset >= safe-area-inset-bottom the
-     keyboard fully covers it, so padding becomes 0. No CSS transition — the
-     value is driven by --kb-inset which updates each animation frame. */
+     keyboard fully covers it, so padding becomes 0. */
   padding-bottom: max(0px, env(safe-area-inset-bottom) - var(--kb-inset, 0px));
+  /* Smooth the transition when data-keyboard-open flips and padding jumps
+     between env(safe-area-inset-bottom) and 0. */
+  transition: padding-bottom 0.15s ease-out;
 }
 /* Once the keyboard is fully open, --kb-inset returns to 0 in PWA mode
    (`interactive-widget=resizes-content` shrinks innerHeight to match vv.height),

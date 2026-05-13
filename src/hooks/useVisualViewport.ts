@@ -39,36 +39,40 @@ export function useVisualViewport() {
       let unsub: (() => void) | null = null
       let nativeAlsoResizes = false
       let heightBeforeShow = 0
+      const setAppHeight = (kbInset: number) => {
+        const innerH = window.innerHeight
+        root.style.setProperty('--app-height', `${innerH - kbInset}px`)
+        root.style.setProperty('--kb-inset', `${kbInset}px`)
+      }
+      const clearAppHeight = () => {
+        root.style.setProperty('--app-height', `${window.innerHeight}px`)
+        root.style.setProperty('--kb-inset', '0px')
+      }
       subscribeKeyboard({
         onWillShow: (kbHeight) => {
           heightBeforeShow = window.innerHeight
           root.setAttribute('data-keyboard-open', 'true')
-          // If we've already detected the native shell is resizing the webview,
-          // leave layout to native (avoids double-shrink).
           if (nativeAlsoResizes) {
-            root.style.setProperty('--kb-inset', '0px')
+            clearAppHeight()
           } else {
-            root.style.setProperty('--kb-inset', `${kbHeight}px`)
+            setAppHeight(kbHeight)
           }
         },
         onDidShow: (kbHeight) => {
           const drop = heightBeforeShow - window.innerHeight
-          // Threshold: a significant innerHeight drop means the native shell
-          // resized the webview itself. Switch modes for next time.
           if (drop > 50) {
             nativeAlsoResizes = true
-            // Compensate now so this show isn't broken either.
             const compensated = Math.max(0, kbHeight - drop)
-            root.style.setProperty('--kb-inset', `${compensated}px`)
+            setAppHeight(compensated)
           }
         },
         onWillHide: () => {
           root.removeAttribute('data-keyboard-open')
-          root.style.setProperty('--kb-inset', '0px')
+          clearAppHeight()
         },
         onDidHide: () => {
           root.removeAttribute('data-keyboard-open')
-          root.style.setProperty('--kb-inset', '0px')
+          clearAppHeight()
         },
       }).then((u) => {
         unsub = u
@@ -77,63 +81,131 @@ export function useVisualViewport() {
         unsub?.()
         root.removeAttribute('data-keyboard-open')
         root.style.removeProperty('--kb-inset')
+        root.style.removeProperty('--app-height')
       }
     }
 
-    // ---- Web / iOS Safari PWA: drive --kb-inset from visualViewport ----
+    // ---- Web / iOS Safari PWA: drive --app-height from visualViewport ----
+    //
+    // Single source of truth: --app-height = visualViewport.height.
+    // #root uses `height: var(--app-height, 100dvh)` — no compound math.
+    //
+    // This avoids the dvh-snap race condition: with the old
+    // `calc(100dvh - --kb-inset)` formula, when iOS finally shrinks the layout
+    // viewport at the END of the keyboard animation, 100dvh and --kb-inset
+    // could update one frame apart, briefly making the height wrong by the
+    // keyboard's height (visible as an up/down jitter).
+    //
+    // --kb-inset is still computed for safe-area-bottom and other consumers.
     const vv = window.visualViewport
     if (!vv) return
 
     const KEYBOARD_THRESHOLD = 150 // px difference → keyboard is open
 
-    // Track the maximum innerHeight we've observed in the current orientation.
-    // With `interactive-widget=resizes-content`, innerHeight stays at full
-    // height during the keyboard animation, then shrinks to match vv.height
-    // at the end. Comparing current innerHeight to this baseline lets us
-    // detect "keyboard logically open" even after innerHeight catches up
-    // (when kbInset would otherwise read 0).
     let maxInnerHeight = window.innerHeight
+    let prevAppHeight = 0
+    let stableFrames = 0
+    let polling = false
 
-    const update = () => {
-      cancelAnimationFrame(rafId.current)
-      rafId.current = requestAnimationFrame(() => {
-        const innerH = window.innerHeight
-        if (innerH > maxInnerHeight) maxInnerHeight = innerH
-        // Space at the bottom of the layout viewport covered by the keyboard.
-        // Updates on every visualViewport resize/scroll, so the layout can
-        // animate in lockstep with the keyboard slide.
-        const kbInset = Math.max(0, innerH - vv.height - vv.offsetTop)
-        root.style.setProperty('--kb-inset', `${kbInset}px`)
-        const keyboardOpen =
-          kbInset > KEYBOARD_THRESHOLD ||
-          maxInnerHeight - innerH > KEYBOARD_THRESHOLD
-        if (keyboardOpen) {
-          root.setAttribute('data-keyboard-open', 'true')
-        } else {
-          root.removeAttribute('data-keyboard-open')
-        }
-      })
+    const applyViewport = () => {
+      const innerH = window.innerHeight
+      if (innerH > maxInnerHeight) maxInnerHeight = innerH
+      const appHeight = vv.height
+      const kbInset = Math.max(0, innerH - appHeight - vv.offsetTop)
+
+      root.style.setProperty('--app-height', `${appHeight}px`)
+      root.style.setProperty('--kb-inset', `${kbInset}px`)
+
+      const keyboardOpen =
+        kbInset > KEYBOARD_THRESHOLD ||
+        maxInnerHeight - innerH > KEYBOARD_THRESHOLD ||
+        maxInnerHeight - appHeight > KEYBOARD_THRESHOLD
+      if (keyboardOpen) {
+        root.setAttribute('data-keyboard-open', 'true')
+      } else {
+        root.removeAttribute('data-keyboard-open')
+      }
+      return appHeight
     }
 
-    update()
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
+    // rAF polling loop — fills gaps between irregular visualViewport events.
+    const poll = () => {
+      const appHeight = applyViewport()
+      if (Math.abs(appHeight - prevAppHeight) < 0.5) {
+        stableFrames++
+      } else {
+        stableFrames = 0
+      }
+      prevAppHeight = appHeight
+      if (stableFrames >= 10) {
+        polling = false
+        // Animation settled — remove the CSS transition so any subsequent
+        // stray visualViewport events (e.g. Safari adjusting its UI chrome)
+        // don't cause a visible bounce/transition. Will be re-enabled on
+        // next viewport change.
+        root.removeAttribute('data-vv-animating')
+        return
+      }
+      rafId.current = requestAnimationFrame(poll)
+    }
+
+    const startPolling = () => {
+      if (polling) return
+      polling = true
+      stableFrames = 0
+      // Enable the CSS transition only during active animation, so settled
+      // micro-adjustments don't trigger a visible interpolation.
+      root.setAttribute('data-vv-animating', 'true')
+      rafId.current = requestAnimationFrame(poll)
+    }
+
+    const onViewportChange = () => {
+      applyViewport()
+      startPolling()
+    }
+
+    onViewportChange()
+    vv.addEventListener('resize', onViewportChange)
+    vv.addEventListener('scroll', onViewportChange)
+
+    // Predictive trigger: when the user focuses an input, the keyboard is
+    // about to open. Start the polling loop immediately so we don't miss the
+    // first few frames of the animation while waiting for the first
+    // visualViewport event (which can lag on iOS Safari).
+    const onFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      const tag = target.tagName
+      const editable = target.isContentEditable
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || editable) {
+        startPolling()
+      }
+    }
+    const onFocusOut = () => {
+      // Keyboard about to close — start polling to catch the animation.
+      startPolling()
+    }
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('focusout', onFocusOut)
 
     const handleOrientation = () => {
-      // Reset the baseline so the new orientation's full height becomes the
-      // reference for "keyboard open" detection.
       maxInnerHeight = 0
-      setTimeout(update, 200)
+      setTimeout(onViewportChange, 200)
     }
     window.addEventListener('orientationchange', handleOrientation)
 
     return () => {
+      polling = false
       cancelAnimationFrame(rafId.current)
-      vv.removeEventListener('resize', update)
-      vv.removeEventListener('scroll', update)
+      vv.removeEventListener('resize', onViewportChange)
+      vv.removeEventListener('scroll', onViewportChange)
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('focusout', onFocusOut)
       window.removeEventListener('orientationchange', handleOrientation)
       root.removeAttribute('data-keyboard-open')
+      root.removeAttribute('data-vv-animating')
       root.style.removeProperty('--kb-inset')
+      root.style.removeProperty('--app-height')
     }
   }, [])
 }

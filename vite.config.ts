@@ -125,6 +125,93 @@ async function sendPushToAll(payload: { title: string; body: string; threadId: s
   if (valid.length !== subs.length) savePushSubscriptions(valid)
 }
 
+/**
+ * Server-side SSE proxy for /v1/responses.
+ * Keeps the Hermes connection alive even if the client (phone) disconnects,
+ * preventing Hermes from aborting the agent run.
+ */
+function responsesProxyPlugin() {
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (req.url !== '/v1/responses' || req.method !== 'POST') return next()
+
+      // Read the request body
+      const chunks: Buffer[] = []
+      for await (const chunk of req) chunks.push(Buffer.from(chunk))
+      const body = Buffer.concat(chunks).toString('utf-8')
+
+      let parsed: any
+      try { parsed = JSON.parse(body) } catch { return next() }
+
+      // Only intercept streaming requests
+      if (!parsed.stream) return next()
+
+      // Forward to Hermes
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (req.headers.authorization) headers['Authorization'] = req.headers.authorization
+      if (req.headers['idempotency-key']) headers['Idempotency-Key'] = req.headers['idempotency-key']
+
+      let hermesRes: Response
+      try {
+        hermesRes = await fetch(`${HERMES_API_TARGET}/v1/responses`, {
+          method: 'POST',
+          headers,
+          body,
+        })
+      } catch (e: any) {
+        res.statusCode = 502
+        res.end(JSON.stringify({ error: { message: `Gateway error: ${e.message}` } }))
+        return
+      }
+
+      if (!hermesRes.ok || !hermesRes.body) {
+        res.statusCode = hermesRes.status
+        res.setHeader('Content-Type', 'application/json')
+        res.end(await hermesRes.text())
+        return
+      }
+
+      // Set up SSE response to client
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      })
+
+      let clientDisconnected = false
+      res.on('close', () => { clientDisconnected = true })
+
+      // Read the Hermes stream and forward to client
+      const reader = hermesRes.body.getReader()
+      const decoder = new TextDecoder()
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          const chunk = decoder.decode(value, { stream: true })
+          // Forward to client if still connected
+          if (!clientDisconnected) {
+            try { res.write(chunk) } catch { clientDisconnected = true }
+          }
+          // Even if client disconnected, keep reading to prevent Hermes abort
+        }
+      } catch {
+        // Hermes connection error — nothing to do
+      }
+
+      if (!clientDisconnected) {
+        try { res.end() } catch { /* ignore */ }
+      }
+    })
+  }
+
+  return {
+    name: 'responses-proxy',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
 function threadsApiPlugin() {
   // Ensure data directory exists
   if (!fs.existsSync(THREADS_DATA_DIR)) {
@@ -800,6 +887,7 @@ export default defineConfig({
   server: phoneServerOptions,
   preview: phoneServerOptions,
   plugins: [
+    responsesProxyPlugin(),
     threadsApiPlugin(),
     recipesApiPlugin(),
     elevenLabsProxy(),
