@@ -7,6 +7,7 @@ import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
 import { useTabsStore, ensureChatTab, type ChatTab, type FileTab, type MarksenseTab } from './state/tabs.ts'
+import { applyRoute, getCurrentRoute, onRouteChange, pushHash, type Route } from './state/router.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
@@ -114,6 +115,23 @@ export function App() {
     _setVisiblePanel(prev => {
       if (next === 'home' && prev !== 'home') {
         // console.warn('[CLAVUS-DEBUG] visiblePanel → home (was:', prev, ')', new Error().stack)
+      }
+      if (next !== prev) {
+        // Reflect the visible panel in the URL hash so it can be deep-linked.
+        const tabs = useTabsStore.getState().tabs
+        const tab = tabs.find(t => t.id === next)
+        let route: Route
+        if (next === 'home' || !tab) {
+          route = { kind: 'home' }
+        } else if (tab.type === 'chat') {
+          route = { kind: 'chat', threadId: (tab as ChatTab).threadId }
+        } else if (tab.type === 'marksense') {
+          route = { kind: 'doc', path: (tab as MarksenseTab).path }
+        } else {
+          // 'file' tab — no canonical deep link for now; fall back to home
+          route = { kind: 'home' }
+        }
+        pushHash(route, true)
       }
       return next
     })
@@ -391,6 +409,24 @@ export function App() {
       navigateToThread(threadParam)
     }
   }, [navigateToThread])
+
+  // ── Deep-link router ────────────────────────────────────────────────────
+  // On mount: apply the route from the URL hash (e.g. #/chat/abc).
+  // On hashchange (back/forward): re-apply the route.
+  useEffect(() => {
+    const apply = (route: Route | null) => {
+      if (!route) return
+      const tabId = applyRoute(route)
+      if (tabId === null) {
+        setVisiblePanel('home')
+      } else {
+        setVisiblePanel(tabId)
+      }
+    }
+    apply(getCurrentRoute())
+    const unsub = onRouteChange(apply)
+    return unsub
+  }, [setVisiblePanel])
 
   useEffect(() => {
     if (needsToken) return
