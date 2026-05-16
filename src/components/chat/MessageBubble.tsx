@@ -356,6 +356,8 @@ interface Props {
   onRegenerate?: (messageId: string) => void
   showAvatar?: boolean
   isLastInGroup?: boolean
+  /** Thread id — propagated to RichMessageRenderer for linkedDoc tracking. */
+  threadId?: string
 }
 
 function relativeTime(timestamp: number): string {
@@ -376,7 +378,7 @@ function fullDateTime(timestamp: number): string {
   })
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, onRegenerate, showAvatar = true, isLastInGroup = true }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, onRegenerate, showAvatar = true, isLastInGroup = true, threadId }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
@@ -584,10 +586,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                     if (part.type === 'buttons') return <ButtonGroup key={i} buttons={part.buttons} />
                     if (part.type === 'select') return <SelectBlock key={i} prompt={part.prompt} options={part.options} />
                     if (part.type === 'confirm') return <ConfirmBlock key={i} message={part.message} confirmLabel={part.confirmLabel} cancelLabel={part.cancelLabel} />
-                    return <RichMessageRenderer key={i} content={part.content} />
+                    return <RichMessageRenderer key={i} content={part.content} threadId={threadId} />
                   })
                 ) : (
-                  <RichMessageRenderer content={replyQuote ? replyQuote.rest : (message.content || ' ')} />
+                  <RichMessageRenderer content={replyQuote ? replyQuote.rest : (message.content || ' ')} threadId={threadId} />
                 )}
               </Suspense>
             </div>

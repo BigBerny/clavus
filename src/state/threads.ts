@@ -2,12 +2,21 @@ import { create } from 'zustand'
 import type { Message } from './chat'
 import { useTabsStore } from './tabs'
 
+export interface LinkedDoc {
+  path: string
+  title?: string
+}
+
 export interface Thread {
   id: string
   title: string
   createdAt: number
   updatedAt: number
   lastMessagePreview: string
+  /** Whether this thread is archived (hidden from the main Open list). */
+  archived?: boolean
+  /** Marksense docs referenced from this thread (via @-mention or message scan). */
+  linkedDocs?: LinkedDoc[]
 }
 
 interface ThreadsState {
@@ -19,6 +28,9 @@ interface ThreadsState {
   switchThread: (id: string) => void
   updateThreadTitle: (id: string, title: string) => void
   updateThreadPreview: (id: string, preview: string) => void
+  archiveThread: (id: string) => void
+  unarchiveThread: (id: string) => void
+  addLinkedDoc: (threadId: string, doc: LinkedDoc) => void
   getActiveThread: () => Thread | undefined
 }
 
@@ -329,6 +341,40 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       const threads = state.threads.map((t) =>
         t.id === id ? { ...t, lastMessagePreview: preview.slice(0, 80), updatedAt: Date.now() } : t,
       )
+      saveThreads(threads)
+      return { threads }
+    })
+  },
+
+  archiveThread: (id) => {
+    set((state) => {
+      const threads = state.threads.map((t) =>
+        t.id === id ? { ...t, archived: true } : t,
+      )
+      saveThreads(threads)
+      return { threads }
+    })
+  },
+
+  unarchiveThread: (id) => {
+    set((state) => {
+      const threads = state.threads.map((t) =>
+        t.id === id ? { ...t, archived: false, updatedAt: Date.now() } : t,
+      )
+      saveThreads(threads)
+      return { threads }
+    })
+  },
+
+  addLinkedDoc: (threadId, doc) => {
+    set((state) => {
+      const threads = state.threads.map((t) => {
+        if (t.id !== threadId) return t
+        const existing = t.linkedDocs ?? []
+        // Dedupe by path
+        if (existing.some((d) => d.path === doc.path)) return t
+        return { ...t, linkedDocs: [...existing, doc] }
+      })
       saveThreads(threads)
       return { threads }
     })

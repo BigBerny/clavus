@@ -62,24 +62,36 @@ function openMarksenseInline(href: string, title: string) {
   }))
 }
 
-function ExternalLink({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
-  if (href && MARKSENSE_PATTERN.test(href)) {
-    return <MarksenseCard href={href} />
+function ExternalLink(threadId?: string) {
+  return function ExternalLinkInner({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
+    if (href && MARKSENSE_PATTERN.test(href)) {
+      return <MarksenseCard href={href} threadId={threadId} />
+    }
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline" {...props}>
+        {children}
+      </a>
+    )
   }
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline" {...props}>
-      {children}
-    </a>
-  )
 }
 
-function MarksenseCard({ href }: { href: string }) {
+function MarksenseCard({ href, threadId }: { href: string; threadId?: string }) {
   const filename = decodeURIComponent(href.split('/file/').pop() || 'Document')
   const workspacePath = extractWorkspacePath(href)
   const [content, setContent] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
+
+  // Side-effect: register this doc as linked to the current thread so the
+  // sidebar can render it as a sibling row under the conversation.
+  useEffect(() => {
+    if (!threadId || !workspacePath) return
+    // Dynamic import to avoid a circular ref on first render
+    import('../../state/threads').then(({ useThreadsStore }) => {
+      useThreadsStore.getState().addLinkedDoc(threadId, { path: workspacePath, title: filename })
+    })
+  }, [threadId, workspacePath, filename])
 
   useEffect(() => {
     if (!workspacePath) { setFailed(true); return }
@@ -306,9 +318,11 @@ function TableBlock({ children, ...props }: React.ComponentPropsWithoutRef<'tabl
 interface Props {
   content: string
   remarkPluginsGfmOnly?: boolean
+  /** Thread the message belongs to — used to track linked Marksense docs. */
+  threadId?: string
 }
 
-export function RichMessageRenderer({ content, remarkPluginsGfmOnly }: Props) {
+export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId }: Props) {
   if (remarkPluginsGfmOnly) {
     return <Markdown remarkPlugins={[remarkGfm]} components={{ table: TableBlock }}>{content}</Markdown>
   }
@@ -316,7 +330,7 @@ export function RichMessageRenderer({ content, remarkPluginsGfmOnly }: Props) {
     <Markdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeHighlight]}
-      components={{ code: CodeBlock, a: ExternalLink, table: TableBlock }}
+      components={{ code: CodeBlock, a: ExternalLink(threadId), table: TableBlock }}
     >
       {content}
     </Markdown>
