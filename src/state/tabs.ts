@@ -22,7 +22,10 @@ export interface RecipeTab extends TabBase {
 
 export interface MarksenseTab extends TabBase {
   type: 'marksense'
-  documentUrl: string
+  /** Workspace file path (e.g., '/SOUL.md') — used for direct editor integration */
+  path: string
+  /** @deprecated Legacy URL-based loading — kept for backward compat with existing tabs */
+  documentUrl?: string
 }
 
 export interface FileTab extends TabBase {
@@ -171,7 +174,7 @@ export function ensureChatTab(threadId: string, title: string) {
 }
 
 // Batch version: ensure chat tabs for multiple threads in a single store update
-export function ensureChatTabsBatch(entries: Array<{ threadId: string; title: string }>) {
+export function ensureChatTabsBatch(entries: Array<{ threadId: string; title: string; updatedAt?: number }>) {
   const state = useTabsStore.getState()
   const existingIds = new Set(
     state.tabs.filter(t => t.type === 'chat').map(t => (t as ChatTab).threadId)
@@ -184,7 +187,7 @@ export function ensureChatTabsBatch(entries: Array<{ threadId: string; title: st
       threadId: e.threadId,
       title: e.title,
       openedAt: Date.now(),
-      updatedAt: Date.now(),
+      updatedAt: e.updatedAt ?? Date.now(),
     }))
   if (newTabs.length === 0) return
   const tabs = [...state.tabs, ...newTabs]

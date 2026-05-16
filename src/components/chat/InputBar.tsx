@@ -4,6 +4,7 @@ import { haptic, isNative } from '../../lib/native'
 import { usePresetStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
 import { MODEL_PRESETS } from '../../gateway/presets'
+import { VoiceInputPill } from '../voice/VoiceInputPill'
 import {
   SLASH_COMMANDS,
   filterSlashCommands,
@@ -362,51 +363,40 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0
 
-  // Talk Mode: full-width overlay when active
+  // Talk Mode: full-width overlay when active.
+  // Uses the shared VoiceInputPill for visual consistency with GPT Realtime.
   if (talkMode?.active) {
     const phaseLabels: Record<string, string> = {
-      listening: 'Listening...',
-      transcribing: 'Transcribing...',
-      waiting: 'Jane is responding...',
-      speaking: 'Jane is speaking...',
+      listening: 'Listening…',
+      transcribing: 'Transcribing…',
+      waiting: 'Jane is thinking…',
+      speaking: 'Jane is speaking…',
     }
-    const phaseColors: Record<string, string> = {
-      listening: 'bg-red-500',
-      transcribing: 'bg-amber-500',
-      waiting: 'bg-accent',
-      speaking: 'bg-emerald-500',
-    }
+    // Map Talk Mode phase → VoiceInputPill mode.
+    // - listening      → 'locked'  (active recording, green pill)
+    // - transcribing   → 'locked'  (still processing user audio)
+    // - waiting/speaking → 'idle'  (assistant has the floor, neutral pill)
+    const pillMode = (talkMode.phase === 'listening' || talkMode.phase === 'transcribing')
+      ? 'locked' as const
+      : 'idle' as const
     return (
-      <div className="bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom">
+      <div className="bg-surface-light dark:bg-surface-dark border-t border-border-light dark:border-border-dark safe-area-bottom">
         <div className="max-w-[900px] mx-auto p-3">
           <div className="flex flex-col items-center gap-3 py-4">
-            {/* Pulsing indicator */}
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${phaseColors[talkMode.phase] || 'bg-accent'} ${talkMode.phase === 'listening' ? 'animate-pulse' : ''}`}>
-              {talkMode.phase === 'listening' && (
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
-              )}
-              {talkMode.phase === 'transcribing' && (
-                <div className="voice-spinner" style={{ width: 24, height: 24, borderWidth: 2, borderColor: 'white', borderTopColor: 'transparent' }} />
-              )}
-              {talkMode.phase === 'waiting' && (
-                <div className="flex gap-1">
-                  <span className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0s' }} />
-                  <span className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0.2s' }} />
-                  <span className="w-2 h-2 rounded-full bg-white animate-bounce" style={{ animationDelay: '0.4s' }} />
-                </div>
-              )}
-              {talkMode.phase === 'speaking' && (
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-              )}
-            </div>
-            <span className="text-sm text-text-light-muted dark:text-text-dark-muted">
+            <VoiceInputPill
+              size="medium"
+              mode={pillMode}
+              showLockTarget={false}
+              showPauseButton={false}
+            />
+            <span className="text-[13px] text-text-light-muted dark:text-text-dark-muted">
               {phaseLabels[talkMode.phase] || 'Talk Mode'}
             </span>
             <div className="flex gap-2">
               {talkMode.phase === 'listening' && (
                 <button
                   onClick={talkMode.endListening}
-                  className="inline-btn px-4 py-2 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-sm text-text-light dark:text-text-dark active:scale-95 transition-transform"
+                  className="inline-btn px-4 h-9 rounded-md bg-surface-light-2 dark:bg-surface-dark-3 text-[13px] font-medium text-text-light dark:text-text-dark active:scale-95 transition-transform"
                 >
                   Done speaking
                 </button>
@@ -414,14 +404,14 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               {talkMode.phase === 'speaking' && (
                 <button
                   onClick={talkMode.interrupt}
-                  className="inline-btn px-4 py-2 rounded-full bg-surface-light-2 dark:bg-surface-dark-2 text-sm text-text-light dark:text-text-dark active:scale-95 transition-transform"
+                  className="inline-btn px-4 h-9 rounded-md bg-surface-light-2 dark:bg-surface-dark-3 text-[13px] font-medium text-text-light dark:text-text-dark active:scale-95 transition-transform"
                 >
                   Interrupt
                 </button>
               )}
               <button
                 onClick={talkMode.toggle}
-                className="inline-btn px-4 py-2 rounded-full bg-red-500/10 text-sm text-red-500 active:scale-95 transition-transform"
+                className="inline-btn px-4 h-9 rounded-md bg-red-500/10 text-[13px] font-medium text-red-500 active:scale-95 transition-transform"
               >
                 End Talk Mode
               </button>
@@ -434,7 +424,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   return (
     <div
-      className={`bg-surface-light dark:bg-[#111318] border-t border-white/5 safe-area-bottom relative ${dragOver ? 'ring-2 ring-accent ring-inset' : ''}`}
+      className={`bg-surface-light dark:bg-surface-dark border-t border-border-light dark:border-border-dark safe-area-bottom relative ${dragOver ? 'ring-2 ring-accent ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -587,11 +577,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                 <PaperclipIcon />
               </button>
             </div>
-            {/* Version info */}
-            <div className="flex items-center gap-1.5 px-3 pb-1.5 pt-0">
-              <span className="w-1 h-1 rounded-full bg-accent/50" />
-              <span className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40">Build {formatBuildTime(__CLAVUS_BUILD_TIME__)}{__CLAVUS_GIT_SHA__ && __CLAVUS_GIT_SHA__ !== 'dev' ? ` · ${__CLAVUS_GIT_SHA__}` : ''}</span>
-            </div>
           </div>
         )}
 
@@ -705,7 +690,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                 </button>
                 <button
                   onClick={handleSubmit}
-                  className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
+                  className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
                   aria-label="Queue message"
                   title="Send (queues after current response)"
                 >
@@ -724,7 +709,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             ) : hasContent ? (
               <button
                 onClick={handleSubmit}
-                className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all shadow-lg shadow-accent/25 animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
+                className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
                 aria-label="Send message"
                 title="Send"
               >
@@ -832,13 +817,6 @@ function StopIcon() {
       <rect x="6" y="6" width="12" height="12" rx="2"/>
     </svg>
   )
-}
-
-function formatBuildTime(value: string): string {
-  if (!value || value === 'dev') return 'dev'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 function CloseIcon() {

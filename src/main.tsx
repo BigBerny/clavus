@@ -40,12 +40,14 @@ window.addEventListener('unhandledrejection', (e) => {
 document.documentElement.setAttribute('data-platform', nativePlatform)
 if (isNative) document.documentElement.setAttribute('data-native', 'true')
 
-// In the Capacitor WKWebView we don't want a service worker: precached
-// chunks make new app builds invisible until the SW updates (which can take
-// two cold starts), so changes to the openclaw-client deploy don't show up
-// reliably on the phone. Unregister anything already installed and clear
-// the caches.
-if (isNative && 'serviceWorker' in navigator) {
+// In the Capacitor WKWebView (and the Tauri macOS shell, which sets its UA to
+// "Clavus/<ver> (Tauri; …)") we don't want a service worker: precached chunks
+// make new app builds invisible until the SW updates (which can take two cold
+// starts), so changes to the openclaw-client deploy don't show up reliably on
+// the phone or in the desktop app. Unregister anything already installed and
+// clear the caches.
+const isTauri = /Clavus\/[\d.]+ \(Tauri/.test(navigator.userAgent)
+if ((isNative || isTauri) && 'serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then((regs) => {
     regs.forEach((reg) => { void reg.unregister() })
   }).catch(() => { /* ignore */ })

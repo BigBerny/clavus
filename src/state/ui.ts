@@ -11,6 +11,7 @@ interface UIState {
   connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
   currentView: AppView
   fileBrowserOpen: boolean
+  fileExplorerOpen: boolean
   selectedRecipeId: number | null
   gatewayUrl: string
   gatewayToken: string
@@ -20,6 +21,7 @@ interface UIState {
   setConnectionStatus: (status: UIState['connectionStatus']) => void
   setCurrentView: (view: AppView) => void
   setFileBrowserOpen: (open: boolean) => void
+  setFileExplorerOpen: (open: boolean) => void
   setSelectedRecipeId: (id: number | null) => void
   setGatewayUrl: (url: string) => void
   setGatewayToken: (token: string) => void
@@ -57,6 +59,7 @@ export const useUIStore = create<UIState>((set) => ({
   connectionStatus: 'checking',
   currentView: 'home',
   fileBrowserOpen: false,
+  fileExplorerOpen: false,
   selectedRecipeId: null,
   gatewayUrl: localStorage.getItem('clavus-hermes-url') || localStorage.getItem('clavus-gateway-url') || '',
   gatewayToken: localStorage.getItem('clavus-hermes-token') || localStorage.getItem('clavus-gateway-token') || '',
@@ -72,6 +75,7 @@ export const useUIStore = create<UIState>((set) => ({
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   setCurrentView: (view) => set({ currentView: view }),
   setFileBrowserOpen: (open) => set({ fileBrowserOpen: open }),
+  setFileExplorerOpen: (open) => set({ fileExplorerOpen: open }),
   setSelectedRecipeId: (id) => set({ selectedRecipeId: id }),
 
   setGatewayUrl: (url) => {

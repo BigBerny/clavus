@@ -1,0 +1,83 @@
+/* =====================
+     RAW PREFIX BLOCK
+     ===================== */
+
+.raw-prefix-block {
+  width: 100%;
+}
+
+.raw-prefix-block-inner {
+  padding: 0.75rem 3rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+@media screen and (max-width: 768px) {
+  .raw-prefix-block-inner {
+    max-width: 768px;
+    margin: 0 auto;
+    padding: 0.75rem 1.5rem 0;
+  }
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+
+.raw-prefix-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.raw-prefix-icon {
+  width: 14px;
+  height: 14px;
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.raw-prefix-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.4;
+  user-select: none;
+}
+
+/* ── Code block ───────────────────────────────────────────── */
+
+.raw-prefix-code {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-radius: 6px;
+  border: 1px solid var(--tt-gray-light-200, rgba(0, 0, 0, 0.08));
+  background: var(--tt-gray-light-50, rgba(0, 0, 0, 0.02));
+  color: inherit;
+  opacity: 0.6;
+  width: 100%;
+  resize: none;
+  overflow: hidden;
+  outline: none;
+  box-sizing: border-box;
+
+  &:focus {
+    opacity: 0.8;
+    border-color: var(--tt-gray-light-300, rgba(0, 0, 0, 0.15));
+
+    .dark & {
+      border-color: var(--tt-gray-dark-300, rgba(255, 255, 255, 0.15));
+    }
+  }
+
+  .dark & {
+    border-color: var(--tt-gray-dark-200, rgba(255, 255, 255, 0.08));
+    background: var(--tt-gray-dark-50, rgba(255, 255, 255, 0.02));
+  }
+}

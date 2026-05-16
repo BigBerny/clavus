@@ -10,6 +10,7 @@ import Database from 'better-sqlite3'
 import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, markOpened, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
+const DOCUMENTS_ROOT = nodePath.join(process.env.HOME || '', 'Documents/Workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
 
 // Read OPENAI_API_KEY from .env for server-side proxy
@@ -356,48 +357,126 @@ function threadsApiPlugin() {
   }
 }
 
-function workspacePlugin() {
-  const attach = (server: any) => {
-    server.middlewares.use((req: any, res: any, next: any) => {
-      if (!req.url?.startsWith('/api/workspace')) return next()
+function workspacePlugin(rootDir = WORKSPACE_ROOT, apiPrefix = '/api/workspace', pluginName = 'workspace-api') {
+  function resolveWorkspacePath(relPath: string): string | null {
+    const absPath = nodePath.join(rootDir, relPath)
+    if (!absPath.startsWith(rootDir)) return null
+    return absPath
+  }
 
-      const rawRequest = req.url.replace('/api/workspace', '') || '/'
+  function readBody(req: any): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const chunks: Buffer[] = []
+      req.on('data', (chunk: Buffer) => chunks.push(chunk))
+      req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+      req.on('error', reject)
+    })
+  }
+
+  function listDir(absPath: string, relPath: string): any[] {
+    return fs.readdirSync(absPath, { withFileTypes: true })
+      .filter(e => !e.name.startsWith('.'))
+      .map(e => ({
+        name: e.name,
+        type: e.isDirectory() ? 'dir' as const : 'file' as const,
+        path: nodePath.join(relPath, e.name),
+        size: e.isFile() ? fs.statSync(nodePath.join(absPath, e.name)).size : undefined,
+      }))
+      .sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+        return a.name.localeCompare(b.name)
+      })
+  }
+
+  function listDirRecursive(absPath: string, relPath: string): any[] {
+    const entries: any[] = []
+    for (const e of fs.readdirSync(absPath, { withFileTypes: true })) {
+      if (e.name.startsWith('.')) continue
+      const childRel = nodePath.join(relPath, e.name)
+      const childAbs = nodePath.join(absPath, e.name)
+      if (e.isDirectory()) {
+        entries.push({ name: e.name, type: 'dir', path: childRel, children: listDirRecursive(childAbs, childRel) })
+      } else {
+        entries.push({ name: e.name, type: 'file', path: childRel, size: fs.statSync(childAbs).size })
+      }
+    }
+    entries.sort((a, b) => {
+      if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+    return entries
+  }
+
+  const mimeTypes: Record<string, string> = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
+    pdf: 'application/pdf', csv: 'text/csv; charset=utf-8', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
+    json: 'application/json; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  }
+
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (!req.url?.startsWith(apiPrefix)) return next()
+
+      const url = new URL(req.url, 'http://localhost')
+      const rawRequest = url.pathname.replace(apiPrefix, '') || '/'
       const rawMode = rawRequest.startsWith('/raw/')
       const relPath = decodeURIComponent(rawMode ? rawRequest.replace('/raw', '') : rawRequest)
-      const absPath = nodePath.join(WORKSPACE_ROOT, relPath)
+      const absPath = resolveWorkspacePath(relPath)
+      const recursive = url.searchParams.get('recursive') === 'true'
 
-      if (!absPath.startsWith(WORKSPACE_ROOT)) {
+      if (!absPath) {
         res.statusCode = 403
         res.end(JSON.stringify({ error: 'Forbidden' }))
         return
       }
 
+      // POST — write file (atomic)
+      if (req.method === 'POST') {
+        try {
+          const body = await readBody(req)
+          const { content } = JSON.parse(body)
+          const dir = nodePath.dirname(absPath)
+          if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+          // Atomic write: write to temp file then rename
+          const tmpPath = absPath + '.tmp.' + Date.now()
+          fs.writeFileSync(tmpPath, content, 'utf-8')
+          fs.renameSync(tmpPath, absPath)
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ ok: true, path: relPath }))
+        } catch (err: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: err.message }))
+        }
+        return
+      }
+
+      // DELETE — delete file
+      if (req.method === 'DELETE') {
+        try {
+          if (fs.existsSync(absPath)) {
+            fs.unlinkSync(absPath)
+          }
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ ok: true, path: relPath }))
+        } catch (err: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: err.message }))
+        }
+        return
+      }
+
+      // GET — read file or directory
       try {
         const stat = fs.statSync(absPath)
         if (stat.isDirectory()) {
-          const entries = fs.readdirSync(absPath, { withFileTypes: true })
-            .filter(e => !e.name.startsWith('.'))
-            .map(e => ({
-              name: e.name,
-              type: e.isDirectory() ? 'dir' : 'file',
-              size: e.isFile() ? fs.statSync(nodePath.join(absPath, e.name)).size : undefined,
-            }))
-            .sort((a, b) => {
-              if (a.type !== b.type) return a.type === 'dir' ? -1 : 1
-              return a.name.localeCompare(b.name)
-            })
+          const entries = recursive ? listDirRecursive(absPath, relPath) : listDir(absPath, relPath)
           res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify({ path: relPath, entries }))
         } else {
           if (rawMode) {
             const ext = nodePath.extname(absPath).slice(1).toLowerCase()
-            const mimeTypes: Record<string, string> = {
-              png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', svg: 'image/svg+xml',
-              pdf: 'application/pdf', csv: 'text/csv; charset=utf-8', txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8',
-              json: 'application/json; charset=utf-8', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-              xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-              ppt: 'application/vnd.ms-powerpoint', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            }
             res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream')
             res.setHeader('Content-Disposition', `inline; filename="${nodePath.basename(absPath).replace(/"/g, '')}"`)
             fs.createReadStream(absPath).pipe(res)
@@ -415,7 +494,7 @@ function workspacePlugin() {
   }
 
   return {
-    name: 'workspace-api',
+    name: pluginName,
     configureServer: attach,
     configurePreviewServer: attach,
   }
@@ -870,6 +949,11 @@ function pushApiPlugin() {
 }
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@/': nodePath.resolve(import.meta.dirname, 'src/marksense/@') + '/',
+    },
+  },
   define: {
     __CLAVUS_BUILD_TIME__: JSON.stringify(BUILD_TIME),
     __CLAVUS_GIT_SHA__: JSON.stringify(GIT_SHA),
@@ -877,9 +961,17 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom', 'scheduler'],
-          'markdown-vendor': ['react-markdown', 'remark-gfm', 'remark-parse', 'unified', 'micromark', 'rehype-highlight', 'highlight.js'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
+            return 'react-vendor'
+          }
+          if (id.includes('node_modules/react-markdown/') || id.includes('node_modules/remark-gfm/') || id.includes('node_modules/remark-parse/') || id.includes('node_modules/unified/') || id.includes('node_modules/micromark/') || id.includes('node_modules/rehype-highlight/') || id.includes('node_modules/highlight.js/')) {
+            return 'markdown-vendor'
+          }
+          // Marksense editor — separate chunk (lazy loaded)
+          if (id.includes('/src/marksense/') || id.includes('node_modules/@tiptap/') || id.includes('node_modules/@codemirror/') || id.includes('node_modules/prosemirror') || id.includes('node_modules/@floating-ui/') || id.includes('node_modules/@radix-ui/') || id.includes('node_modules/tippy.js') || id.includes('node_modules/lucide-react') || id.includes('node_modules/@ariakit/')) {
+            return 'marksense-editor'
+          }
         },
       },
     },
@@ -893,6 +985,7 @@ export default defineConfig({
     elevenLabsProxy(),
     openaiRealtimeProxy(),
     workspacePlugin(),
+    workspacePlugin(DOCUMENTS_ROOT, '/api/documents', 'documents-api'),
     pushApiPlugin(),
     hermesResponsesPlugin(),
     react(),
@@ -903,6 +996,9 @@ export default defineConfig({
       filename: 'sw.ts',
       registerType: 'autoUpdate',
       injectRegister: 'auto',
+      injectManifest: {
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB — increased for Marksense editor chunk
+      },
       manifest: {
         name: 'Clavus — Hermes Chat',
         short_name: 'Clavus',

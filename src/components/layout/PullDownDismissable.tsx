@@ -34,7 +34,14 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
   const findScrollableAncestor = useCallback((target: EventTarget | null): HTMLElement | null => {
     let el = target as HTMLElement | null
     while (el && el !== containerRef.current) {
+      // Already scrolled down — let native scroll handle it
       if (el.scrollTop > 0) return el
+      // Element is scrollable (overflow auto/scroll) and has content to scroll into
+      // — block pull-down so the editor's own scroll works naturally
+      const overflow = getComputedStyle(el).overflowY
+      if ((overflow === 'auto' || overflow === 'scroll') && el.scrollHeight > el.clientHeight + 1) {
+        return el
+      }
       el = el.parentElement
     }
     return null

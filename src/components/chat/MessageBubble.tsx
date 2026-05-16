@@ -8,7 +8,13 @@ const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(
 
 // ─── Thinking Block ─────────────────────────────────────────────────────────
 
-function ThinkingBlock({ thinking, isStreaming, defaultExpanded }: { thinking: string; isStreaming: boolean; defaultExpanded: boolean }) {
+function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isStreamingMsg }: {
+  thinking: string
+  isStreaming: boolean
+  defaultExpanded: boolean
+  toolCalls?: import('../../state/chat').ToolCall[]
+  isStreamingMsg?: boolean
+}) {
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   // Auto-collapse when thinking is done (streaming stops)
@@ -23,6 +29,8 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded }: { thinking: s
   useEffect(() => {
     if (isStreaming) setExpanded(true)
   }, [isStreaming])
+
+  const hasToolCalls = toolCalls && toolCalls.length > 0
 
   return (
     <div className="mb-2">
@@ -39,14 +47,24 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded }: { thinking: s
         {isStreaming ? (
           <span className="animate-pulse">Thinking...</span>
         ) : (
-          <span>Reasoning</span>
+          <span>
+            Reasoning
+            {hasToolCalls && <span className="ml-1.5 text-text-light-muted/40 dark:text-text-dark-muted/40 text-[11px]">+ {toolCalls.length} {toolCalls.length === 1 ? 'action' : 'actions'}</span>}
+          </span>
         )}
       </button>
       {expanded && (
         <div className="mt-1.5 pl-4 border-l-2 border-text-light-muted/15 dark:border-text-dark-muted/15">
-          <p className="text-[13px] text-text-light-muted/60 dark:text-text-dark-muted/60 whitespace-pre-wrap leading-relaxed" style={{ overflowWrap: 'break-word' }}>
-            {thinking}
-          </p>
+          <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] text-text-light-muted/60 dark:text-text-dark-muted/60 leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_h1]:text-[14px] [&_h2]:text-[14px] [&_h3]:text-[13px] [&_h4]:text-[13px] [&_strong]:text-text-light-muted/80 dark:[&_strong]:text-text-dark-muted/80" style={{ overflowWrap: 'break-word' }}>
+            <Suspense fallback={<p className="whitespace-pre-wrap">{thinking}</p>}>
+              <RichMessageRenderer content={thinking} />
+            </Suspense>
+          </div>
+          {hasToolCalls && (
+            <div className="mt-2">
+              <ToolCallCards toolCalls={toolCalls} isStreaming={!!isStreamingMsg} />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -82,7 +100,7 @@ function CopyableBlock({ children }: { children: string }) {
   }, [])
 
   return (
-    <div className="my-3 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden relative group/copy">
+    <div className="!my-1.5 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden relative group/copy">
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-accent/10">
         <span className="text-[11px] font-medium text-accent/60 uppercase tracking-wider">Output</span>
         <button
@@ -107,7 +125,7 @@ function CopyableBlock({ children }: { children: string }) {
           )}
         </button>
       </div>
-      <div ref={contentRef} className="px-4 py-3 prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+      <div ref={contentRef} className="p-4 prose prose-sm dark:prose-invert max-w-none text-[15px] leading-[1.55] [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
         <Suspense fallback={<p className="whitespace-pre-wrap">{children}</p>}>
           <RichMessageRenderer content={children} remarkPluginsGfmOnly />
         </Suspense>
@@ -470,17 +488,17 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         <div
           className={`px-4 py-2.5 min-w-0 w-fit relative transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
-              ? `bg-gradient-to-br from-[#7B2FBE] to-[#9B59D0] text-white shadow-sm shadow-purple-500/15 ${
-                  showAvatar && isLastInGroup ? 'rounded-[20px]' :
-                  showAvatar ? 'rounded-[20px] rounded-br-[6px]' :
-                  isLastInGroup ? 'rounded-[20px] rounded-tr-[6px]' :
-                  'rounded-[20px] rounded-r-[6px]'
+              ? `bg-accent text-white ${
+                  showAvatar && isLastInGroup ? 'rounded-[18px]' :
+                  showAvatar ? 'rounded-[18px] rounded-br-[6px]' :
+                  isLastInGroup ? 'rounded-[18px] rounded-tr-[6px]' :
+                  'rounded-[18px] rounded-r-[6px]'
                 }`
-              : `bg-[#1E1F2B] text-text-light dark:text-text-dark shadow-sm shadow-black/10 ${
-                  showAvatar && isLastInGroup ? 'rounded-[20px]' :
-                  showAvatar ? 'rounded-[20px] rounded-bl-[6px]' :
-                  isLastInGroup ? 'rounded-[20px] rounded-tl-[6px]' :
-                  'rounded-[20px] rounded-l-[6px]'
+              : `bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark ${
+                  showAvatar && isLastInGroup ? 'rounded-[18px]' :
+                  showAvatar ? 'rounded-[18px] rounded-bl-[6px]' :
+                  isLastInGroup ? 'rounded-[18px] rounded-tl-[6px]' :
+                  'rounded-[18px] rounded-l-[6px]'
                 }`
           }`}
         >
@@ -531,7 +549,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             message.content ? (
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55]" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
-          ) : message.streaming && !message.content && !message.thinking ? (
+          ) : message.streaming && !message.content && !message.thinking && !message.toolCalls?.length ? (
             <div className="flex items-center gap-[4px] py-0.5">
               <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_infinite]" />
               <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_0.2s_infinite]" />
@@ -539,17 +557,19 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             </div>
           ) : (
             <>
-            {/* Thinking/Reasoning block */}
+            {/* Thinking/Reasoning block (includes actions when present) */}
             {message.thinking && (
               <ThinkingBlock
                 thinking={message.thinking}
                 isStreaming={!!message.streaming && !message.thinkingDone}
                 defaultExpanded={!!message.streaming && !message.thinkingDone}
+                toolCalls={message.toolCalls}
+                isStreamingMsg={message.streaming}
               />
             )}
-            {/* Tool call cards */}
-            {message.toolCalls && message.toolCalls.length > 0 && (
-              <ToolCallCards toolCalls={message.toolCalls} />
+            {/* Standalone tool call cards — only when no thinking block */}
+            {!message.thinking && message.toolCalls && message.toolCalls.length > 0 && (
+              <ToolCallCards toolCalls={message.toolCalls} isStreaming={!!message.streaming} />
             )}
             {/* Reply quote block */}
             {replyQuote?.quote && (
@@ -589,7 +609,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               className={`inline-btn p-1.5 rounded-full active:scale-90 transition-all ${
                 copied
                   ? 'text-emerald-500'
-                  : 'text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted'
+                  : 'text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark'
               }`}
               aria-label={copied ? 'Copied' : 'Copy message'}
             >
@@ -607,7 +627,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                     ? 'text-accent'
                     : ttsLoading
                       ? 'text-text-light-muted/30 dark:text-text-dark-muted/30'
-                      : 'text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted'
+                      : 'text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark'
                 }`}
                 aria-label={isSpeaking ? 'Stop speaking' : 'Listen to message'}
               >
@@ -623,7 +643,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             {!message.streaming && onRegenerate && (
               <button
                 onClick={() => onRegenerate(message.id)}
-                className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted"
+                className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
                 aria-label="Regenerate response"
                 title="Regenerate"
               >
@@ -634,7 +654,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               <div className="relative">
                 <button
                   onClick={() => setInfoOpen((v) => !v)}
-                  className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/35 dark:text-text-dark-muted/35 hover:text-text-light-muted dark:hover:text-text-dark-muted"
+                  className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
                   aria-label="Message info"
                   aria-expanded={infoOpen}
                   title="Message info"

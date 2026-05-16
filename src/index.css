@@ -6,18 +6,20 @@
 @theme {
   --color-accent: #6366f1;
   --color-accent-hover: #4f46e5;
-  --color-surface-dark: #111318;
-  --color-surface-dark-2: #1a1d24;
-  --color-surface-dark-3: #2a2d35;
+  --color-surface-dark: #1c1c1e;
+  --color-surface-dark-2: #242426;
+  --color-surface-dark-3: #2c2c2e;
   --color-surface-light: #ffffff;
   --color-surface-light-2: #f4f5f7;
   --color-surface-light-3: #e5e7eb;
   --color-text-dark: #e4e5e9;
-  --color-text-dark-muted: #7d818a;
+  --color-text-dark-muted: #8e8e93;
   --color-text-light: #111318;
   --color-text-light-muted: #6b7280;
-  --color-border-dark: #2a2d35;
+  --color-border-dark: rgba(255, 255, 255, 0.08);
   --color-border-light: #e5e7eb;
+  --color-selection-dark: rgba(255, 255, 255, 0.08);
+  --color-selection-light: rgba(0, 0, 0, 0.05);
 }
 
 :root {
@@ -32,7 +34,7 @@ html, body {
   overscroll-behavior: none;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: auto;
-  background-color: var(--color-surface-dark, #111318);
+  background-color: var(--color-surface-dark, #1c1c1e);
   /* Force-hide any page-level scrollbar (iOS keyboard can create phantom scrollbars) */
   scrollbar-width: none;
 }
@@ -62,7 +64,7 @@ body {
   height: var(--app-height, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
-  background-color: var(--color-surface-dark, #111318);
+  background-color: var(--color-surface-dark, #1c1c1e);
   scrollbar-width: none;
   /* Limit reflow scope: height changes don't propagate outside #root. */
   contain: layout style paint;
@@ -184,7 +186,7 @@ button.inline-btn {
   opacity: 0.85;
 }
 .dark .chat-glass-top {
-  background: linear-gradient(to bottom, #111318 0%, transparent 100%);
+  background: linear-gradient(to bottom, #1c1c1e 0%, transparent 100%);
   opacity: 0.9;
 }
 
@@ -193,7 +195,7 @@ button.inline-btn {
   background: var(--color-surface-light);
 }
 .dark .chat-bg {
-  background: #111318;
+  background: #1c1c1e;
 }
 
 /* Message fade + slide animation */
@@ -366,7 +368,7 @@ textarea::-webkit-scrollbar {
 
 /* Highlight.js code theme overrides */
 .dark pre code.hljs {
-  background: #1a1d24;
+  background: #242426;
 }
 pre code.hljs {
   background: #f4f5f7;
@@ -401,6 +403,25 @@ pre code.hljs {
 .dark .prose th, .dark .prose td { border-color: var(--color-border-dark); }
 .prose th { font-weight: 600; background: rgba(0,0,0,0.03); }
 .dark .prose th { background: rgba(255,255,255,0.03); }
+.fullscreen-table { display: table; border-collapse: separate; border-spacing: 0; min-width: max-content; width: 100%; font-size: 0.9em; color: var(--color-text-light); background: var(--color-surface-light); }
+.dark .fullscreen-table { color: var(--color-text-dark); background: var(--color-surface-dark); }
+.fullscreen-table th, .fullscreen-table td { border-bottom: 1px solid var(--color-border-light); border-right: 1px solid var(--color-border-light); padding: 0.5em 1em; text-align: left; white-space: nowrap; background: var(--color-surface-light); }
+.fullscreen-table th:first-child, .fullscreen-table td:first-child { border-left: 1px solid var(--color-border-light); }
+.fullscreen-table thead th { border-top: 1px solid var(--color-border-light); }
+.dark .fullscreen-table th, .dark .fullscreen-table td { border-color: var(--color-border-dark); background: var(--color-surface-dark); }
+.fullscreen-table th { font-weight: 600; background: var(--color-surface-light-2); }
+.dark .fullscreen-table th { background: var(--color-surface-dark-2); }
+/* Sticky header row — always on (rows are tall enough that scrolled context matters) */
+.fullscreen-table thead th { position: sticky; top: 0; z-index: 2; }
+/* Sticky first column — only when narrow enough that it doesn't dominate the screen.
+   Toggled via .sticky-col class set by JS based on column-width vs viewport ratio. */
+.fullscreen-table.sticky-col td:first-child,
+.fullscreen-table.sticky-col th:first-child { position: sticky; left: 0; border-right: none; box-shadow: 1px 0 0 0 var(--color-border-light); }
+.fullscreen-table.sticky-col td:first-child { z-index: 1; }
+.dark .fullscreen-table.sticky-col td:first-child,
+.dark .fullscreen-table.sticky-col th:first-child { box-shadow: 1px 0 0 0 var(--color-border-dark); }
+/* Top-left corner sticks in both directions */
+.fullscreen-table.sticky-col thead th:first-child { z-index: 3; }
 .prose strong { font-weight: 600; }
 
 /* Pull-down-to-close: smooth spring-back with gentle overshoot */

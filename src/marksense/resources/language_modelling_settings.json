@@ -1,0 +1,12 @@
+{
+  "standard_languages_default": [
+    "en"
+  ],
+  "to_be_recognized_only_languages_default": [],
+  "noisy_prefix_technique": "greedy-multiword6-alpha1.5-filtshorter4-filtprob0.10-filtnotwordlst-filtblocklst-filtafternames",
+  "use_tf_lite": true,
+  "lang_to_model_names": {},
+  "use_unknown_in_language_detection": true,
+  "to_be_filtered_out_full_predictions": {},
+  "regexes_to_clean_lang_recognition_text": []
+}

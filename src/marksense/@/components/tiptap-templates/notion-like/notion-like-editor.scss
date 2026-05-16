@@ -1,0 +1,201 @@
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+
+body {
+  --tt-toolbar-height: 44px;
+  --tt-theme-text: var(--tt-gray-light-900);
+
+  .dark & {
+    --tt-theme-text: var(--tt-gray-dark-900);
+  }
+}
+
+body {
+  font-family: "Inter", sans-serif;
+  color: var(--tt-theme-text);
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  padding: 0;
+  overscroll-behavior-y: none;
+}
+
+html,
+body {
+  overscroll-behavior-x: none;
+}
+
+html,
+body,
+#root,
+#app {
+  height: 100%;
+  background-color: var(--tt-bg-color);
+}
+
+::-webkit-scrollbar {
+  width: 0.25rem;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tt-scrollbar-color) transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--tt-scrollbar-color);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tiptap.ProseMirror {
+  font-family: "DM Sans", sans-serif;
+}
+
+.notion-like-editor-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-inline: 0.5rem;
+}
+
+.notion-like-editor-layout {
+  --content-width: minmax(0, 780px);
+  --margin-left-width: minmax(16px, 0.3fr);
+  --margin-right-width: minmax(32px, 1fr);
+
+  display: grid;
+  grid-template-columns:
+    [full-start] var(--margin-left-width)
+    [content-start] var(--content-width)
+    [content-end] var(--margin-right-width)
+    [full-end];
+  width: 100%;
+  position: relative;
+
+  .wide-mode & {
+    --content-width: minmax(0, 1000px);
+    --margin-left-width: minmax(24px, 0.6fr);
+    --margin-right-width: minmax(32px, 1fr);
+
+    @media screen and (min-width: 1280px) {
+      --margin-right-width: minmax(15rem, 1fr);
+    }
+  }
+
+  &[data-source-mode] {
+    --content-width: minmax(0, 780px);
+    --margin-left-width: minmax(16px, 0.3fr);
+    --margin-right-width: minmax(32px, 1fr);
+  }
+
+  .wide-mode &[data-source-mode] {
+    --content-width: minmax(0, 1fr);
+    --margin-left-width: 16px;
+    --margin-right-width: 32px;
+
+    @media screen and (min-width: 1280px) {
+      --margin-right-width: 15rem;
+    }
+  }
+}
+
+// Mobile: single column layout
+@media screen and (max-width: 1024px) {
+  .notion-like-editor-layout {
+    --margin-left-width: minmax(1rem, 1fr);
+    --margin-right-width: minmax(1rem, 1fr);
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .notion-like-editor-layout {
+    display: block;
+  }
+}
+
+.notion-like-editor-content-column {
+  grid-column: content-start / content-end;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.notion-like-editor-content {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+// Mobile fallback
+@media screen and (max-width: 768px) {
+  .notion-like-editor-content {
+    max-width: 768px;
+    margin: 0 auto;
+  }
+}
+
+.notion-like-editor-content .tiptap.ProseMirror.notion-like-editor {
+  flex: 1;
+  padding: 3rem 3rem 30vh;
+}
+
+/* Reduce top spacing when frontmatter panel is shown above the editor */
+.frontmatter-panel + .notion-like-editor-content .tiptap.ProseMirror.notion-like-editor {
+  padding-top: 1rem;
+}
+
+@media screen and (max-width: 480px) {
+  .notion-like-editor-content .tiptap.ProseMirror.notion-like-editor {
+    padding: 1.5rem 1.25rem 30vh;
+  }
+}
+
+// Spinner
+.spinner-container {
+  min-height: 100vh;
+  width: 100%;
+  height: 100%;
+  flex-grow: 1;
+  flex-shrink: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .spinner-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+
+    svg {
+      animation: spin 1s linear infinite;
+      height: 1.25rem;
+      width: 1.25rem;
+
+      circle {
+        opacity: 0.25;
+        stroke: currentColor;
+        stroke-width: 4;
+      }
+
+      path {
+        opacity: 0.75;
+        fill: currentColor;
+      }
+    }
+
+    .spinner-loading-text {
+      text-align: center;
+    }
+  }
+}

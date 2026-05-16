@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { VoiceInputPill, LOCK_DISTANCE_FULL } from '../voice/VoiceInputPill'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -9,7 +10,7 @@ interface Message {
 
 type RecordingMode = 'idle' | 'holding' | 'locked'
 
-const LOCK_DISTANCE = 80 // px to swipe right to lock
+const LOCK_DISTANCE = LOCK_DISTANCE_FULL // shared with VoiceInputPill
 
 export function RealtimeChat({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<'connecting' | 'connected' | 'error' | 'closed'>('connecting')
@@ -326,10 +327,10 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
         {status === 'connected' && messages.length === 0 && (
           <div className="flex items-center justify-center py-12">
             <div className="flex flex-col items-center gap-2 text-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+              <div className="w-11 h-11 rounded-full bg-surface-light-2 dark:bg-surface-dark-3 flex items-center justify-center text-text-light-muted dark:text-text-dark-muted">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
               </div>
-              <p className="text-[14px] font-medium text-text-light dark:text-text-dark">Listening</p>
+              <p className="text-[13px] text-text-light-muted dark:text-text-dark-muted">Listening</p>
             </div>
           </div>
         )}
@@ -387,68 +388,18 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
             <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="4" y="4" width="16" height="16" rx="3"/></svg>
           </button>
 
-          {/* Pill */}
-          <div
-            className={`absolute top-1/2 -translate-y-1/2 h-[72px] rounded-[36px] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-              recordingMode === 'locked'
-                ? 'w-[152px] bg-gradient-to-br from-emerald-600 to-emerald-500 border border-emerald-500/40 shadow-[0_4px_24px_rgba(16,185,129,0.25),inset_0_1px_2px_rgba(255,255,255,0.08)]'
-                : recordingMode === 'holding'
-                  ? 'w-[152px] bg-gradient-to-br from-slate-800 to-slate-900 border border-red-500 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4),0_0_24px_rgba(239,68,68,0.15)]'
-                  : 'w-[72px] bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]'
-            }`}
-            style={{ left: 'calc(50% - 36px)' }}
-          >
-            {/* Pause button — center of screen in locked state */}
-            {recordingMode === 'locked' && (
-              <button
-                onClick={handlePause}
-                className="absolute left-[15px] top-1/2 -translate-y-1/2 w-[42px] h-[42px] rounded-full bg-white/12 flex items-center justify-center z-10 active:scale-90 transition-transform"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
-              </button>
-            )}
-
-            {/* Lock target icon — visible during hold */}
-            {recordingMode === 'holding' && (
-              <div
-                className="absolute right-[14px] top-1/2 -translate-y-1/2 w-[38px] h-[38px] rounded-full flex items-center justify-center transition-opacity duration-200"
-                style={{ opacity: Math.min(1, 0.35 + lockProgress * 0.8) }}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-              </div>
-            )}
-
-            {/* Knob */}
-            <div
-              className={`absolute top-[6px] w-[58px] h-[58px] rounded-full flex items-center justify-center z-20 select-none touch-none transition-[background,box-shadow] duration-300 ${
-                recordingMode === 'locked'
-                  ? 'right-[6px] bg-white/18 backdrop-blur border border-white/12'
-                  : recordingMode === 'holding'
-                    ? 'left-[6px] bg-gradient-to-br from-red-500 to-red-600 shadow-[0_3px_16px_rgba(239,68,68,0.45)]'
-                    : 'left-[6px] bg-gradient-to-br from-blue-500 to-blue-600 shadow-[0_3px_12px_rgba(59,130,246,0.3)]'
-              }`}
-              style={recordingMode === 'holding' && dragOffset > 0 ? {
-                transform: `translateX(${dragOffset}px)`,
-                transition: 'background 0.3s, box-shadow 0.3s',
-              } : undefined}
+          {/* Pill — shared with Talk Mode (+ future inline voice input) */}
+          <div className="absolute top-1/2 -translate-y-1/2" style={{ left: 'calc(50% - 36px)' }}>
+            <VoiceInputPill
+              size="full"
+              mode={recordingMode}
+              dragOffset={dragOffset}
+              lockProgress={lockProgress}
+              onPause={handlePause}
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
-              onTouchCancel={onTouchEnd}
-            >
-              {/* Pulse ring */}
-              {(recordingMode === 'holding' || recordingMode === 'locked') && (
-                <div className={`absolute -inset-1 rounded-full border-2 animate-ping pointer-events-none ${
-                  recordingMode === 'holding' ? 'border-red-500/40' : 'border-white/25'
-                }`} />
-              )}
-              <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                <line x1="12" y1="19" x2="12" y2="23"/>
-                <line x1="8" y1="23" x2="16" y2="23"/>
-              </svg>
-            </div>
+            />
           </div>
 
           {/* Status text intentionally omitted — UI is self-explanatory */}
@@ -467,7 +418,12 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
           {status === 'error' && (
             <div className="flex flex-col items-center gap-3">
               <span className="text-[13px] text-red-500">Connection error</span>
-              <button onClick={onClose} className="text-accent text-[14px] font-medium">Close</button>
+              <button
+                onClick={onClose}
+                className="inline-btn px-4 h-9 rounded-md bg-surface-light-2 dark:bg-surface-dark-3 text-[13px] font-medium text-text-light dark:text-text-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-2 transition-colors"
+              >
+                Close
+              </button>
             </div>
           )}
         </div>

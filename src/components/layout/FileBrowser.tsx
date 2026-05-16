@@ -206,7 +206,7 @@ export function FileBrowser({ open, onClose }: Props) {
               {isRoot && agentEntries.length > 0 && (
                 <div>
                   <div className="px-4 pt-3 pb-1">
-                    <h3 className="text-[11px] font-semibold text-text-light-muted/60 dark:text-text-dark-muted/60 uppercase tracking-wider">Agent</h3>
+                    <h3 className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">Agent</h3>
                   </div>
                   {agentEntries.map(entry => (
                     <button
@@ -230,7 +230,7 @@ export function FileBrowser({ open, onClose }: Props) {
               {isRoot && userEntries.length > 0 && (
                 <div>
                   <div className="px-4 pt-3 pb-1">
-                    <h3 className="text-[11px] font-semibold text-text-light-muted/60 dark:text-text-dark-muted/60 uppercase tracking-wider">User</h3>
+                    <h3 className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">User</h3>
                   </div>
                   {userEntries.map(entry => (
                     <button

@@ -20,6 +20,7 @@ import { useVisualViewport } from './hooks/useVisualViewport.ts'
 
 // Lazy-loaded components (code splitting)
 const FileBrowser = lazy(() => import('./components/layout/FileBrowser.tsx').then(m => ({ default: m.FileBrowser })))
+const FileExplorerColumn = lazy(() => import('./components/files/FileExplorerColumn.tsx').then(m => ({ default: m.FileExplorerColumn })))
 const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
 const RecipePanel = lazy(() => import('./components/recipes/RecipePanel.tsx').then(m => ({ default: m.RecipePanel })))
 const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
@@ -97,6 +98,8 @@ export function App() {
   const connectionStatus = useUIStore((s) => s.connectionStatus)
   const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
   const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
+  const fileExplorerOpen = useUIStore((s) => s.fileExplorerOpen)
+  const setFileExplorerOpen = useUIStore((s) => s.setFileExplorerOpen)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const tabs = useTabsStore((s) => s.tabs)
   const closeTab = useTabsStore((s) => s.closeTab)
@@ -193,7 +196,7 @@ export function App() {
 
   // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home)
   const sortedTabs = useMemo(() =>
-    [...tabs].sort((a, b) => a.updatedAt - b.updatedAt),
+    [...tabs].sort((a, b) => (a.updatedAt - b.updatedAt) || (a.openedAt - b.openedAt)),
     [tabs]
   )
 
@@ -419,28 +422,37 @@ export function App() {
 
     // Handle inline Marksense doc opening from chat
     const handleOpenMarksense = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { url: string; title: string }
-      if (!detail?.url) return
-      // Append ?sidebar=collapsed to hide Marksense sidebar
-      const docUrl = detail.url.includes('?')
-        ? detail.url + '&sidebar=collapsed'
-        : detail.url + '?sidebar=collapsed'
+      const detail = (e as CustomEvent).detail as { url?: string; path?: string; title: string }
       const docTitle = detail.title || 'Document'
 
+      // Extract workspace path from URL or use path directly
+      let filePath = detail.path
+      if (!filePath && detail.url) {
+        // Extract path from Marksense URL like .../file/SOUL.md
+        const match = detail.url.match(/\/file\/(.+)$/)
+        if (match) {
+          filePath = '/' + decodeURIComponent(match[1])
+        }
+      }
+      if (!filePath) return
+
       if (isDesktop) {
-        // Desktop: open as Canvas side panel
-        setCanvasContent('')
+        // Desktop: open as Canvas side panel with direct Tiptap editor
         setCanvasTitle(docTitle)
         setCanvasOpen(true)
-        // The CanvasPanel will load via iframe
+        // Load file content for the editor
+        fetch(`/api/documents${filePath}`)
+          .then(r => r.json())
+          .then(data => setCanvasContent(data.content || ''))
+          .catch(() => setCanvasContent(''))
       }
       // Both mobile & desktop: open/update as a Marksense tab
-      const tabId = `marksense-${docUrl}`
+      const tabId = `marksense-${filePath}`
       useTabsStore.getState().openTab({
         id: tabId,
         type: 'marksense',
         title: docTitle,
-        documentUrl: docUrl,
+        path: filePath,
         openedAt: Date.now(),
         updatedAt: Date.now(),
       } satisfies MarksenseTab)
@@ -689,7 +701,7 @@ export function App() {
       }
       // Re-enable snap after smooth scroll completes (~300ms)
       setTimeout(() => {
-        container.style.scrollSnapType = ''
+        container.style.scrollSnapType = 'x mandatory'
         isProgrammaticScroll.current = false
       }, 350)
     })
@@ -793,7 +805,7 @@ export function App() {
         container.scrollLeft = container.scrollWidth
         setVisiblePanel('home')
         requestAnimationFrame(() => {
-          container.style.scrollSnapType = ''
+          container.style.scrollSnapType = 'x mandatory'
           isProgrammaticScroll.current = false
         })
       }
@@ -888,7 +900,7 @@ export function App() {
             container.scrollLeft = targetLeft
             // Re-enable on next frame so the new swipe gets snap behavior
             requestAnimationFrame(() => {
-              container.style.scrollSnapType = ''
+              container.style.scrollSnapType = 'x mandatory'
             })
           }
           // Update visiblePanel to match the snapped position
@@ -1006,7 +1018,42 @@ export function App() {
             onSelectTab={handleDesktopSelectTab}
             onNewChat={handleDesktopNewChat}
             onCloseTab={handleDesktopCloseTab}
+            fileExplorerOpen={fileExplorerOpen}
+            onToggleFileExplorer={() => setFileExplorerOpen(!fileExplorerOpen)}
           />
+        )}
+
+        {/* File Explorer (desktop only) */}
+        {isDesktop && fileExplorerOpen && (
+          <Suspense fallback={null}>
+            <FileExplorerColumn
+              onClose={() => setFileExplorerOpen(false)}
+              onSelectFile={(path, title, isMd) => {
+                if (isMd) {
+                  // Open markdown files in the canvas editor (right panel)
+                  setCanvasTitle(title)
+                  setCanvasOpen(true)
+                  // Load file content into canvas editor
+                  fetch(`/api/documents${path}`)
+                    .then(r => r.json())
+                    .then(data => setCanvasContent(data.content || ''))
+                    .catch(() => setCanvasContent(''))
+                } else {
+                  // Open non-markdown files in the file viewer tab
+                  const tabId = `file-${path}`
+                  useTabsStore.getState().openTab({
+                    id: tabId,
+                    type: 'file',
+                    title,
+                    path,
+                    openedAt: Date.now(),
+                    updatedAt: Date.now(),
+                  } satisfies FileTab)
+                  setVisiblePanel(tabId)
+                }
+              }}
+            />
+          </Suspense>
         )}
 
         {/* Content area */}
@@ -1040,7 +1087,7 @@ export function App() {
                   )}
                   {visibleTab?.type === 'marksense' && (
                     <MarksensePanel
-                      documentUrl={(visibleTab as MarksenseTab).documentUrl}
+                      path={(visibleTab as MarksenseTab).path}
                       title={visibleTab.title}
                       isVisible={true}
                     />
@@ -1083,6 +1130,7 @@ export function App() {
               touchAction: 'pan-x pan-y',
               opacity: initialReady ? 1 : 0,
               scrollSnapType: initialReady ? 'x mandatory' : 'none',
+              overscrollBehaviorX: 'none',
             }}
           >
             {sortedTabs.map((tab) => {
@@ -1110,7 +1158,7 @@ export function App() {
                       )}
                       {tab.type === 'marksense' && (
                         <MarksensePanel
-                          documentUrl={(tab as MarksenseTab).documentUrl}
+                          path={(tab as MarksenseTab).path}
                           title={tab.title}
                           isVisible={isActive}
                         />

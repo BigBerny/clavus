@@ -1,15 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { Suspense, lazy } from 'react'
 
 /**
  * Canvas Panel — inline Marksense editor next to chat.
- * Loads the Marksense editor ESM module and renders it in an iframe
- * with bidirectional communication via postMessage.
- *
- * This approach avoids CSS/dependency conflicts while providing
- * a native-feeling canvas experience.
+ * Uses MarksenseEditorInstance for per-instance isolation.
  */
 
-const MARKSENSE_EDITOR_URL = '/marksense'
+const MarksenseEditorInstance = lazy(() =>
+  import('../../marksense').then(m => ({ default: m.MarksenseEditorInstance }))
+)
 
 interface CanvasPanelProps {
   content: string
@@ -19,32 +17,8 @@ interface CanvasPanelProps {
 }
 
 export function CanvasPanel({ content, title, onSave, onClose }: CanvasPanelProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const [loaded, setLoaded] = useState(false)
-
-  // Send initial content to iframe after load
-  useEffect(() => {
-    if (!loaded || !iframeRef.current) return
-    iframeRef.current.contentWindow?.postMessage({
-      type: 'marksense:init',
-      content,
-      settings: {
-        defaultFullWidth: true,
-        aiProvider: 'offlineOnly',
-      },
-    }, '*')
-  }, [loaded, content])
-
-  // Listen for save events from iframe
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'marksense:save' && onSave) {
-        onSave(e.data.content)
-      }
-    }
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
-  }, [onSave])
+  // Use title as part of the instance ID so switching files creates a new editor
+  const instanceId = `canvas-${title || 'untitled'}`
 
   return (
     <div className="flex flex-col h-full bg-surface-light dark:bg-surface-dark">
@@ -67,16 +41,21 @@ export function CanvasPanel({ content, title, onSave, onClose }: CanvasPanelProp
         </div>
       </div>
 
-      {/* Editor iframe */}
-      <div className="flex-1 min-h-0">
-        <iframe
-          ref={iframeRef}
-          src={MARKSENSE_EDITOR_URL}
-          className="w-full h-full border-0"
-          onLoad={() => setLoaded(true)}
-          title={title || 'Canvas Editor'}
-          allow="clipboard-write"
-        />
+      {/* Editor */}
+      <div className="flex-1 min-h-0 marksense-scope overflow-auto">
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-full text-text-light-muted dark:text-text-dark-muted">
+            <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full" />
+          </div>
+        }>
+          <MarksenseEditorInstance
+            key={instanceId}
+            instanceId={instanceId}
+            content={content}
+            onSave={onSave}
+            settings={{ defaultFullWidth: true, aiProvider: 'offlineOnly' }}
+          />
+        </Suspense>
       </div>
     </div>
   )

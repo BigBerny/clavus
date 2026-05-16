@@ -1,0 +1,36 @@
+{
+  "company_name": "default",
+  "cache": {
+    "implementation": "in_memory_dict",
+    "settings": {
+      "nr_chars_for_flexibility": 25,
+      "max_nr_records": 500
+    }
+  },
+  "wordlists": {
+    "company_specific_wordlists": {
+
+    },
+    "blocklist_from_list_of_words": {
+
+    },
+    "blocklist_from_wordlist_names": {
+      "de": [
+        "l=de_v=4.0_k=blocklistfromlistofwords",
+        "l=de_v=4.0_k=prediction-blocklist"
+      ],
+      "en": [
+        "l=en_v=4.0_k=blocklistfromlistofwords",
+        "l=en_v=4.0_k=prediction-blocklist"
+      ]
+    }
+  },
+  "languages": [
+    "en",
+    "de"
+  ],
+  "kmp_library_specific_settings": {
+    "use_wasm_damerau_levenshtein_on_js_platform": false,
+    "forced_casing_in_word_by_word_correction": false
+  }
+}

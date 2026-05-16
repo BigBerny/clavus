@@ -194,7 +194,7 @@ export async function syncFromServer(): Promise<boolean> {
       const msgs = loadThreadMessages(t.id)
       return msgs.length > 0
     })
-    ensureChatTabsBatch(recentWithMessages.map(t => ({ threadId: t.id, title: t.title })))
+    ensureChatTabsBatch(recentWithMessages.map(t => ({ threadId: t.id, title: t.title, updatedAt: t.updatedAt })))
 
     // Discover conversations from Hermes that don't exist locally (cross-device sync)
     try {
@@ -220,7 +220,7 @@ export async function syncFromServer(): Promise<boolean> {
           syncThreadsToServer(allThreads)
           ensureChatTabsBatch(newThreads
             .filter(t => t.createdAt > recentCutoff)
-            .map(t => ({ threadId: t.id, title: t.title })))
+            .map(t => ({ threadId: t.id, title: t.title, updatedAt: t.updatedAt })))
         }
       }
     } catch { /* Hermes unavailable — skip discovery */ }

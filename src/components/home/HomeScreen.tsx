@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { useThreadsStore } from '../../state/threads'
+import { useThreadsStore, type Thread, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
 import { useTabsStore, type Tab, type ChatTab, type RecipeTab, type MarksenseTab } from '../../state/tabs'
+import { useUIStore } from '../../state/ui'
 
 function relativeTime(timestamp: number): string {
   const diff = Math.floor((Date.now() - timestamp) / 1000)
@@ -24,18 +25,14 @@ interface QuickActionsProps {
 
 function QuickActions({ onCompose, onOpenTab, onOpenRealtime }: QuickActionsProps) {
   const openMarksense = useCallback(() => {
-    const tabId = 'marksense-home'
-    const tab: MarksenseTab = {
-      id: tabId,
-      type: 'marksense',
-      title: 'Marksense',
-      documentUrl: 'https://mac-mini-von-janis.taild2ad59.ts.net:3700/',
-      openedAt: Date.now(),
-      updatedAt: Date.now(),
+    // Toggle the file explorer column (desktop) or open file browser modal (mobile)
+    const isDesktop = window.innerWidth >= 768
+    if (isDesktop) {
+      useUIStore.getState().setFileExplorerOpen(true)
+    } else {
+      useUIStore.getState().setFileBrowserOpen(true)
     }
-    useTabsStore.getState().openTab(tab)
-    onOpenTab?.(tab)
-  }, [onOpenTab])
+  }, [])
 
   const openRecipes = useCallback(() => {
     const tabId = 'recipes-browser'
@@ -56,40 +53,40 @@ function QuickActions({ onCompose, onOpenTab, onOpenRealtime }: QuickActionsProp
       {/* Full-width cards for Marksense and Recipes */}
       <button
         onClick={openMarksense}
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 text-white shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.01] active:scale-[0.98] transition-all duration-200 text-left"
+        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
       >
-        <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
+        <div className="w-9 h-9 rounded-lg bg-surface-light-3 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0 text-text-light-muted dark:text-text-dark-muted">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
         </div>
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold leading-tight">Marksense</p>
-          <p className="text-[12px] text-white/70 leading-snug">Open knowledge base</p>
+          <p className="text-[14px] font-medium leading-tight">Marksense</p>
+          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Open knowledge base</p>
         </div>
       </button>
 
       <button
         onClick={openRecipes}
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.01] active:scale-[0.98] transition-all duration-200 text-left"
+        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
       >
-        <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
+        <div className="w-9 h-9 rounded-lg bg-surface-light-3 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0 text-text-light-muted dark:text-text-dark-muted">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
         </div>
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold leading-tight">Recipes</p>
-          <p className="text-[12px] text-white/70 leading-snug">Browse & search recipes</p>
+          <p className="text-[14px] font-medium leading-tight">Recipes</p>
+          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Browse & search recipes</p>
         </div>
       </button>
 
       <button
         onClick={onOpenRealtime}
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:scale-[1.01] active:scale-[0.98] transition-all duration-200 text-left"
+        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
       >
-        <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center flex-shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <div className="w-9 h-9 rounded-lg bg-surface-light-3 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0 text-text-light-muted dark:text-text-dark-muted">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         </div>
         <div className="min-w-0">
-          <p className="text-[14px] font-semibold leading-tight">GPT Realtime</p>
-          <p className="text-[12px] text-white/70 leading-snug">Voice chat with GPT</p>
+          <p className="text-[14px] font-medium leading-tight">GPT Realtime</p>
+          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Voice chat with GPT</p>
         </div>
       </button>
 
@@ -97,23 +94,23 @@ function QuickActions({ onCompose, onOpenTab, onOpenRealtime }: QuickActionsProp
       <div className="grid grid-cols-3 gap-2">
         <button
           onClick={() => onCompose?.('messaging')}
-          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:scale-[1.02] active:scale-[0.97] transition-all duration-200"
+          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-text-light dark:text-text-dark"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           <span className="text-[12px] font-medium">Message</span>
         </button>
         <button
           onClick={() => onCompose?.('slack')}
-          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-2xl bg-gradient-to-br from-purple-500 to-fuchsia-600 text-white shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-[1.02] active:scale-[0.97] transition-all duration-200"
+          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-text-light dark:text-text-dark"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="3" height="8" x="13" y="2" rx="1.5"/><path d="M19 8.5V10h1.5A1.5 1.5 0 1 0 19 8.5"/><rect width="3" height="8" x="8" y="14" rx="1.5"/><path d="M5 15.5V14H3.5A1.5 1.5 0 1 0 5 15.5"/><rect width="8" height="3" x="14" y="13" rx="1.5"/><path d="M15.5 19H14v1.5a1.5 1.5 0 1 0 1.5-1.5"/><rect width="8" height="3" x="2" y="8" rx="1.5"/><path d="M8.5 5H10V3.5A1.5 1.5 0 1 0 8.5 5"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted"><rect width="3" height="8" x="13" y="2" rx="1.5"/><path d="M19 8.5V10h1.5A1.5 1.5 0 1 0 19 8.5"/><rect width="3" height="8" x="8" y="14" rx="1.5"/><path d="M5 15.5V14H3.5A1.5 1.5 0 1 0 5 15.5"/><rect width="8" height="3" x="14" y="13" rx="1.5"/><path d="M15.5 19H14v1.5a1.5 1.5 0 1 0 1.5-1.5"/><rect width="8" height="3" x="2" y="8" rx="1.5"/><path d="M8.5 5H10V3.5A1.5 1.5 0 1 0 8.5 5"/></svg>
           <span className="text-[12px] font-medium">Slack</span>
         </button>
         <button
           onClick={() => onCompose?.('email')}
-          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:scale-[1.02] active:scale-[0.97] transition-all duration-200"
+          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-text-light dark:text-text-dark"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
           <span className="text-[12px] font-medium">Email</span>
         </button>
       </div>
@@ -141,32 +138,31 @@ function stripMarkdown(text: string): string {
 
 // Tab type icons
 function TabIcon({ type }: { type: Tab['type'] }) {
+  const className = "text-text-light-muted dark:text-text-dark-muted"
   if (type === 'recipe') {
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/>
       </svg>
     )
   }
   if (type === 'marksense') {
     return (
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-violet-500">
+      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
         <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/>
       </svg>
     )
   }
   // chat
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted group-hover:text-accent transition-colors">
+    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   )
 }
 
-function tabIconBgClass(type: Tab['type']): string {
-  if (type === 'recipe') return 'bg-amber-500/10 dark:bg-amber-500/15 group-hover:bg-amber-500/15'
-  if (type === 'marksense') return 'bg-violet-500/10 dark:bg-violet-500/15 group-hover:bg-violet-500/15'
-  return 'bg-surface-light-2 dark:bg-surface-dark-2 group-hover:bg-accent/10 dark:group-hover:bg-accent/15'
+function tabIconBgClass(_type: Tab['type']): string {
+  return 'bg-surface-light-2 dark:bg-surface-dark-3'
 }
 
 function getTabPreview(tab: Tab): string {
@@ -262,7 +258,7 @@ function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; 
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate group-hover:text-accent transition-colors">
+            <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate">
               {tab.title}
             </p>
             <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 flex-shrink-0 tabular-nums">
@@ -281,6 +277,160 @@ function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; 
   )
 }
 
+function PreviousConversations({ onRestore }: { onRestore: (thread: Thread) => void }) {
+  const threads = useThreadsStore((s) => s.threads)
+  const tabs = useTabsStore((s) => s.tabs)
+  const [expanded, setExpanded] = useState(false)
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [searching, setSearching] = useState(false)
+  const messageIndexRef = useRef<Map<string, string> | null>(null)
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    if (!search.trim()) {
+      setDebouncedSearch('')
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setSearching(false)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  const activeTabIds = useMemo(() => new Set(
+    tabs.filter(t => t.type === 'chat').map(t => (t as ChatTab).threadId)
+  ), [tabs])
+
+  const inactiveThreads = useMemo(() =>
+    threads
+      .filter(t => !activeTabIds.has(t.id))
+      .sort((a, b) => b.updatedAt - a.updatedAt),
+    [threads, activeTabIds]
+  )
+
+  // Build message index lazily on first search
+  const getMessageIndex = useCallback(() => {
+    if (messageIndexRef.current) return messageIndexRef.current
+    const index = new Map<string, string>()
+    for (const thread of inactiveThreads) {
+      const msgs = loadThreadMessages(thread.id)
+      const text = msgs
+        .map(m => m.content || '')
+        .join(' ')
+        .toLowerCase()
+      index.set(thread.id, text)
+    }
+    messageIndexRef.current = index
+    return index
+  }, [inactiveThreads])
+
+  // Invalidate index when threads change
+  useEffect(() => {
+    messageIndexRef.current = null
+  }, [inactiveThreads])
+
+  const previousThreads = useMemo(() => {
+    if (!debouncedSearch.trim()) return inactiveThreads
+    const q = debouncedSearch.toLowerCase()
+    const index = getMessageIndex()
+    return inactiveThreads.filter(t =>
+      t.title.toLowerCase().includes(q) ||
+      t.lastMessagePreview?.toLowerCase().includes(q) ||
+      (index.get(t.id) || '').includes(q)
+    )
+  }, [inactiveThreads, debouncedSearch, getMessageIndex])
+
+  if (inactiveThreads.length === 0 && !search) return null
+
+  return (
+    <div className="px-5 pt-5">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex items-center gap-1.5 mb-1 group"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className={`text-text-light-muted dark:text-text-dark-muted transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
+        >
+          <polyline points="9 18 15 12 9 6"/>
+        </svg>
+        <p className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">
+          Previous
+        </p>
+        <span className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40 tabular-nums">
+          {debouncedSearch ? previousThreads.length : inactiveThreads.length}
+        </span>
+      </button>
+      {expanded && (
+        <>
+          <div className="relative mb-2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-light-muted/40 dark:text-text-dark-muted/40 pointer-events-none"
+            >
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search conversations..."
+              className="w-full pl-8 pr-3 py-2 text-[13px] rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark text-text-light dark:text-text-dark placeholder:text-text-light-muted/40 dark:placeholder:text-text-dark-muted/40 outline-none focus:border-accent/40 transition-colors"
+            />
+          </div>
+          <div className="space-y-0.5 max-h-[50vh] overflow-y-auto overscroll-y-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
+            {previousThreads.map((thread) => (
+              <button
+                key={thread.id}
+                onClick={() => onRestore(thread)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 transition-colors duration-150 text-left group"
+              >
+                <div className="w-9 h-9 rounded-xl bg-surface-light-2 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate">
+                      {thread.title}
+                    </p>
+                    <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 flex-shrink-0 tabular-nums">
+                      {relativeTime(thread.updatedAt)}
+                    </span>
+                  </div>
+                  {thread.lastMessagePreview && (
+                    <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
+                      {stripMarkdown(thread.lastMessagePreview)}
+                    </p>
+                  )}
+                </div>
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-text-light-muted/20 dark:text-text-dark-muted/20 group-hover:text-accent/50 transition-colors"><polyline points="9 18 15 12 9 6"/></svg>
+              </button>
+            ))}
+            {searching && (
+              <p className="text-[13px] text-text-light-muted/50 dark:text-text-dark-muted/50 text-center py-4">
+                Searching...
+              </p>
+            )}
+            {!searching && previousThreads.length === 0 && search && (
+              <p className="text-[13px] text-text-light-muted/50 dark:text-text-dark-muted/50 text-center py-4">
+                No matches
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, onOpenRealtime }: {
   onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
   onSelectTab?: (tabId: string) => void
@@ -294,7 +444,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   const [twentyFourHoursAgo] = useState(() => Date.now() - 24 * 60 * 60 * 1000)
 
   const sortedTabs = useMemo(() =>
-    [...tabs].sort((a, b) => b.updatedAt - a.updatedAt),
+    [...tabs].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt)),
     [tabs]
   )
 
@@ -334,9 +484,23 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
     }
   }, [onSelectTab])
 
+  const handleRestoreThread = useCallback((thread: Thread) => {
+    const tab: ChatTab = {
+      id: thread.id,
+      type: 'chat',
+      threadId: thread.id,
+      title: thread.title,
+      openedAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    useTabsStore.getState().openTab(tab)
+    onSelectTab?.(thread.id)
+  }, [onSelectTab])
+
   return (
     <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-      <div className="max-w-[900px] mx-auto pb-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3.5rem)' }}>
+      <div className="max-w-[900px] mx-auto min-h-full flex flex-col pb-4" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+        <div className="flex-1" />
         {/* Push notification prompt */}
         {pushState === 'prompt' && onEnablePush && (
           <div className="mx-5 mt-6 mb-2">
@@ -354,15 +518,15 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
           </div>
         )}
 
-        <div className="pt-10">
+        <div className="pt-2">
           <QuickActions onCompose={onCompose} onOpenTab={handleOpenTab} onOpenRealtime={onOpenRealtime} />
         </div>
 
         {recentTabs.length > 0 && (
           <div className="px-5 pt-6">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-[11px] font-semibold text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-widest">
-                Recent Tabs
+              <p className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">
+                Recent
               </p>
             </div>
             <div className="space-y-0.5">
@@ -386,6 +550,9 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
           </div>
         )}
 
+        <PreviousConversations onRestore={handleRestoreThread} />
+
+        <div className="flex-1" />
       </div>
     </div>
   )

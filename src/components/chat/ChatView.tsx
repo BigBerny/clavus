@@ -34,7 +34,7 @@ export function ChatView({ messages, title, threadId }: Props) {
     const savedPos = scrollPositionCache.get(threadId)
     if (savedPos !== undefined) {
       container.scrollTop = savedPos
-      setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 100)
+      setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 50)
     } else {
       // Default: scroll to bottom (latest messages)
       requestAnimationFrame(() => {
@@ -120,7 +120,7 @@ export function ChatView({ messages, title, threadId }: Props) {
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 200
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
     setAutoScroll(atBottom)
   }, [])
 
@@ -240,11 +240,11 @@ export function ChatView({ messages, title, threadId }: Props) {
 
   return (
     <div className="flex-1 flex flex-col relative min-h-0 chat-bg">
-      {/* Floating title pill */}
+      {/* Floating title pill (mobile-only — desktop uses Header.tsx) */}
       {title && (
-        <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
-          <div className="px-4 py-1.5 rounded-full bg-surface-light/70 dark:bg-surface-dark/70 backdrop-blur-xl border border-surface-light-3/30 dark:border-surface-dark-3/30 shadow-sm shadow-black/5">
-            <span className="text-[13px] font-medium text-text-light/80 dark:text-text-dark/80 truncate max-w-[250px] block">{title}</span>
+        <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none md:hidden" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
+          <div className="px-3.5 py-1.5 rounded-full bg-surface-light-2/80 dark:bg-surface-dark-2/80 backdrop-blur-xl border border-border-light dark:border-border-dark">
+            <span className="text-[12px] font-medium text-text-light dark:text-text-dark truncate max-w-[250px] block">{title}</span>
           </div>
         </div>
       )}

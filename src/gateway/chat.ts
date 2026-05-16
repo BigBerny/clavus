@@ -304,11 +304,13 @@ async function sendResponsesStream(
       return
     }
 
-    if (eventName === 'reasoning') {
-      const text = typeof parsed.text === 'string' ? parsed.text : ''
-      if (text) {
-        callbacks.onThinking?.(text)
-      }
+    if (eventName === 'response.reasoning_summary_text.delta') {
+      const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
+      if (delta) callbacks.onThinking?.(delta)
+      return
+    }
+
+    if (eventName === 'response.reasoning_summary_text.added' || eventName === 'response.reasoning_summary_text.done') {
       return
     }
 
