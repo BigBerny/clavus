@@ -490,19 +490,22 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         <div
           className={`px-4 py-2.5 min-w-0 w-fit relative transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
-              ? `bg-accent text-white ${
+              ? `text-primary-foreground ${
                   showAvatar && isLastInGroup ? 'rounded-[18px]' :
                   showAvatar ? 'rounded-[18px] rounded-br-[6px]' :
                   isLastInGroup ? 'rounded-[18px] rounded-tr-[6px]' :
                   'rounded-[18px] rounded-r-[6px]'
                 }`
-              : `bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark ${
+              : `bg-card border border-border text-foreground ${
                   showAvatar && isLastInGroup ? 'rounded-[18px]' :
                   showAvatar ? 'rounded-[18px] rounded-bl-[6px]' :
                   isLastInGroup ? 'rounded-[18px] rounded-tl-[6px]' :
                   'rounded-[18px] rounded-l-[6px]'
                 }`
           }`}
+          style={isUser ? {
+            background: 'linear-gradient(135deg, var(--color-primary), color-mix(in oklch, var(--color-primary) 70%, var(--color-cat-violet)))',
+          } : undefined}
         >
           {/* Image attachments (user-sent) */}
           {message.images && message.images.length > 0 && (
