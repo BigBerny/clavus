@@ -175,7 +175,9 @@ function RecentCard({ tab, thread, onSelect, onOpenDoc, onArchive }: {
   thread?: Thread
   onSelect: () => void
   onOpenDoc?: (path: string) => void
-  /** Called when the user swipes left past the threshold (only for chat tabs). */
+  /** Called when the user swipes left past the threshold.
+   *  - For chat tabs: archives the underlying Thread.
+   *  - For marksense / file tabs: closes the column. File on disk unchanged. */
   onArchive?: () => void
 }) {
   const accent = accentForTab(tab)
@@ -184,11 +186,14 @@ function RecentCard({ tab, thread, onSelect, onOpenDoc, onArchive }: {
       return stripMarkdown(thread.lastMessagePreview)
     }
     if (tab.type === 'marksense') return 'Document'
+    if (tab.type === 'file') return 'File'
     return ''
   }, [tab, thread])
 
-  // Swipe-to-archive (chat tabs only; docs aren't archivable today)
-  const swipeable = !!onArchive && tab.type === 'chat'
+  // Swipe-left to archive (chat) or close (doc/file)
+  const swipeable = !!onArchive
+  const isDocLike = tab.type !== 'chat'
+  const swipeLabel = isDocLike ? 'Close' : 'Archive'
   const [offsetX, setOffsetX] = useState(0)
   const [swiping, setSwiping] = useState(false)
   const startX = useRef(0)
@@ -264,7 +269,7 @@ function RecentCard({ tab, thread, onSelect, onOpenDoc, onArchive }: {
           {revealedWidth > 30 && (
             <span className="flex items-center gap-1.5 text-[12px] font-medium text-foreground">
               {ArchiveSvg}
-              {revealedWidth > 70 && 'Archive'}
+              {revealedWidth > 70 && swipeLabel}
             </span>
           )}
         </div>
@@ -462,11 +467,14 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     thread={thread}
                     onSelect={() => onSelectTab?.(tab.id)}
                     onOpenDoc={handleOpenDoc}
-                    onArchive={
-                      tab.type === 'chat' && thread
-                        ? () => useThreadsStore.getState().archiveThread(thread.id)
-                        : undefined
-                    }
+                    onArchive={() => {
+                      if (tab.type === 'chat' && thread) {
+                        useThreadsStore.getState().archiveThread(thread.id)
+                      } else {
+                        // Marksense / file tab: just close the column. File on disk is untouched.
+                        useTabsStore.getState().closeTab(tab.id)
+                      }
+                    }}
                   />
                 )
               })}

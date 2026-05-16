@@ -5,6 +5,31 @@ const MarksenseEditorInstance = lazy(() =>
   import('../../marksense').then(m => ({ default: m.MarksenseEditorInstance }))
 )
 
+const WORKSPACE_API = '/api/workspace'
+
+/**
+ * Resolves a markdown file's content + source by trying both file roots:
+ *   /api/documents → ~/Documents/Workspace (Janis's personal docs)
+ *   /api/workspace → ~/.openclaw/workspace (Jane's agent workspace)
+ * Picks whichever endpoint returns the most content. Falls back to documents
+ * (the editable location) when both are empty so saves still work.
+ */
+async function loadDoc(path: string): Promise<{ content: string; source: 'documents' | 'workspace' }> {
+  const fetchSafe = async (base: string) => {
+    try {
+      const r = await fetch(`${base}${path}`)
+      if (!r.ok) return null
+      const data = await r.json()
+      return typeof data.content === 'string' ? data.content : null
+    } catch { return null }
+  }
+  const [docs, ws] = await Promise.all([fetchSafe(DOCUMENTS_API), fetchSafe(WORKSPACE_API)])
+  const docsLen = (docs ?? '').trim().length
+  const wsLen = (ws ?? '').trim().length
+  if (wsLen > docsLen) return { content: ws!, source: 'workspace' }
+  return { content: docs ?? '', source: 'documents' }
+}
+
 export function MarksensePanel({ path, title, isVisible }: {
   path?: string
   /** @deprecated Legacy URL-based prop */
@@ -14,15 +39,16 @@ export function MarksensePanel({ path, title, isVisible }: {
 }) {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [source, setSource] = useState<'documents' | 'workspace'>('documents')
 
   useEffect(() => {
     if (!isVisible || !path) return
 
     setLoading(true)
-    fetch(`${DOCUMENTS_API}${path}`)
-      .then(r => r.json())
-      .then(data => {
-        setContent(data.content || '')
+    loadDoc(path)
+      .then(({ content, source }) => {
+        setContent(content)
+        setSource(source)
         setLoading(false)
       })
       .catch(err => {
@@ -75,7 +101,9 @@ export function MarksensePanel({ path, title, isVisible }: {
               content={content}
               onSave={(markdown) => {
                 if (path) {
-                  writeFile(path, markdown, DOCUMENTS_API).catch(err =>
+                  // Save back to whichever root the content was loaded from
+                  const saveApi = source === 'workspace' ? WORKSPACE_API : DOCUMENTS_API
+                  writeFile(path, markdown, saveApi).catch(err =>
                     console.error('[MarksensePanel] save failed:', err)
                   )
                 }
