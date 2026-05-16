@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type TabType = 'chat' | 'recipe' | 'marksense' | 'file'
+export type TabType = 'chat' | 'marksense' | 'file'
 
 interface TabBase {
   id: string
@@ -13,11 +13,6 @@ interface TabBase {
 export interface ChatTab extends TabBase {
   type: 'chat'
   threadId: string
-}
-
-export interface RecipeTab extends TabBase {
-  type: 'recipe'
-  recipeId: number
 }
 
 export interface MarksenseTab extends TabBase {
@@ -33,7 +28,7 @@ export interface FileTab extends TabBase {
   path: string
 }
 
-export type Tab = ChatTab | RecipeTab | MarksenseTab | FileTab
+export type Tab = ChatTab | MarksenseTab | FileTab
 
 interface TabsState {
   tabs: Tab[]
@@ -50,7 +45,12 @@ function loadTabs(): Tab[] {
     if (!raw) return []
     const parsed = JSON.parse(raw) as Tab[]
     if (!Array.isArray(parsed)) return []
-    return parsed
+    // Migration: filter out legacy recipe tabs (recipes were removed in mockup migration)
+    const filtered = parsed.filter((t) => (t as { type?: string }).type !== 'recipe')
+    if (filtered.length !== parsed.length) {
+      saveTabs(filtered)
+    }
+    return filtered
   } catch {
     return []
   }

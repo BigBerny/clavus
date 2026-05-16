@@ -6,7 +6,7 @@ import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
-import { useTabsStore, ensureChatTab, type ChatTab, type FileTab, type RecipeTab, type MarksenseTab } from './state/tabs.ts'
+import { useTabsStore, ensureChatTab, type ChatTab, type FileTab, type MarksenseTab } from './state/tabs.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
@@ -22,7 +22,6 @@ import { useVisualViewport } from './hooks/useVisualViewport.ts'
 const FileBrowser = lazy(() => import('./components/layout/FileBrowser.tsx').then(m => ({ default: m.FileBrowser })))
 const FileExplorerColumn = lazy(() => import('./components/files/FileExplorerColumn.tsx').then(m => ({ default: m.FileExplorerColumn })))
 const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
-const RecipePanel = lazy(() => import('./components/recipes/RecipePanel.tsx').then(m => ({ default: m.RecipePanel })))
 const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
 const FileViewerPanel = lazy(() => import('./components/files/FileViewerPanel.tsx').then(m => ({ default: m.FileViewerPanel })))
 const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
@@ -1079,12 +1078,6 @@ export function App() {
                       threadId={(visibleTab as ChatTab).threadId}
                     />
                   )}
-                  {visibleTab?.type === 'recipe' && (
-                    <RecipePanel
-                      recipeId={(visibleTab as RecipeTab).recipeId}
-                      isVisible={true}
-                    />
-                  )}
                   {visibleTab?.type === 'marksense' && (
                     <MarksensePanel
                       path={(visibleTab as MarksenseTab).path}
@@ -1148,12 +1141,6 @@ export function App() {
                       {tab.type === 'chat' && (
                         <ChatViewPanel
                           threadId={(tab as ChatTab).threadId}
-                        />
-                      )}
-                      {tab.type === 'recipe' && (
-                        <RecipePanel
-                          recipeId={(tab as RecipeTab).recipeId}
-                          isVisible={isActive}
                         />
                       )}
                       {tab.type === 'marksense' && (

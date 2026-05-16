@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { useThreadsStore, type Thread, loadThreadMessages } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
-import { useTabsStore, type Tab, type ChatTab, type RecipeTab, type MarksenseTab } from '../../state/tabs'
+import { useTabsStore, type Tab, type ChatTab, type MarksenseTab } from '../../state/tabs'
 import { useUIStore } from '../../state/ui'
 
 function relativeTime(timestamp: number): string {
@@ -34,23 +34,9 @@ function QuickActions({ onCompose, onOpenTab, onOpenRealtime }: QuickActionsProp
     }
   }, [])
 
-  const openRecipes = useCallback(() => {
-    const tabId = 'recipes-browser'
-    const tab: RecipeTab = {
-      id: tabId,
-      type: 'recipe',
-      title: 'Rezepte',
-      recipeId: 0, // 0 means show the list
-      openedAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-    useTabsStore.getState().openTab(tab)
-    onOpenTab?.(tab)
-  }, [onOpenTab])
-
   return (
     <div className="px-5 pt-1 pb-1 space-y-2">
-      {/* Full-width cards for Marksense and Recipes */}
+      {/* Full-width cards for Marksense */}
       <button
         onClick={openMarksense}
         className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
@@ -61,19 +47,6 @@ function QuickActions({ onCompose, onOpenTab, onOpenRealtime }: QuickActionsProp
         <div className="min-w-0">
           <p className="text-[14px] font-medium leading-tight">Marksense</p>
           <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Open knowledge base</p>
-        </div>
-      </button>
-
-      <button
-        onClick={openRecipes}
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
-      >
-        <div className="w-9 h-9 rounded-lg bg-surface-light-3 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0 text-text-light-muted dark:text-text-dark-muted">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
-        </div>
-        <div className="min-w-0">
-          <p className="text-[14px] font-medium leading-tight">Recipes</p>
-          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Browse & search recipes</p>
         </div>
       </button>
 
@@ -139,13 +112,6 @@ function stripMarkdown(text: string): string {
 // Tab type icons
 function TabIcon({ type }: { type: Tab['type'] }) {
   const className = "text-text-light-muted dark:text-text-dark-muted"
-  if (type === 'recipe') {
-    return (
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/>
-      </svg>
-    )
-  }
   if (type === 'marksense') {
     return (
       <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
@@ -172,7 +138,6 @@ function getTabPreview(tab: Tab): string {
     const thread = threads.find(t => t.id === (tab as ChatTab).threadId)
     return thread?.lastMessagePreview ? stripMarkdown(thread.lastMessagePreview) : ''
   }
-  if (tab.type === 'recipe') return 'Recipe'
   if (tab.type === 'marksense') return 'Knowledge base'
   return ''
 }
