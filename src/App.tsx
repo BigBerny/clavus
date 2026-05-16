@@ -1242,6 +1242,7 @@ export function App() {
               onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               threadId={visiblePanel !== 'home' ? visiblePanel : null}
+              draftKey={visiblePanel}
               onRetry={visiblePanel !== 'home' ? () => {
                 const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
                 const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
