@@ -4,6 +4,8 @@ import { haptic, isNative } from '../../lib/native'
 import { usePresetStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
 import { MODEL_PRESETS } from '../../gateway/presets'
+import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspaceApi'
+import { useThreadsStore } from '../../state/threads'
 import { VoiceInputPill } from '../voice/VoiceInputPill'
 import {
   SLASH_COMMANDS,
@@ -38,6 +40,59 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   const [slashIndex, setSlashIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [menuState, setMenuState] = useState<'closed' | 'open' | 'closing'>('closed')
+  // @-mention palette state
+  const [atQuery, setAtQuery] = useState<string | null>(null) // null = closed
+  const [atIndex, setAtIndex] = useState(0)
+  const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
+
+  // Lazy-load workspace file index when the user first types @
+  useEffect(() => {
+    if (atQuery !== null && workspaceFiles.length === 0) {
+      listAllWorkspaceFiles().then(setWorkspaceFiles)
+    }
+  }, [atQuery, workspaceFiles.length])
+
+  const atMatches = useMemo(() => {
+    if (atQuery === null) return []
+    return searchWorkspaceFiles(atQuery, workspaceFiles)
+  }, [atQuery, workspaceFiles])
+
+  const detectAtTrigger = useCallback((text: string, caret: number) => {
+    const before = text.slice(0, caret)
+    const at = before.lastIndexOf('@')
+    if (at === -1) { setAtQuery(null); return }
+    const segment = before.slice(at + 1)
+    if (/[\s\n]/.test(segment)) { setAtQuery(null); return }
+    const charBefore = at === 0 ? ' ' : before[at - 1]
+    if (!/\s/.test(charBefore)) { setAtQuery(null); return }
+    setAtQuery(segment)
+    setAtIndex(0)
+  }, [])
+
+  const insertAtMention = useCallback((path: string) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const caret = ta.selectionStart
+    const before = value.slice(0, caret)
+    const at = before.lastIndexOf('@')
+    if (at === -1) return
+    // Insert as a markdown link the RichMessageRenderer will detect as a MarksenseCard.
+    // Format mirrors the existing /file/<filename> pattern.
+    const filename = path.split('/').pop() || path
+    const link = `[${filename}](https://mac-mini-von-janis.taild2ad59.ts.net/file/${encodeURIComponent(filename)}) `
+    const next = value.slice(0, at) + link + value.slice(caret)
+    setValue(next.slice(0, 10000))
+    setAtQuery(null)
+    // Record the linked doc on the active thread immediately
+    if (threadId) {
+      useThreadsStore.getState().addLinkedDoc(threadId, { path, title: filename })
+    }
+    requestAnimationFrame(() => {
+      ta.focus()
+      const pos = at + link.length
+      ta.setSelectionRange(pos, pos)
+    })
+  }, [value, threadId])
   const menuRef = useRef<HTMLDivElement>(null)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
 
@@ -445,6 +500,50 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             </div>
           </div>
         )}
+        {/* @-mention file picker */}
+        {atQuery !== null && (
+          <div className="mb-2 rounded-xl bg-card border border-border overflow-hidden shadow-lg animate-[fadeSlideIn_0.2s_ease-out]" role="listbox" aria-label="Mention a file">
+            <div className="px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground font-medium border-b border-border flex items-center gap-1.5">
+              <span>@ Attach file</span>
+              {atQuery && <span className="opacity-70 normal-case tracking-normal">— "{atQuery}"</span>}
+              <span className="ml-auto normal-case tracking-normal text-[10px] opacity-70">↑↓ · ↵ select · esc</span>
+            </div>
+            {atMatches.length === 0 ? (
+              <div className="px-3 py-3 text-[12.5px] text-muted-foreground text-center">
+                {workspaceFiles.length === 0 ? 'Loading workspace…' : `No files match "${atQuery}"`}
+              </div>
+            ) : (
+              <div className="max-h-[260px] overflow-y-auto scrollbar-fine">
+                {atMatches.map((f, i) => (
+                  <button
+                    key={f.path}
+                    role="option"
+                    aria-selected={i === atIndex}
+                    onMouseEnter={() => setAtIndex(i)}
+                    onClick={() => insertAtMention(f.path)}
+                    className={`inline-btn w-full text-left px-3 py-2 flex items-start gap-2.5 text-[13px] transition-colors border-b border-border/40 last:border-0 ${
+                      i === atIndex ? 'bg-accent-soft' : 'hover:bg-accent-soft/60'
+                    }`}
+                  >
+                    <div
+                      className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-px"
+                      style={{ background: 'color-mix(in oklch, var(--color-cat-doc) 16%, transparent)' }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-cat-doc)' }}>
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{f.title}</div>
+                      <div className="text-[11.5px] text-muted-foreground truncate">{f.folder} · {f.path}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {showSlashPalette && filteredCommands.length > 0 && (
           <div className="mb-2 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox">
             {filteredCommands.map((cmd, i) => (
@@ -635,8 +734,36 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             <textarea
               ref={textareaRef}
               value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={handleKeyDown}
+              onChange={(e) => {
+                setValue(e.target.value)
+                detectAtTrigger(e.target.value, e.target.selectionStart)
+              }}
+              onKeyDown={(e) => {
+                // @-palette keyboard navigation
+                if (atQuery !== null && atMatches.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setAtIndex((i) => (i + 1) % atMatches.length)
+                    return
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setAtIndex((i) => (i - 1 + atMatches.length) % atMatches.length)
+                    return
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault()
+                    insertAtMention(atMatches[atIndex].path)
+                    return
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setAtQuery(null)
+                    return
+                  }
+                }
+                handleKeyDown(e)
+              }}
               onPaste={handlePaste}
               onFocus={() => {
                 onFocusInput?.()
