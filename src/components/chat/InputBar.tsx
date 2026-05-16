@@ -424,7 +424,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   return (
     <div
-      className={`bg-surface-light dark:bg-surface-dark border-t border-border-light dark:border-border-dark safe-area-bottom relative ${dragOver ? 'ring-2 ring-accent ring-inset' : ''}`}
+      className={`bg-background border-t border-border safe-area-bottom relative ${dragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -539,13 +539,13 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         {menuVisible && (
           <div
             ref={menuRef}
-            className={`mb-2 rounded-2xl bg-surface-light-2/90 dark:bg-surface-dark-2/90 backdrop-blur-xl border border-surface-light-3/20 dark:border-surface-dark-3/20 shadow-lg shadow-black/15 overflow-hidden ${
+            className={`mb-2 rounded-2xl bg-card/95 backdrop-blur-xl border border-border shadow-lg shadow-black/15 overflow-hidden ${
               menuState === 'open' ? 'animate-[menuIn_0.2s_ease-out_both]' : 'animate-[menuOut_0.18s_ease-in_both]'
             }`}
             onAnimationEnd={() => { if (menuState === 'closing') setMenuState('closed') }}
           >
+            {/* Model row */}
             <div className="flex items-center gap-2 p-2">
-              {/* Model selection pills */}
               <div className="flex-1 flex items-center gap-1.5">
                 {MODEL_PRESETS.map((preset) => (
                   <button
@@ -555,10 +555,10 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                       setSelectedPresetId(preset.id)
                       closeMenu()
                     }}
-                    className={`flex-1 px-2 py-2.5 rounded-xl text-[13px] font-medium text-center transition-all ${
+                    className={`flex-1 px-2 py-2 rounded-xl text-[13px] font-medium text-center transition-all ${
                       preset.id === selectedPresetId
-                        ? 'bg-accent/15 text-accent shadow-sm'
-                        : 'text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50'
+                        ? 'bg-primary/15 text-primary shadow-sm'
+                        : 'text-muted-foreground hover:bg-accent-soft'
                     }`}
                   >
                     {preset.shortLabel}
@@ -570,13 +570,18 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                 onPointerDown={(e) => e.preventDefault()}
                 onClick={() => { handleAttachClick(); closeMenu() }}
                 disabled={pendingImages.length >= MAX_IMAGES}
-                className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full text-text-light-muted dark:text-text-dark-muted hover:text-accent active:scale-95 transition-all disabled:opacity-30"
+                className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full text-muted-foreground hover:text-primary active:scale-95 transition-all disabled:opacity-30"
                 aria-label="Attach file"
                 title="Attach file"
               >
                 <PaperclipIcon />
               </button>
             </div>
+
+            {/* Reasoning row (only when a thread is active) */}
+            {threadId && (
+              <ReasoningPicker threadId={threadId} onChange={closeMenu} />
+            )}
           </div>
         )}
 
@@ -586,7 +591,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             ref={menuBtnRef}
             onPointerDown={(e) => e.preventDefault()}
             onClick={toggleMenu}
-            className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all"
+            className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full bg-primary/15 text-primary hover:bg-primary hover:text-primary-foreground active:scale-95 transition-all"
             aria-label={menuVisible ? 'Close options' : 'Options'}
             title={menuVisible ? 'Close' : `Options (${currentPreset.shortLabel})`}
           >
@@ -641,7 +646,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               disabled={isTranscribing}
               aria-label="Chat message input"
               maxLength={10000}
-              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2/80 dark:bg-surface-dark-2/80 border border-surface-light-3/30 dark:border-surface-dark-3/30 text-text-light dark:text-text-dark placeholder:text-text-light-muted/55 dark:placeholder:text-text-dark-muted/55 text-[16px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/15 focus:bg-surface-light-2 dark:focus:bg-surface-dark-2 disabled:opacity-50 transition-all overflow-hidden"
+              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-card border border-border text-foreground placeholder:text-muted-foreground/70 text-[16px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-ring/25 focus:border-ring/30 disabled:opacity-50 transition-all overflow-hidden"
             />
           )}
 
@@ -808,6 +813,42 @@ function ArrowUpIcon() {
       <path d="M12 19V5"/>
       <path d="m5 12 7-7 7 7"/>
     </svg>
+  )
+}
+
+const REASONING_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
+
+function ReasoningPicker({ threadId, onChange }: { threadId: string; onChange?: () => void }) {
+  // Subscribe to the override for this thread so the active state stays in sync.
+  const current = useChatSettingsStore((s) => s.reasoningOverride[threadId] ?? null)
+  return (
+    <div className="flex items-center gap-2 px-2 pb-2 -mt-1">
+      <span className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground pl-1 pr-2 shrink-0">
+        Reasoning
+      </span>
+      <div className="flex-1 flex items-center gap-1">
+        {REASONING_LEVELS.map((level) => {
+          const isActive = current === level
+          return (
+            <button
+              key={level}
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => {
+                useChatSettingsStore.getState().setReasoningOverride(threadId, level)
+                onChange?.()
+              }}
+              className={`flex-1 px-1 py-1.5 rounded-md text-[11px] font-medium text-center transition-all ${
+                isActive
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:bg-accent-soft'
+              }`}
+            >
+              {level === 'xhigh' ? 'x-high' : level}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
