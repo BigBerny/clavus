@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThreadsStore, type Thread } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
 import { useTabsStore, type Tab, type ChatTab } from '../../state/tabs'
@@ -160,13 +160,23 @@ function ActionTile({ title, description, icon, accent, onClick }: ActionTilePro
   )
 }
 
-// ── recent tab card ────────────────────────────────────────────────────────
+// ── recent tab card (swipe left to archive) ────────────────────────────────
 
-function RecentCard({ tab, thread, onSelect, onOpenDoc }: {
+const ArchiveSvg = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="5" x="2" y="3" rx="1"/>
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+    <path d="M10 12h4"/>
+  </svg>
+)
+
+function RecentCard({ tab, thread, onSelect, onOpenDoc, onArchive }: {
   tab: Tab
   thread?: Thread
   onSelect: () => void
   onOpenDoc?: (path: string) => void
+  /** Called when the user swipes left past the threshold (only for chat tabs). */
+  onArchive?: () => void
 }) {
   const accent = accentForTab(tab)
   const preview = useMemo(() => {
@@ -177,46 +187,133 @@ function RecentCard({ tab, thread, onSelect, onOpenDoc }: {
     return ''
   }, [tab, thread])
 
+  // Swipe-to-archive (chat tabs only; docs aren't archivable today)
+  const swipeable = !!onArchive && tab.type === 'chat'
+  const [offsetX, setOffsetX] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+  const startX = useRef(0)
+  const startY = useRef(0)
+  const direction = useRef<'none' | 'h' | 'v'>('none')
+  const itemRef = useRef<HTMLDivElement>(null)
+  const SWIPE_THRESHOLD = 80
+
+  useEffect(() => {
+    if (!swipeable) return
+    const el = itemRef.current
+    if (!el) return
+
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      startX.current = e.touches[0].clientX
+      startY.current = e.touches[0].clientY
+      direction.current = 'none'
+      setSwiping(true)
+    }
+    const onMove = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return
+      const dx = e.touches[0].clientX - startX.current
+      const dy = e.touches[0].clientY - startY.current
+      if (direction.current === 'none') {
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+        direction.current = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v'
+      }
+      if (direction.current === 'h' && dx < 0) {
+        e.preventDefault()
+        e.stopPropagation()
+        setOffsetX(dx)
+      }
+    }
+    const onEnd = () => {
+      setSwiping(false)
+      direction.current = 'none'
+      setOffsetX((prev) => {
+        if (prev < -SWIPE_THRESHOLD) {
+          // Slide out, then archive after the animation
+          setTimeout(() => onArchive?.(), 180)
+          return -600
+        }
+        return 0
+      })
+    }
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd, { passive: true })
+    el.addEventListener('touchcancel', onEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+      el.removeEventListener('touchcancel', onEnd)
+    }
+  }, [swipeable, onArchive])
+
+  const revealedWidth = Math.min(Math.abs(offsetX), 120)
+
   return (
-    <button
-      onClick={onSelect}
-      className="inline-btn w-full text-left p-3.5 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all"
-    >
-      <div className="flex items-start gap-3">
-        <span
-          className="w-1.5 h-1.5 rounded-full shrink-0 mt-2"
-          style={{ background: `var(--color-${accent})` }}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-[14px] font-medium truncate text-foreground">{tab.title || 'Untitled'}</div>
-            <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-              {relativeTime(tab.updatedAt)}
-            </div>
-          </div>
-          {preview && (
-            <div className="text-[12.5px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
-          )}
-          {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {thread.linkedDocs.map((d) => (
-                <span
-                  key={d.path}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onOpenDoc?.(d.path)
-                  }}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-secondary text-[11.5px] text-foreground/85 hover:bg-accent-soft border border-border cursor-pointer"
-                >
-                  <span style={{ color: 'var(--color-cat-doc)' }}>{FileChipIcon}</span>
-                  <span className="truncate max-w-[160px]">{d.title || d.path.split('/').filter(Boolean).pop()}</span>
-                </span>
-              ))}
-            </div>
+    <div ref={itemRef} className="relative overflow-hidden rounded-xl">
+      {/* Archive reveal behind the card */}
+      {swipeable && offsetX < 0 && (
+        <div
+          className="absolute top-0 bottom-0 right-0 flex items-center justify-end pr-5 rounded-r-xl"
+          style={{
+            width: `${revealedWidth}px`,
+            background: `color-mix(in oklch, var(--color-cat-doc) ${Math.min(60, revealedWidth * 0.6)}%, transparent)`,
+            color: 'var(--color-cat-doc)',
+          }}
+        >
+          {revealedWidth > 30 && (
+            <span className="flex items-center gap-1.5 text-[12px] font-medium text-foreground">
+              {ArchiveSvg}
+              {revealedWidth > 70 && 'Archive'}
+            </span>
           )}
         </div>
-      </div>
-    </button>
+      )}
+      <button
+        onClick={onSelect}
+        className="inline-btn w-full text-left p-3.5 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all block"
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: swiping ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s',
+          opacity: offsetX < -SWIPE_THRESHOLD * 2 ? 0 : 1,
+        }}
+      >
+        <div className="flex items-start gap-3">
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0 mt-2"
+            style={{ background: `var(--color-${accent})` }}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[14px] font-medium truncate text-foreground">{tab.title || 'Untitled'}</div>
+              <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                {relativeTime(tab.updatedAt)}
+              </div>
+            </div>
+            {preview && (
+              <div className="text-[12.5px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
+            )}
+            {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {thread.linkedDocs.map((d) => (
+                  <span
+                    key={d.path}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenDoc?.(d.path)
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-secondary text-[11.5px] text-foreground/85 hover:bg-accent-soft border border-border cursor-pointer"
+                  >
+                    <span style={{ color: 'var(--color-cat-doc)' }}>{FileChipIcon}</span>
+                    <span className="truncate max-w-[160px]">{d.title || d.path.split('/').filter(Boolean).pop()}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </button>
+    </div>
   )
 }
 
@@ -365,6 +462,11 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     thread={thread}
                     onSelect={() => onSelectTab?.(tab.id)}
                     onOpenDoc={handleOpenDoc}
+                    onArchive={
+                      tab.type === 'chat' && thread
+                        ? () => useThreadsStore.getState().archiveThread(thread.id)
+                        : undefined
+                    }
                   />
                 )
               })}

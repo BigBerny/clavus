@@ -847,9 +847,9 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           )}
         </div>
 
-        {/* Hint row */}
+        {/* Hint row — desktop only (mouse + keyboard hints don't apply on touch) */}
         {!isRecording && !isTranscribing && (
-          <div className="text-[10.5px] text-muted-foreground/70 mt-2 px-1 flex items-center gap-3 flex-wrap">
+          <div className="hidden md:flex text-[10.5px] text-muted-foreground/70 mt-2 px-1 items-center gap-3 flex-wrap">
             <span>↵ to send</span>
             <span>⇧↵ for new line</span>
             <span className="opacity-50">·</span>

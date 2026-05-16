@@ -70,16 +70,31 @@ export function FileBrowser({ open, onClose }: Props) {
   }, [])
 
   const openFile = useCallback((filePath: string, name: string) => {
-    const tabId = `file-${filePath}`
-    useTabsStore.getState().openTab({
-      id: tabId,
-      type: 'file',
-      title: name,
-      path: filePath,
-      openedAt: Date.now(),
-      updatedAt: Date.now(),
-    })
-    window.dispatchEvent(new CustomEvent('clavus:open-file-tab', { detail: { tabId } }))
+    const isMd = /\.md$/i.test(name)
+    if (isMd) {
+      // Open markdowns as Marksense tabs (matches the unified-tab design)
+      const tabId = `marksense:${filePath}`
+      useTabsStore.getState().openTab({
+        id: tabId,
+        type: 'marksense',
+        title: name,
+        path: filePath,
+        openedAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      window.dispatchEvent(new CustomEvent('clavus:open-file-tab', { detail: { tabId } }))
+    } else {
+      const tabId = `file-${filePath}`
+      useTabsStore.getState().openTab({
+        id: tabId,
+        type: 'file',
+        title: name,
+        path: filePath,
+        openedAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+      window.dispatchEvent(new CustomEvent('clavus:open-file-tab', { detail: { tabId } }))
+    }
     onClose()
   }, [onClose])
 

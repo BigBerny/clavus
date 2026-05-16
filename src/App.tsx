@@ -471,29 +471,12 @@ export function App() {
       }
       if (!filePath) return
 
-      if (isDesktop) {
-        // Desktop: open as Canvas side panel with direct Tiptap editor
-        setCanvasTitle(docTitle)
-        setCanvasOpen(true)
-        // Load file content for the editor
-        fetch(`/api/documents${filePath}`)
-          .then(r => r.json())
-          .then(data => setCanvasContent(data.content || ''))
-          .catch(() => setCanvasContent(''))
-      }
-      // Both mobile & desktop: open/update as a Marksense tab
-      const tabId = `marksense-${filePath}`
-      useTabsStore.getState().openTab({
-        id: tabId,
-        type: 'marksense',
-        title: docTitle,
-        path: filePath,
-        openedAt: Date.now(),
-        updatedAt: Date.now(),
-      } satisfies MarksenseTab)
-      if (!isDesktop) {
+      // Always open the markdown as its own Marksense tab so it lives in the
+      // sidebar/tab strip — matches the unified-tab design from the mockup.
+      const tabId = applyRoute({ kind: 'doc', path: filePath, title: docTitle })
+      if (tabId) {
         setVisiblePanel(tabId)
-        scrollToTabRef.current(tabId)
+        if (!isDesktop) scrollToTabRef.current(tabId)
       }
     }
     window.addEventListener('clavus:open-marksense', handleOpenMarksense)
@@ -1079,14 +1062,9 @@ export function App() {
               onClose={() => setFileExplorerOpen(false)}
               onSelectFile={(path, title, isMd) => {
                 if (isMd) {
-                  // Open markdown files in the canvas editor (right panel)
-                  setCanvasTitle(title)
-                  setCanvasOpen(true)
-                  // Load file content into canvas editor
-                  fetch(`/api/documents${path}`)
-                    .then(r => r.json())
-                    .then(data => setCanvasContent(data.content || ''))
-                    .catch(() => setCanvasContent(''))
+                  // Open markdown as its own marksense tab (sits in the tab list)
+                  const tabId = applyRoute({ kind: 'doc', path, title })
+                  if (tabId) setVisiblePanel(tabId)
                 } else {
                   // Open non-markdown files in the file viewer tab
                   const tabId = `file-${path}`
