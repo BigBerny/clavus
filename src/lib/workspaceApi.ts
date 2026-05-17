@@ -81,7 +81,7 @@ function flattenFiles(entries: FileEntry[], acc: string[] = []): string[] {
 let workspaceFilesCache: { files: string[]; loadedAt: number } | null = null
 const CACHE_TTL_MS = 30_000
 
-export async function listAllWorkspaceFiles(apiBase = WORKSPACE_API): Promise<string[]> {
+export async function listAllWorkspaceFiles(apiBase = DOCUMENTS_API): Promise<string[]> {
   if (workspaceFilesCache && Date.now() - workspaceFilesCache.loadedAt < CACHE_TTL_MS) {
     return workspaceFilesCache.files
   }

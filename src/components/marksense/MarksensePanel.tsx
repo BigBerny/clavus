@@ -1,34 +1,10 @@
 import { useEffect, useState, Suspense, lazy } from 'react'
 import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
+import { useUIStore } from '../../state/ui'
 
 const MarksenseEditorInstance = lazy(() =>
   import('../../marksense').then(m => ({ default: m.MarksenseEditorInstance }))
 )
-
-const WORKSPACE_API = '/api/workspace'
-
-/**
- * Resolves a markdown file's content + source by trying both file roots:
- *   /api/documents → ~/Documents/Workspace (Janis's personal docs)
- *   /api/workspace → ~/.openclaw/workspace (Jane's agent workspace)
- * Picks whichever endpoint returns the most content. Falls back to documents
- * (the editable location) when both are empty so saves still work.
- */
-async function loadDoc(path: string): Promise<{ content: string; source: 'documents' | 'workspace' }> {
-  const fetchSafe = async (base: string) => {
-    try {
-      const r = await fetch(`${base}${path}`)
-      if (!r.ok) return null
-      const data = await r.json()
-      return typeof data.content === 'string' ? data.content : null
-    } catch { return null }
-  }
-  const [docs, ws] = await Promise.all([fetchSafe(DOCUMENTS_API), fetchSafe(WORKSPACE_API)])
-  const docsLen = (docs ?? '').trim().length
-  const wsLen = (ws ?? '').trim().length
-  if (wsLen > docsLen) return { content: ws!, source: 'workspace' }
-  return { content: docs ?? '', source: 'documents' }
-}
 
 export function MarksensePanel({ path, title, isVisible }: {
   path?: string
@@ -39,16 +15,18 @@ export function MarksensePanel({ path, title, isVisible }: {
 }) {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const [source, setSource] = useState<'documents' | 'workspace'>('documents')
+  const fileExplorerOpen = useUIStore((s) => s.fileExplorerOpen)
+  const setFileExplorerOpen = useUIStore((s) => s.setFileExplorerOpen)
+  const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
 
   useEffect(() => {
     if (!isVisible || !path) return
 
     setLoading(true)
-    loadDoc(path)
-      .then(({ content, source }) => {
-        setContent(content)
-        setSource(source)
+    fetch(`${DOCUMENTS_API}${path}`)
+      .then(r => r.json())
+      .then(data => {
+        setContent(data.content || '')
         setLoading(false)
       })
       .catch(err => {
@@ -58,6 +36,11 @@ export function MarksensePanel({ path, title, isVisible }: {
   }, [path, isVisible])
 
   const instanceId = `marksense-tab-${path || 'none'}`
+
+  const openBrowser = () => {
+    if (window.innerWidth >= 768) setFileExplorerOpen(!fileExplorerOpen)
+    else setFileBrowserOpen(true)
+  }
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-background">
@@ -79,7 +62,18 @@ export function MarksensePanel({ path, title, isVisible }: {
         <h1 className="text-[13px] font-medium text-foreground truncate flex-1">
           {title || 'Document'}
         </h1>
-        <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground">Finder</span>
+        {/* Browse files — re-open the Finder/file explorer without leaving this doc */}
+        <button
+          onClick={openBrowser}
+          title="Browse files"
+          aria-label="Browse files"
+          className="inline-btn h-7 px-2 rounded-md flex items-center gap-1.5 text-[11.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>
+          </svg>
+          <span className="hidden sm:inline">Browse</span>
+        </button>
       </div>
 
       {/* Editor */}
@@ -101,9 +95,7 @@ export function MarksensePanel({ path, title, isVisible }: {
               content={content}
               onSave={(markdown) => {
                 if (path) {
-                  // Save back to whichever root the content was loaded from
-                  const saveApi = source === 'workspace' ? WORKSPACE_API : DOCUMENTS_API
-                  writeFile(path, markdown, saveApi).catch(err =>
+                  writeFile(path, markdown, DOCUMENTS_API).catch(err =>
                     console.error('[MarksensePanel] save failed:', err)
                   )
                 }

@@ -152,6 +152,8 @@ export function App() {
   // Used to commit a mid-animation snap when a second swipe interrupts the first.
   const lastSwipeDirection = useRef<-1 | 0 | 1>(0)
   const userGestureEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Panel index when gesture started — used to clamp scroll to ±1 panel per swipe
+  const gestureStartPanelIndex = useRef<number | null>(null)
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
   const [initialReady, setInitialReady] = useState(false)
@@ -937,6 +939,11 @@ export function App() {
 
     gestureStartPoint.current = { x: event.clientX, y: event.clientY }
     isUserHorizontalGesture.current = false
+    // Record which panel this gesture starts on so we can clamp to ±1
+    const cw = container?.clientWidth
+    gestureStartPanelIndex.current = container && cw
+      ? Math.round(container.scrollLeft / cw)
+      : null
     logKeyboardScroll('gesture-pending', {
       pointerType: event.pointerType,
       startX: event.clientX,
