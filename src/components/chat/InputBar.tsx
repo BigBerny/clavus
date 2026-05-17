@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { haptic, isNative } from '../../lib/native'
-import { usePresetStore } from '../../state/preset'
+import { useModelStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
-import { MODEL_PRESETS } from '../../gateway/presets'
+import { MODEL_OPTIONS } from '../../gateway/presets'
 import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspaceApi'
 import { useThreadsStore } from '../../state/threads'
 import { useDraftsStore } from '../../state/drafts'
@@ -259,8 +259,9 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       threadId: threadId ?? null,
       setReasoningOverride: (tid, level) => useChatSettingsStore.getState().setReasoningOverride(tid, level),
       getReasoningOverride: (tid) => useChatSettingsStore.getState().getReasoningOverride(tid),
-      setPresetId: (id) => usePresetStore.getState().setSelectedPresetId(id),
-      getPresetId: () => usePresetStore.getState().selectedPresetId,
+      setModelId: (id) => useModelStore.getState().setSelectedModelId(id),
+      getModelId: () => useModelStore.getState().selectedModelId,
+      setGlobalReasoning: (level) => useChatSettingsStore.getState().setGlobalReasoning(level),
       clearChat: () => onClear?.(),
       regenerateLast: () => {
         if (onRetry) onRetry()
@@ -433,8 +434,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     }
   }, [pendingImages.length])
 
-  const { selectedPresetId, setSelectedPresetId } = usePresetStore()
-  const currentPreset = MODEL_PRESETS.find((p) => p.id === selectedPresetId) || MODEL_PRESETS[0]
+  const { selectedModelId, setSelectedModelId } = useModelStore()
+  const currentModel = MODEL_OPTIONS.find((m) => m.id === selectedModelId) || MODEL_OPTIONS[0]
 
   const menuVisible = menuState !== 'closed'
 
@@ -753,13 +754,11 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             <div className="flex items-center gap-0.5 min-w-0">
               {/* Model picker */}
               <ModelPill
-                presetId={selectedPresetId}
-                onChange={setSelectedPresetId}
+                modelId={selectedModelId}
+                onChange={setSelectedModelId}
               />
-              {/* Reasoning picker (only when a thread is active) */}
-              {threadId && (
-                <ReasoningPill threadId={threadId} />
-              )}
+              {/* Reasoning picker */}
+              <ReasoningPill threadId={threadId ?? null} />
               <div className="w-px h-4 bg-border mx-1.5 hidden sm:block" />
               {/* Attach file */}
               <IconBtn
@@ -1116,7 +1115,7 @@ function SendBtn({ onClick, disabled, pulse }: { onClick: () => void; disabled?:
 }
 
 // Inline dropdown pill for model selection
-function ModelPill({ presetId, onChange }: { presetId: string; onChange: (id: string) => void }) {
+function ModelPill({ modelId, onChange }: { modelId: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -1127,7 +1126,7 @@ function ModelPill({ presetId, onChange }: { presetId: string; onChange: (id: st
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
-  const current = MODEL_PRESETS.find((p) => p.id === presetId) || MODEL_PRESETS[0]
+  const current = MODEL_OPTIONS.find((m) => m.id === modelId) || MODEL_OPTIONS[0]
   return (
     <div ref={ref} className="relative">
       <button
@@ -1148,23 +1147,20 @@ function ModelPill({ presetId, onChange }: { presetId: string; onChange: (id: st
             Model
           </div>
           <div className="py-1">
-            {MODEL_PRESETS.map((p) => (
+            {MODEL_OPTIONS.map((m) => (
               <button
                 type="button"
-                key={p.id}
-                onClick={() => { onChange(p.id); setOpen(false) }}
+                key={m.id}
+                onClick={() => { onChange(m.id); setOpen(false) }}
                 className={`inline-btn w-full text-left px-3 py-2 flex items-center gap-2.5 text-[13px] transition-colors ${
-                  p.id === presetId ? 'bg-accent-soft/60' : 'hover:bg-accent-soft'
+                  m.id === modelId ? 'bg-accent-soft/60' : 'hover:bg-accent-soft'
                 }`}
               >
                 <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-violet)' }} />
                 <span className="flex-1 min-w-0">
-                  <span className="block font-medium text-foreground">{p.label}</span>
-                  {p.shortLabel !== p.label && (
-                    <span className="block text-[11.5px] text-muted-foreground mt-0.5">{p.shortLabel}</span>
-                  )}
+                  <span className="block font-medium text-foreground">{m.label}</span>
                 </span>
-                {p.id === presetId && <CheckMini />}
+                {m.id === modelId && <CheckMini />}
               </button>
             ))}
           </div>
@@ -1176,18 +1172,19 @@ function ModelPill({ presetId, onChange }: { presetId: string; onChange: (id: st
 
 // Inline dropdown pill for reasoning level
 const REASONING_DESCRIPTIONS: Record<string, string> = {
+  auto: 'Auto — server default',
   none: 'No reasoning',
   minimal: 'Minimal — quick replies',
   low: 'Low — light deliberation',
-  medium: 'Medium — balanced (default)',
+  medium: 'Medium — balanced',
   high: 'High — careful thinking',
   xhigh: 'X-high — maximum reasoning',
 }
 
-function ReasoningPill({ threadId }: { threadId: string }) {
+function ReasoningPill({ threadId }: { threadId: string | null }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const current = useChatSettingsStore((s) => s.reasoningOverride[threadId] ?? null)
+  const effective = useChatSettingsStore((s) => s.getEffectiveReasoning(threadId))
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
@@ -1196,6 +1193,22 @@ function ReasoningPill({ threadId }: { threadId: string }) {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
+
+  const handleSelect = (level: string) => {
+    const store = useChatSettingsStore.getState()
+    if (level === 'auto') {
+      if (threadId) store.setReasoningOverride(threadId, null)
+      else store.setGlobalReasoning(null)
+    } else {
+      const typedLevel = level as import('../../state/chatSettings').ReasoningLevel
+      if (threadId) store.setReasoningOverride(threadId, typedLevel)
+      else store.setGlobalReasoning(typedLevel)
+    }
+    setOpen(false)
+  }
+
+  const displayLabel = effective ? (effective === 'xhigh' ? 'x-high' : effective) : 'auto'
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -1206,7 +1219,7 @@ function ReasoningPill({ threadId }: { threadId: string }) {
         }`}
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-chat)' }} />
-        <span className="truncate max-w-[110px]">{current ? (current === 'xhigh' ? 'x-high' : current) : 'auto'}</span>
+        <span className="truncate max-w-[110px]">{displayLabel}</span>
         <ChevronMini rotated={open} />
       </button>
       {open && (
@@ -1215,16 +1228,13 @@ function ReasoningPill({ threadId }: { threadId: string }) {
             Reasoning
           </div>
           <div className="py-1">
-            {(['none','minimal','low','medium','high','xhigh'] as const).map((level) => {
-              const isActive = current === level
+            {(['auto','none','minimal','low','medium','high','xhigh'] as const).map((level) => {
+              const isActive = level === 'auto' ? effective === null : effective === level
               return (
                 <button
                   type="button"
                   key={level}
-                  onClick={() => {
-                    useChatSettingsStore.getState().setReasoningOverride(threadId, level)
-                    setOpen(false)
-                  }}
+                  onClick={() => handleSelect(level)}
                   className={`inline-btn w-full text-left px-3 py-2 flex items-center gap-2.5 text-[13px] transition-colors ${
                     isActive ? 'bg-accent-soft/60' : 'hover:bg-accent-soft'
                   }`}

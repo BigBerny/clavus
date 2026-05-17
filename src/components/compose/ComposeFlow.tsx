@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { getConfig } from '../../gateway/config'
 import { sendChatCompletion } from '../../gateway/chat'
-import { usePresetStore } from '../../state/preset'
-import { MODEL_PRESETS } from '../../gateway/presets'
+import { useModelStore } from '../../state/preset'
+import { MODEL_OPTIONS } from '../../gateway/presets'
 import { haptic } from '../../lib/native'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
 
@@ -149,11 +149,11 @@ export function ComposeFlow({ channel, onClose }: Props) {
     async function reformulate() {
       try {
         const gwConfig = getConfig()
-        // Apply selected model preset (same as useChat.ts)
-        const selectedPresetId = usePresetStore.getState().selectedPresetId
-        const preset = MODEL_PRESETS.find((p) => p.id === selectedPresetId)
-        if (preset) {
-          gwConfig.model = preset.model
+        // Apply selected model (same as useChat.ts)
+        const selectedModelId = useModelStore.getState().selectedModelId
+        const modelOption = MODEL_OPTIONS.find((m) => m.id === selectedModelId)
+        if (modelOption) {
+          gwConfig.model = modelOption.model
         }
         // Build messages: if there are multiple recordings, include previous
         // ones as context so the LLM can refine based on all input

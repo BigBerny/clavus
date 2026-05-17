@@ -2,10 +2,10 @@ import { useMemo } from 'react'
 import { useThreadsStore } from '../../state/threads'
 import { useChatStore } from '../../state/chat'
 import type { Message } from '../../state/chat'
-import { usePresetStore } from '../../state/preset'
+import { useModelStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
 import { useUIStore } from '../../state/ui'
-import { MODEL_PRESETS } from '../../gateway/presets'
+import { MODEL_OPTIONS } from '../../gateway/presets'
 
 interface StatusModalProps {
   threadId: string | null
@@ -19,12 +19,12 @@ export default function StatusModal({ threadId, onClose }: StatusModalProps) {
     if (!threadId) return []
     return useChatStore.getState().getThreadState(threadId).messages
   }, [threadId])
-  const presetId = usePresetStore((s) => s.selectedPresetId)
-  const reasoning = useChatSettingsStore((s) => (threadId ? s.getReasoningOverride(threadId) : null))
+  const modelId = useModelStore((s) => s.selectedModelId)
+  const reasoning = useChatSettingsStore((s) => s.getEffectiveReasoning(threadId))
   const connectionStatus = useUIStore((s) => s.connectionStatus)
   const gatewayUrl = useUIStore((s) => s.gatewayUrl)
 
-  const preset = MODEL_PRESETS.find((p) => p.id === presetId)
+  const modelOption = MODEL_OPTIONS.find((m) => m.id === modelId)
   const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant')
 
   const connectionDot =
@@ -60,9 +60,9 @@ export default function StatusModal({ threadId, onClose }: StatusModalProps) {
         <div className="max-h-[70vh] overflow-y-auto divide-y divide-white/5">
           {/* Model */}
           <Section title="Model">
-            <Row label="Preset" value={preset?.label ?? presetId} />
-            <Row label="Model ID" value={preset?.model ?? presetId} mono />
-            <Row label="Reasoning" value={reasoning ?? preset?.reasoningEffort ?? 'default'} />
+            <Row label="Model" value={modelOption?.label ?? modelId} />
+            <Row label="Model ID" value={modelOption?.model ?? modelId} mono />
+            <Row label="Reasoning" value={reasoning ?? 'auto'} />
           </Section>
 
           {/* Connection */}

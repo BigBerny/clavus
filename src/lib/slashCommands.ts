@@ -1,5 +1,5 @@
 import { isValidReasoningLevel, VALID_REASONING_LEVELS, type ReasoningLevel } from '../state/chatSettings'
-import { MODEL_PRESETS } from '../gateway/presets'
+import { MODEL_OPTIONS } from '../gateway/presets'
 
 export interface SlashCommand {
   command: string
@@ -16,8 +16,9 @@ export interface SlashContext {
   threadId: string | null
   setReasoningOverride: (threadId: string, level: ReasoningLevel | null) => void
   getReasoningOverride: (threadId: string) => ReasoningLevel | null
-  setPresetId: (id: string) => void
-  getPresetId: () => string
+  setGlobalReasoning: (level: ReasoningLevel | null) => void
+  setModelId: (id: string) => void
+  getModelId: () => string
   clearChat: () => void
   regenerateLast: () => void
   showHelp: () => void
@@ -37,16 +38,16 @@ export interface SlashResult {
 export const SLASH_COMMANDS: SlashCommand[] = [
   {
     command: '/reasoning',
-    description: 'Set reasoning effort for this chat',
-    arg: 'none|minimal|low|medium|high|xhigh',
-    subArgs: [...VALID_REASONING_LEVELS],
+    description: 'Set reasoning effort',
+    arg: 'auto|none|minimal|low|medium|high|xhigh',
+    subArgs: ['auto', ...VALID_REASONING_LEVELS],
     local: true,
   },
   {
     command: '/model',
-    description: 'Switch model preset',
-    arg: MODEL_PRESETS.map((p) => p.id).join('|'),
-    subArgs: MODEL_PRESETS.map((p) => p.id),
+    description: 'Switch model',
+    arg: MODEL_OPTIONS.map((m) => m.id).join('|'),
+    subArgs: MODEL_OPTIONS.map((m) => m.id),
     local: true,
   },
   { command: '/help', description: 'List available commands', local: true },
@@ -107,21 +108,31 @@ export async function tryRunSlashCommand(input: string, ctx: SlashContext): Prom
 }
 
 function handleReasoning(args: string, ctx: SlashContext): SlashResult {
-  if (!ctx.threadId) {
-    ctx.toast('Open a chat first to set reasoning level')
-    return { handled: true }
-  }
   if (!args) {
-    const current = ctx.getReasoningOverride(ctx.threadId)
-    ctx.toast(current ? `Reasoning: ${current}` : 'Reasoning: default (no override)')
-    return { handled: true, message: current ?? 'default' }
+    if (ctx.threadId) {
+      const current = ctx.getReasoningOverride(ctx.threadId)
+      ctx.toast(current ? `Reasoning: ${current}` : 'Reasoning: auto (no override)')
+    } else {
+      ctx.toast('Reasoning: auto (no thread)')
+    }
+    return { handled: true }
   }
   const level = args.toLowerCase()
+  if (level === 'auto') {
+    if (ctx.threadId) ctx.setReasoningOverride(ctx.threadId, null)
+    else ctx.setGlobalReasoning(null)
+    ctx.toast('Reasoning: auto')
+    return { handled: true, message: 'auto' }
+  }
   if (!isValidReasoningLevel(level)) {
-    ctx.toast(`Invalid level — use ${VALID_REASONING_LEVELS.join(', ')}`)
+    ctx.toast(`Invalid level — use auto, ${VALID_REASONING_LEVELS.join(', ')}`)
     return { handled: true }
   }
-  ctx.setReasoningOverride(ctx.threadId, level)
+  if (ctx.threadId) {
+    ctx.setReasoningOverride(ctx.threadId, level)
+  } else {
+    ctx.setGlobalReasoning(level)
+  }
   // Best-effort: also sync the global default to hermes-webui
   void ctx.syncReasoningToHermes?.(level).catch(() => {})
   ctx.toast(`Reasoning: ${level}`)
@@ -130,23 +141,23 @@ function handleReasoning(args: string, ctx: SlashContext): SlashResult {
 
 function handleModel(args: string, ctx: SlashContext): SlashResult {
   if (!args) {
-    const current = ctx.getPresetId()
-    const preset = MODEL_PRESETS.find((p) => p.id === current)
-    ctx.toast(`Model: ${preset?.label ?? current}`)
+    const current = ctx.getModelId()
+    const model = MODEL_OPTIONS.find((m) => m.id === current)
+    ctx.toast(`Model: ${model?.label ?? current}`)
     return { handled: true }
   }
   const arg = args.toLowerCase()
-  const preset = MODEL_PRESETS.find(
-    (p) => p.id.toLowerCase() === arg || p.shortLabel.toLowerCase() === arg || p.label.toLowerCase() === arg,
+  const model = MODEL_OPTIONS.find(
+    (m) => m.id.toLowerCase() === arg || m.shortLabel.toLowerCase() === arg || m.label.toLowerCase() === arg,
   )
-  if (!preset) {
-    const ids = MODEL_PRESETS.map((p) => p.id).join(', ')
+  if (!model) {
+    const ids = MODEL_OPTIONS.map((m) => m.id).join(', ')
     ctx.toast(`Unknown model — try ${ids}`)
     return { handled: true }
   }
-  ctx.setPresetId(preset.id)
-  ctx.toast(`Model: ${preset.label}`)
-  return { handled: true, message: preset.id }
+  ctx.setModelId(model.id)
+  ctx.toast(`Model: ${model.label}`)
+  return { handled: true, message: model.id }
 }
 
 async function handleTasks(args: string, ctx: SlashContext): Promise<SlashResult> {
