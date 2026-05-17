@@ -240,7 +240,7 @@ export function ChatView({ messages, title, threadId }: Props) {
 
   return (
     <div className="flex-1 flex flex-col relative min-h-0 chat-bg">
-      {/* Floating title pill (mobile-only — desktop uses Header.tsx) */}
+      {/* Floating title pill (mobile-only) */}
       {title && (
         <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none md:hidden" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
           <div className="px-3.5 py-1.5 rounded-full glass">

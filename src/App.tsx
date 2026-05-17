@@ -1016,16 +1016,6 @@ export function App() {
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
-      {/* macOS-style window chrome — desktop only (decorative). */}
-      {isDesktop && (
-        <div className="h-7 shrink-0 flex items-center px-4 border-b border-border bg-background/60 select-none">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]" />
-            <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]" />
-          </div>
-        </div>
-      )}
       {/* Connection status banners */}
       {connectionStatus === 'disconnected' && (
         <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15">
@@ -1064,6 +1054,10 @@ export function App() {
             onGoHome={() => setVisiblePanel('home')}
             onOpenDoc={(path, title) => {
               const tabId = applyRoute({ kind: 'file', path, title })
+              if (tabId) setVisiblePanel(tabId)
+            }}
+            onOpenThread={(threadId) => {
+              const tabId = applyRoute({ kind: 'chat', threadId })
               if (tabId) setVisiblePanel(tabId)
             }}
           />
