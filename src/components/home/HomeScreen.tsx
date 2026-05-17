@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThreadsStore, type Thread } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
 import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab } from '../../state/tabs'
+import { ThreadSearch } from './ThreadSearch.tsx'
+import { applyRoute } from '../../state/router.ts'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -373,6 +375,11 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
     onSelectTab?.(id)
   }, [onSelectTab])
 
+  const handleSelectThread = useCallback((threadId: string) => {
+    const tabId = applyRoute({ kind: 'chat', threadId })
+    if (tabId) onSelectTab?.(tabId)
+  }, [onSelectTab])
+
   const handleOpenDoc = useCallback((path: string) => {
     // Open as a marksense tab so it sits next to its parent conversation
     const docId = `marksense:${path}`
@@ -411,6 +418,11 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
             What would you like to think about?
           </p>
         </header>
+
+        {/* Search */}
+        <section className="mb-6">
+          <ThreadSearch onSelectThread={handleSelectThread} />
+        </section>
 
         {/* Push notification prompt */}
         {pushState === 'prompt' && onEnablePush && (

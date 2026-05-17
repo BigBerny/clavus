@@ -1,6 +1,7 @@
 import { memo, useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import type { Tab, ChatTab, MarksenseTab } from '../../state/tabs.ts'
 import { useThreadsStore, type Thread } from '../../state/threads.ts'
+import { useThreadSearch, type SearchHit } from '../../lib/threadSearch.ts'
 
 interface Props {
   tabs: Tab[]
@@ -13,6 +14,12 @@ interface Props {
    * Receives the doc path (e.g. '/travel/kyoto.md'); App opens a Marksense tab.
    */
   onOpenDoc?: (path: string, title?: string) => void
+  /**
+   * Called when the user picks a thread from search results. The thread may
+   * not yet have an open tab on this device (synced from another browser),
+   * so we route by threadId rather than tabId.
+   */
+  onOpenThread?: (threadId: string) => void
 }
 
 const SIDEBAR_MIN = 200
@@ -98,6 +105,10 @@ const ArchiveIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>
 )
 
+const SearchIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+)
+
 export const DesktopSidebar = memo(function DesktopSidebar({
   tabs,
   activeTabId,
@@ -105,15 +116,44 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   onNewChat,
   onGoHome,
   onOpenDoc,
+  onOpenThread,
 }: Props) {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useSidebarWidth()
   const [isResizing, setIsResizing] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
   const threads = useThreadsStore((s) => s.threads)
   const archiveThread = useThreadsStore((s) => s.archiveThread)
   const unarchiveThread = useThreadsStore((s) => s.unarchiveThread)
+  const { results: searchResults, loading: searchLoading } = useThreadSearch(searchQuery)
+  const isSearching = searchQuery.trim().length >= 2
+
+  // Cmd/Ctrl+K to focus the search input
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+        searchInputRef.current?.select()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  const handleSelectSearchHit = useCallback((hit: SearchHit) => {
+    // If the thread already has an open tab, focus it; otherwise route by threadId.
+    const existing = tabs.find((t) => t.type === 'chat' && (t as ChatTab).threadId === hit.threadId)
+    if (existing) {
+      onSelectTab(existing.id)
+    } else if (onOpenThread) {
+      onOpenThread(hit.threadId)
+    }
+    setSearchQuery('')
+  }, [tabs, onSelectTab, onOpenThread])
 
   // Helper: get the Thread record for a chat tab, or undefined for marksense/file
   const threadFor = (tab: Tab): Thread | undefined => {
@@ -264,9 +304,66 @@ export const DesktopSidebar = memo(function DesktopSidebar({
         </div>
       </button>
 
-      {/* Tab list */}
+      {/* Search */}
+      <div className="px-3 pt-1 pb-2">
+        <div className="relative">
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 pointer-events-none">
+            {SearchIcon}
+          </span>
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setSearchQuery('')
+                ;(e.target as HTMLInputElement).blur()
+              }
+            }}
+            placeholder="Search conversations…"
+            aria-label="Search conversations"
+            className="w-full pl-8 pr-2 py-1.5 text-[12.5px] rounded-md bg-accent-soft/60 text-foreground placeholder:text-muted-foreground/60 border border-transparent focus:outline-none focus:border-primary/30 focus:bg-accent-soft transition-colors"
+          />
+        </div>
+      </div>
+
+      {/* Tab list / search results */}
       <div className="flex-1 overflow-y-auto scrollbar-fine py-1">
-        {tabs.length === 0 ? (
+        {isSearching ? (
+          <div className="pb-1">
+            {searchLoading && searchResults.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <p className="text-[12px] text-muted-foreground/70">Searching…</p>
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="px-4 py-6 text-center">
+                <p className="text-[12px] text-muted-foreground/70">No results</p>
+              </div>
+            ) : (
+              <>
+                <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none">
+                  Results
+                </div>
+                {searchResults.map((hit, i) => (
+                  <div key={`${hit.threadId}-${hit.messageId}-${i}`} className="mx-1.5">
+                    <button
+                      onClick={() => handleSelectSearchHit(hit)}
+                      className="inline-btn w-full px-2 py-1.5 rounded-lg text-left hover:bg-accent-soft transition-colors"
+                    >
+                      <div className="text-[12.5px] font-medium text-foreground/90 truncate">
+                        {hit.threadTitle || 'Untitled'}
+                      </div>
+                      <div className="text-[11.5px] text-muted-foreground line-clamp-2" style={{ overflowWrap: 'break-word' }}>
+                        {hit.snippet}
+                      </div>
+                    </button>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        ) : tabs.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-[13px] text-muted-foreground/70">No conversations yet</p>
           </div>

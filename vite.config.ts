@@ -340,6 +340,80 @@ function threadsApiPlugin() {
             return
           }
 
+          if (req.url.startsWith('/api/threads/search') && req.method === 'GET') {
+            const url = new URL(req.url, 'http://localhost')
+            const q = (url.searchParams.get('q') || '').trim()
+            const limit = Math.max(1, Math.min(100, parseInt(url.searchParams.get('limit') || '20', 10) || 20))
+
+            if (q.length < 2) {
+              res.end(JSON.stringify([]))
+              return
+            }
+
+            const needle = q.toLowerCase()
+            const threads = fs.existsSync(threadsFile)
+              ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
+              : []
+            // Most recently updated threads first
+            const sortedThreads = [...threads].sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0))
+
+            const hits: any[] = []
+            for (const thread of sortedThreads) {
+              if (hits.length >= limit) break
+
+              // Title match
+              if (typeof thread.title === 'string' && thread.title.toLowerCase().includes(needle)) {
+                hits.push({
+                  threadId: thread.id,
+                  threadTitle: thread.title,
+                  messageId: '',
+                  role: 'user',
+                  snippet: thread.title,
+                  timestamp: thread.updatedAt || 0,
+                })
+                if (hits.length >= limit) break
+              }
+
+              // Message content match
+              let messages: any[] = []
+              try {
+                const msgFile = nodePath.join(messagesDir, `${thread.id}.json`)
+                if (fs.existsSync(msgFile)) {
+                  messages = JSON.parse(fs.readFileSync(msgFile, 'utf-8'))
+                }
+              } catch {
+                continue
+              }
+
+              // Newest messages first within a thread
+              const sortedMsgs = [...messages].sort((a: any, b: any) => (b.timestamp || b.createdAt || 0) - (a.timestamp || a.createdAt || 0))
+
+              for (const msg of sortedMsgs) {
+                if (hits.length >= limit) break
+                if (msg.role === 'system') continue
+                const content = typeof msg.content === 'string' ? msg.content : ''
+                if (!content) continue
+                const lc = content.toLowerCase()
+                const idx = lc.indexOf(needle)
+                if (idx === -1) continue
+                const start = Math.max(0, idx - 30)
+                const end = Math.min(content.length, idx + needle.length + 30)
+                const snippet = (start > 0 ? '…' : '') + content.slice(start, end) + (end < content.length ? '…' : '')
+                hits.push({
+                  threadId: thread.id,
+                  threadTitle: thread.title,
+                  messageId: msg.id || '',
+                  role: msg.role === 'assistant' ? 'assistant' : 'user',
+                  snippet,
+                  timestamp: msg.timestamp || msg.createdAt || 0,
+                })
+              }
+            }
+
+            res.end(JSON.stringify(hits))
+            return
+          }
+
           res.statusCode = 404
           res.end(JSON.stringify({ error: 'Not found' }))
         } catch (err: any) {
