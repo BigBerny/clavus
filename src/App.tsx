@@ -1194,7 +1194,7 @@ export function App() {
                 <div
                   key={tab.id}
                   ref={setPanelRef(tab.id)}
-                  className="basis-full max-w-full h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
+                  className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
                   style={{ touchAction: 'pan-x pan-y' }}
                   {...(!isActive ? { inert: true } : {})}
                 >
@@ -1228,7 +1228,7 @@ export function App() {
           {/* Home panel (rightmost) */}
           <div
             ref={setPanelRef('home')}
-            className="basis-full max-w-full h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 overflow-hidden box-border"
+            className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 overflow-hidden box-border"
             {...(visiblePanel !== 'home' ? { inert: true } : {})}
           >
           <HomeScreen
