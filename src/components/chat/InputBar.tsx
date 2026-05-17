@@ -514,7 +514,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   return (
     <div
-      className={`bg-background border-t border-border safe-area-bottom relative ${dragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
+      className={`safe-area-bottom relative ${dragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -537,7 +537,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         )}
         {/* @-mention file picker */}
         {atQuery !== null && (
-          <div className="mb-2 rounded-xl bg-card border border-border overflow-hidden shadow-lg animate-[fadeSlideIn_0.2s_ease-out]" role="listbox" aria-label="Mention a file">
+          <div className="mb-2 rounded-[var(--glass-radius)] glass-heavy overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox" aria-label="Mention a file">
             <div className="px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground font-medium border-b border-border flex items-center gap-1.5">
               <span>@ Attach file</span>
               {atQuery && <span className="opacity-70 normal-case tracking-normal">— "{atQuery}"</span>}
@@ -580,7 +580,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           </div>
         )}
         {showSlashPalette && filteredCommands.length > 0 && (
-          <div className="mb-2 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox">
+          <div className="mb-2 rounded-[var(--glass-radius)] glass-heavy overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox">
             {filteredCommands.map((cmd, i) => (
               <button
                 key={cmd.command}
@@ -680,7 +680,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         />
 
         {/* ─── Unified composer card ────────────────────────────────── */}
-        <div className="relative rounded-2xl bg-card border border-border shadow-sm transition-shadow focus-within:shadow-md focus-within:border-ring/40">
+        <div className="relative rounded-3xl glass-heavy transition-shadow focus-within:shadow-md focus-within:border-[var(--glass-border-strong)]">
           {isRecording ? (
             <div className="flex items-center gap-3 px-4 py-3">
               <div className="w-2 h-2 rounded-full bg-red-500 recording-pulse flex-shrink-0" />
@@ -869,13 +869,13 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       )}
       {helpOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeSlideIn_0.15s_ease-out]"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md animate-[fadeSlideIn_0.15s_ease-out]"
           role="dialog"
           aria-label="Slash commands"
           onClick={() => setHelpOpen(false)}
         >
           <div
-            className="max-w-md w-[92vw] rounded-2xl bg-surface-light dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/40 shadow-xl shadow-black/30 overflow-hidden"
+            className="max-w-md w-[92vw] rounded-[var(--glass-radius-lg)] glass-heavy overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">

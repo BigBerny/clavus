@@ -97,6 +97,9 @@ export function useChat() {
       addMessage(threadId, { role: 'user', content: content.trim(), images })
       // Fire title generation immediately (async, non-blocking)
       generateTitleIfNeeded(threadId)
+      // Reactivate thread if it was auto-archived
+      const t = useThreadsStore.getState().threads.find(t => t.id === threadId)
+      if (t?.archived) useThreadsStore.getState().unarchiveThread(threadId)
     }
 
     const assistantId = store.getState().addMessage(threadId, {

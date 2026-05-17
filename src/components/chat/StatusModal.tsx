@@ -36,13 +36,13 @@ export default function StatusModal({ threadId, onClose }: StatusModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeSlideIn_0.15s_ease-out]"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md animate-[fadeSlideIn_0.15s_ease-out]"
       role="dialog"
       aria-label="Status"
       onClick={onClose}
     >
       <div
-        className="max-w-md w-[92vw] rounded-2xl bg-surface-light dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/40 shadow-xl shadow-black/30 overflow-hidden"
+        className="max-w-md w-[92vw] rounded-[var(--glass-radius-lg)] glass-heavy overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

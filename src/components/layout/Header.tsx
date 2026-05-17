@@ -37,7 +37,7 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
   return (
     <>
       {/* Safe area background for notch */}
-      <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
+      <div className="safe-area-top" />
 
       {/* Recording bar */}
       {isRecording && (
@@ -56,7 +56,7 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
         </div>
       )}
 
-      <header className="flex items-center justify-between px-3 h-12 border-b border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark select-none">
+      <header className="flex items-center justify-between px-3 h-12 glass select-none">
         {/* Left: Back button → scrolls to home */}
         <button
           onClick={handleBack}
@@ -69,7 +69,7 @@ export function Header({ isRecording, recordingDuration, onCancelRecording, isSt
 
         {/* Center: Conversation title */}
         <div className="flex-1 min-w-0 text-center px-2">
-          <h1 className="text-[13px] font-medium text-text-light dark:text-text-dark truncate">
+          <h1 className="text-[13px] font-semibold text-foreground truncate">
             {title}
           </h1>
           {isStreaming && (

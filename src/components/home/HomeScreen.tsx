@@ -135,7 +135,7 @@ function ActionTile({ title, description, icon, accent, onClick }: ActionTilePro
   return (
     <button
       onClick={onClick}
-      className="inline-btn group text-left p-4 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all hover:shadow-sm"
+      className="inline-btn group text-left p-4 rounded-[var(--glass-radius)] glass hover:glass-heavy transition-all"
     >
       <div
         className="w-9 h-9 rounded-lg flex items-center justify-center mb-3"
@@ -275,7 +275,7 @@ function RecentCard({ tab, thread, onSelect, onOpenDoc, onArchive }: {
       )}
       <button
         onClick={onSelect}
-        className="inline-btn w-full text-left p-3.5 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all block"
+        className="inline-btn w-full text-left p-3.5 rounded-[var(--glass-radius)] glass hover:glass-heavy transition-all block"
         style={{
           transform: `translateX(${offsetX}px)`,
           transition: swiping ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s',
@@ -332,7 +332,7 @@ function ChannelTile({ label, icon, accent, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="inline-btn flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all"
+      className="inline-btn flex flex-col items-center justify-center gap-1.5 p-3 rounded-[var(--glass-radius)] glass hover:glass-heavy transition-all"
     >
       <span style={{ color: `var(--color-${accent})` }}>{icon}</span>
       <span className="text-[12px] font-medium text-foreground">{label}</span>

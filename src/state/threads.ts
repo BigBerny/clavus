@@ -37,6 +37,9 @@ interface ThreadsState {
 const THREADS_KEY = 'clavus-threads'
 const ACTIVE_THREAD_KEY = 'clavus-active-thread'
 
+/** Threads with no activity in this window are auto-archived on app load / refocus. */
+const ARCHIVE_IDLE_MS = 24 * 60 * 60 * 1000
+
 function generateThreadId(): string {
   return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -139,6 +142,30 @@ function syncMessagesToServer(threadId: string, messages: Message[]) {
   }, 500))
 }
 
+/**
+ * Archive any non-archived thread whose last activity is older than ARCHIVE_IDLE_MS.
+ * Safe to call repeatedly (e.g. on page load and on tab refocus).
+ * Returns the number of threads newly archived.
+ */
+export function archiveStaleThreads(): number {
+  const cutoff = Date.now() - ARCHIVE_IDLE_MS
+  const current = useThreadsStore.getState().threads
+  let count = 0
+  const next = current.map((t) => {
+    if (!t.archived && t.updatedAt < cutoff) {
+      count++
+      return { ...t, archived: true }
+    }
+    return t
+  })
+  if (count > 0) {
+    try { localStorage.setItem(THREADS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+    useThreadsStore.setState({ threads: next })
+    syncThreadsToServer(next)
+  }
+  return count
+}
+
 // Pull from server on startup (merge with localStorage)
 export async function syncFromServer(): Promise<boolean> {
   try {
@@ -190,6 +217,21 @@ export async function syncFromServer(): Promise<boolean> {
     // Push merged threads to server
     syncThreadsToServer(mergedThreads)
     
+    // Auto-archive threads with no activity in the last 24h
+    const archiveCutoff = Date.now() - ARCHIVE_IDLE_MS
+    let archiveDirty = false
+    for (let i = 0; i < mergedThreads.length; i++) {
+      const t = mergedThreads[i]
+      if (!t.archived && t.updatedAt < archiveCutoff) {
+        mergedThreads[i] = { ...t, archived: true }
+        archiveDirty = true
+      }
+    }
+    if (archiveDirty) {
+      try { localStorage.setItem(THREADS_KEY, JSON.stringify(mergedThreads)) } catch { /* ignore */ }
+      syncThreadsToServer(mergedThreads)
+    }
+
     // Update Zustand store
     const store = useThreadsStore.getState()
     const currentActiveId = store.activeThreadId
@@ -198,10 +240,11 @@ export async function syncFromServer(): Promise<boolean> {
       activeThreadId: mergedThreads.find(t => t.id === currentActiveId) ? currentActiveId : mergedThreads[0]?.id || '',
     })
 
-    // Auto-open tabs only for recent threads (last 24h) to keep startup fast
+    // Auto-open tabs only for recent, non-archived threads to keep startup fast
     const { ensureChatTabsBatch } = await import('./tabs')
-    const recentCutoff = Date.now() - 24 * 60 * 60 * 1000
+    const recentCutoff = archiveCutoff
     const recentWithMessages = mergedThreads.filter(t => {
+      if (t.archived) return false
       if (t.updatedAt < recentCutoff) return false
       const msgs = loadThreadMessages(t.id)
       return msgs.length > 0

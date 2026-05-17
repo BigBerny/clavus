@@ -4,7 +4,7 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
-import { useThreadsStore, syncFromServer } from './state/threads.ts'
+import { useThreadsStore, syncFromServer, archiveStaleThreads } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
 import { useTabsStore, ensureChatTab, openOrFocusFinderTab, type ChatTab, type FileTab, type MarksenseTab, type FinderTab } from './state/tabs.ts'
 import { applyRoute, getCurrentRoute, onRouteChange, pushHash, type Route } from './state/router.ts'
@@ -31,14 +31,14 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   const [token, setToken] = useState('')
 
   return (
-    <div className="h-full flex items-center justify-center bg-surface-light dark:bg-surface-dark p-6">
-      <div className="w-full max-w-sm space-y-6">
+    <div className="h-full flex items-center justify-center chat-bg p-6">
+      <div className="w-full max-w-sm space-y-6 glass-heavy rounded-[var(--glass-radius-lg)] p-8">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-accent/10 flex items-center justify-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-[var(--glass-radius)] glass flex items-center justify-center">
             <span className="text-3xl font-bold text-accent">C</span>
           </div>
-          <h1 className="text-xl font-semibold text-text-light dark:text-text-dark mb-1">Welcome to Clavus</h1>
-          <p className="text-sm text-text-light-muted dark:text-text-dark-muted">
+          <h1 className="text-xl font-semibold text-foreground mb-1">Welcome to Clavus</h1>
+          <p className="text-sm text-muted-foreground">
             Enter your Hermes API token to get started.
           </p>
         </div>
@@ -51,12 +51,12 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
             placeholder="Hermes API token..."
             autoFocus
             aria-label="Hermes API token"
-            className="w-full px-4 py-3 text-sm rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted dark:placeholder:text-text-dark-muted border border-surface-light-3 dark:border-surface-dark-3 focus:outline-none focus:ring-2 focus:ring-accent/50"
+            className="w-full px-4 py-3 text-sm rounded-[var(--glass-radius)] glass text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
           <button
             onClick={() => token.trim() && onSave(token.trim())}
             disabled={!token.trim()}
-            className="w-full py-3 text-sm font-medium rounded-xl bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="w-full py-3 text-sm font-medium rounded-[var(--glass-radius)] bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             Connect
           </button>
@@ -443,6 +443,8 @@ export function App() {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         checkPendingNavigation()
+        // Re-run idle auto-archive in case the tab was left open across the cutoff
+        archiveStaleThreads()
         // Recover interrupted responses when app becomes visible
         const activeId = useThreadsStore.getState().getActiveThread()?.id
         if (activeId) checkRecovery(activeId)
@@ -815,16 +817,20 @@ export function App() {
     }
   }, [])
 
-  // Handle closing a tab via pull-down gesture
-  const handleCloseTab = useCallback((tabId: string) => {
+  // Handle archiving a tab via pull-down gesture (mobile)
+  const handleArchiveTab = useCallback((tabId: string) => {
+    const tab = sortedTabs.find(t => t.id === tabId)
+    if (tab?.type === 'chat') {
+      const threadId = (tab as ChatTab).threadId
+      useThreadsStore.getState().archiveThread(threadId)
+    }
+    // Navigate to neighbor or home
     const neighbor = closeTab(tabId)
     if (neighbor) {
-      // Scroll to the neighbor tab
       requestAnimationFrame(() => {
         scrollToTab(neighbor.id)
       })
     } else {
-      // No tabs left, go home
       const container = scrollContainerRef.current
       if (container) {
         isProgrammaticScroll.current = true
@@ -837,7 +843,7 @@ export function App() {
         })
       }
     }
-  }, [closeTab, scrollToTab])
+  }, [closeTab, scrollToTab, sortedTabs])
 
   // Determine if the visible tab is a chat tab (to show InputBar)
   const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
@@ -864,19 +870,6 @@ export function App() {
     const id = openOrFocusFinderTab()
     setVisiblePanel(id)
   }, [setVisiblePanel])
-
-  const handleDesktopCloseTab = useCallback((tabId: string) => {
-    closeTab(tabId)
-    if (visiblePanel === tabId) {
-      // Navigate to most recent remaining tab or home
-      const remaining = sortedTabs.filter(t => t.id !== tabId)
-      if (remaining.length > 0) {
-        setVisiblePanel(remaining[remaining.length - 1].id)
-      } else {
-        setVisiblePanel('home')
-      }
-    }
-  }, [closeTab, visiblePanel, sortedTabs])
 
   const markHorizontalGestureStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const wasSwipeInProgress = !!userGestureEndTimer.current
@@ -1069,7 +1062,6 @@ export function App() {
             onSelectTab={handleDesktopSelectTab}
             onNewChat={handleDesktopNewChat}
             onGoHome={() => setVisiblePanel('home')}
-            onCloseTab={handleDesktopCloseTab}
             onOpenDoc={(path, title) => {
               const tabId = applyRoute({ kind: 'file', path, title })
               if (tabId) setVisiblePanel(tabId)
@@ -1165,7 +1157,7 @@ export function App() {
                   style={{ touchAction: 'pan-x pan-y' }}
                   {...(!isActive ? { inert: true } : {})}
                 >
-                  <PullDownDismissable tabId={tab.id} onDismiss={handleCloseTab}>
+                  <PullDownDismissable tabId={tab.id} onDismiss={handleArchiveTab}>
                     <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
                       {tab.type === 'chat' && (
                         <ChatViewPanel

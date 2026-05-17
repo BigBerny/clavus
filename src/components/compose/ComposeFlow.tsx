@@ -247,7 +247,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
   }, [voice])
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-surface-dark/95 backdrop-blur-xl animate-[fadeSlideIn_0.2s_ease-out]">
+    <div className="fixed inset-0 z-50 flex flex-col bg-black/40 backdrop-blur-xl animate-[fadeSlideIn_0.2s_ease-out]">
       {/* Header */}
       <div className="safe-area-top bg-transparent" />
       <div className="flex items-center justify-between px-4 py-3">
@@ -326,7 +326,7 @@ export function ComposeFlow({ channel, onClose }: Props) {
 
         {composeState === 'done' && composedText && (
           <div className="w-full max-w-md animate-[fadeSlideIn_0.3s_ease-out]">
-            <div className="rounded-2xl bg-surface-dark-2 border border-surface-dark-3/50 p-4">
+            <div className="rounded-[var(--glass-radius-lg)] glass-heavy p-4">
               <p className="text-sm text-text-dark whitespace-pre-wrap leading-relaxed select-text">{composedText}</p>
             </div>
             <div className="flex items-center justify-center gap-2 mt-4">

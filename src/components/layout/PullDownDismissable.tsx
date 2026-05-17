@@ -185,10 +185,10 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
 
   return (
     <div className="h-full flex flex-col min-h-0 relative">
-      {/* "Release to close" indicator — outside transformed container so it stays in place */}
+      {/* "Release to archive" indicator — outside transformed container so it stays in place */}
       {pastThreshold && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-50 px-3 py-1 rounded-full bg-red-500/80 text-white text-[11px] font-medium animate-[fadeSlideIn_0.15s_ease-out] pointer-events-none">
-          Release to close
+          Release to archive
         </div>
       )}
       <div ref={containerRef} className="h-full flex flex-col min-h-0" style={{ willChange: 'transform' }}>

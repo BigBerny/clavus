@@ -243,7 +243,7 @@ export function ChatView({ messages, title, threadId }: Props) {
       {/* Floating title pill (mobile-only — desktop uses Header.tsx) */}
       {title && (
         <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none md:hidden" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
-          <div className="px-3.5 py-1.5 rounded-full bg-surface-light-2/80 dark:bg-surface-dark-2/80 backdrop-blur-xl border border-border-light dark:border-border-dark">
+          <div className="px-3.5 py-1.5 rounded-full glass">
             <span className="text-[12px] font-medium text-text-light dark:text-text-dark truncate max-w-[250px] block">{title}</span>
           </div>
         </div>
@@ -322,7 +322,7 @@ export function ChatView({ messages, title, threadId }: Props) {
           onTouchStart={(e) => e.preventDefault()}
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => { e.stopPropagation(); scrollToBottom() }}
-          className="absolute bottom-2 right-3 flex items-center justify-center w-11 h-11 rounded-full bg-surface-light/95 dark:bg-surface-dark-2/95 text-text-light-muted dark:text-text-dark-muted shadow-lg shadow-black/10 dark:shadow-black/30 border border-surface-light-3/40 dark:border-surface-dark-3/40 backdrop-blur-sm hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+          className="absolute bottom-2 right-3 flex items-center justify-center w-11 h-11 rounded-full glass text-muted-foreground active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
           aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to bottom'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>

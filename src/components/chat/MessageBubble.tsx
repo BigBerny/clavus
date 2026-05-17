@@ -450,7 +450,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         <div className={`max-w-[85%] px-3.5 py-2 rounded-xl text-[12px] text-center leading-snug ${
           isError
             ? 'bg-red-500/8 text-red-500/90 dark:text-red-400/90 border border-red-500/15'
-            : 'bg-surface-light-2/60 dark:bg-surface-dark-2/60 text-text-light-muted/70 dark:text-text-dark-muted/70'
+            : 'glass-light text-muted-foreground/70'
         }`}>
           {isError ? (
             <div className="flex items-center justify-center gap-2">
@@ -496,7 +496,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                   isLastInGroup ? 'rounded-[18px] rounded-tr-[6px]' :
                   'rounded-[18px] rounded-r-[6px]'
                 }`
-              : `bg-card border border-border text-foreground ${
+              : `glass-light text-foreground ${
                   showAvatar && isLastInGroup ? 'rounded-[18px]' :
                   showAvatar ? 'rounded-[18px] rounded-bl-[6px]' :
                   isLastInGroup ? 'rounded-[18px] rounded-tl-[6px]' :

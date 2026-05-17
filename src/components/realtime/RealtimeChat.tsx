@@ -61,7 +61,8 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
 
         if (!tokenResp.ok) {
           const err = await tokenResp.json().catch(() => ({ error: 'Failed to get session token' }))
-          throw new Error(err.error || `HTTP ${tokenResp.status}`)
+          const errMsg = typeof err.error === 'string' ? err.error : err.error?.message || `HTTP ${tokenResp.status}`
+          throw new Error(errMsg)
         }
 
         const session = await tokenResp.json()

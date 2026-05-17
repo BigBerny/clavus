@@ -40,6 +40,19 @@
   --radius: 0.625rem;
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
 
+  /* === Liquid Glass material tokens ======================================= */
+  --glass-bg: oklch(1 0 0 / 0.12);
+  --glass-bg-heavy: oklch(1 0 0 / 0.22);
+  --glass-border: oklch(1 0 0 / 0.18);
+  --glass-border-strong: oklch(1 0 0 / 0.35);
+  --glass-shadow: oklch(0.3 0.02 260 / 0.12);
+  --glass-inner-glow: oklch(1 0 0 / 0.25);
+  --glass-blur: 16px;
+  --glass-saturate: 180%;
+  --glass-radius: 1.25rem;
+  --glass-radius-lg: 1.75rem;
+  --glass-radius-full: 9999px;
+
   /* === Existing token compatibility =======================================
      These are re-pointed to the new mockup palette so every component that
      uses the old names instantly picks up the new look without code changes.
@@ -93,6 +106,14 @@
   /* Legacy aliases for dark mode */
   --color-accent: oklch(0.72 0.15 280);
   --color-accent-hover: oklch(0.78 0.15 280);
+
+  /* Liquid Glass — dark mode */
+  --glass-bg: oklch(1 0 0 / 0.06);
+  --glass-bg-heavy: oklch(1 0 0 / 0.12);
+  --glass-border: oklch(1 0 0 / 0.10);
+  --glass-border-strong: oklch(1 0 0 / 0.20);
+  --glass-shadow: oklch(0 0 0 / 0.35);
+  --glass-inner-glow: oklch(1 0 0 / 0.08);
 }
 
 :root {
@@ -263,12 +284,18 @@ button.inline-btn {
   opacity: 0.9;
 }
 
-/* Clean chat background — no pattern */
+/* Chat background — subtle gradient so glass surfaces have content to refract */
 .chat-bg {
-  background: var(--color-surface-light);
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, color-mix(in oklch, var(--color-cat-violet) 6%, transparent), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 85% 90%, color-mix(in oklch, var(--color-cat-doc) 5%, transparent), transparent 70%),
+    var(--color-surface-light);
 }
 .dark .chat-bg {
-  background: var(--color-surface-dark);
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, color-mix(in oklch, var(--color-cat-violet) 4%, transparent), transparent 70%),
+    radial-gradient(ellipse 60% 50% at 85% 90%, color-mix(in oklch, var(--color-cat-doc) 3%, transparent), transparent 70%),
+    var(--color-surface-dark);
 }
 
 /* Message fade + slide animation */
@@ -558,5 +585,41 @@ html.theme-ready *::after {
       radial-gradient(60% 50% at 30% 0%, color-mix(in oklch, var(--color-cat-violet) 22%, transparent), transparent 70%),
       radial-gradient(50% 60% at 90% 100%, color-mix(in oklch, var(--color-cat-doc) 18%, transparent), transparent 70%),
       var(--color-background);
+  }
+
+  /* === Liquid Glass utilities ============================================= */
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border);
+    box-shadow:
+      0 8px 32px var(--glass-shadow),
+      inset 0 1px 0 var(--glass-inner-glow);
+  }
+  .glass-heavy {
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+    border: 1px solid var(--glass-border-strong);
+    box-shadow:
+      0 8px 32px var(--glass-shadow),
+      inset 0 1px 0 var(--glass-inner-glow);
+  }
+  /* Lighter glass for elements that repeat many times (e.g. assistant bubbles) */
+  .glass-light {
+    background: var(--glass-bg);
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
+    border: 1px solid var(--glass-border);
+  }
+}
+
+/* Accessibility: reduce transparency fallback */
+@media (prefers-reduced-transparency: reduce) {
+  .glass, .glass-heavy, .glass-light {
+    background: var(--color-card) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 }

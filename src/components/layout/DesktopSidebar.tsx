@@ -1,4 +1,4 @@
-import { memo, useState, useMemo } from 'react'
+import { memo, useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import type { Tab, ChatTab, MarksenseTab } from '../../state/tabs.ts'
 import { useThreadsStore, type Thread } from '../../state/threads.ts'
 
@@ -8,12 +8,35 @@ interface Props {
   onSelectTab: (tabId: string) => void
   onNewChat: () => void
   onGoHome: () => void
-  onCloseTab: (tabId: string) => void
   /**
    * Called when the user clicks a linked-doc row under a conversation.
    * Receives the doc path (e.g. '/travel/kyoto.md'); App opens a Marksense tab.
    */
   onOpenDoc?: (path: string, title?: string) => void
+}
+
+const SIDEBAR_MIN = 200
+const SIDEBAR_MAX = 480
+const SIDEBAR_DEFAULT = 268
+const STORAGE_KEY = 'clavus-sidebar-width'
+
+function useSidebarWidth() {
+  const [width, setWidth] = useState(() => {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      const n = parseInt(stored, 10)
+      if (n >= SIDEBAR_MIN && n <= SIDEBAR_MAX) return n
+    }
+    return SIDEBAR_DEFAULT
+  })
+
+  const persist = useCallback((w: number) => {
+    const clamped = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, w))
+    setWidth(clamped)
+    localStorage.setItem(STORAGE_KEY, String(clamped))
+  }, [])
+
+  return [width, persist] as const
 }
 
 function fullDateTime(timestamp: number): string {
@@ -81,11 +104,13 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   onSelectTab,
   onNewChat,
   onGoHome,
-  onCloseTab,
   onOpenDoc,
 }: Props) {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useSidebarWidth()
+  const [isResizing, setIsResizing] = useState(false)
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const threads = useThreadsStore((s) => s.threads)
   const archiveThread = useThreadsStore((s) => s.archiveThread)
   const unarchiveThread = useThreadsStore((s) => s.unarchiveThread)
@@ -95,6 +120,31 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     if (tab.type !== 'chat') return undefined
     return threads.find((t) => t.id === (tab as ChatTab).threadId)
   }
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizeRef.current = { startX: e.clientX, startWidth: sidebarWidth }
+    setIsResizing(true)
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    if (!isResizing) return
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizeRef.current) return
+      const newWidth = resizeRef.current.startWidth + (e.clientX - resizeRef.current.startX)
+      setSidebarWidth(newWidth)
+    }
+    const handleMouseUp = () => {
+      resizeRef.current = null
+      setIsResizing(false)
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isResizing, setSidebarWidth])
 
   const { openGroups, archived, groupOrder } = useMemo(() => {
     const now = Date.now()
@@ -132,9 +182,9 @@ export const DesktopSidebar = memo(function DesktopSidebar({
           <button
             onClick={() => onSelectTab(tab.id)}
             title={fullDateTime(tab.updatedAt)}
-            className={`inline-btn w-full flex items-start gap-2 px-2 py-1.5 rounded-md text-left transition-colors group ${
+            className={`inline-btn w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left transition-colors group ${
               isActive
-                ? 'bg-primary/10'
+                ? 'bg-primary/12'
                 : 'hover:bg-accent-soft'
             } ${opts?.muted && !isActive ? 'opacity-70 hover:opacity-100' : ''}`}
           >
@@ -152,29 +202,20 @@ export const DesktopSidebar = memo(function DesktopSidebar({
               </div>
             </div>
           </button>
-          {isHovered && (
+          {isHovered && tab.type === 'chat' && (
             <div className="absolute top-1/2 -translate-y-1/2 right-1 flex items-center gap-0.5">
-              {tab.type === 'chat' && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    const threadId = (tab as ChatTab).threadId
-                    if (isArchived) unarchiveThread(threadId)
-                    else archiveThread(threadId)
-                  }}
-                  className="inline-btn w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
-                  aria-label={isArchived ? 'Unarchive' : 'Archive'}
-                  title={isArchived ? 'Unarchive' : 'Archive'}
-                >
-                  {ArchiveIcon}
-                </button>
-              )}
               <button
-                onClick={(e) => { e.stopPropagation(); onCloseTab(tab.id) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const threadId = (tab as ChatTab).threadId
+                  if (isArchived) unarchiveThread(threadId)
+                  else archiveThread(threadId)
+                }}
                 className="inline-btn w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
-                aria-label="Close tab"
+                aria-label={isArchived ? 'Unarchive' : 'Archive'}
+                title={isArchived ? 'Unarchive' : 'Archive'}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                {ArchiveIcon}
               </button>
             </div>
           )}
@@ -201,7 +242,10 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   }
 
   return (
-    <div className="w-[268px] h-full flex flex-col bg-secondary/40 border-r border-border">
+    <div
+      className="relative h-full flex flex-col glass-heavy rounded-r-[var(--glass-radius-lg)] shrink-0"
+      style={{ width: sidebarWidth }}
+    >
       {/* Header */}
       <button
         onClick={onGoHome}
@@ -267,7 +311,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
       </div>
 
       {/* Bottom actions */}
-      <div className="border-t border-border px-3 py-2">
+      <div className="border-t border-[var(--glass-border)] px-3 py-2">
         {/* Assistant identity */}
         <div className="px-2 pt-1 pb-1 flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[var(--color-cat-doc)] to-[var(--color-cat-rose)]" />
@@ -277,6 +321,15 @@ export const DesktopSidebar = memo(function DesktopSidebar({
           </div>
         </div>
       </div>
+
+      {/* Resize handle — wide hit area, thin visible indicator */}
+      <div
+        onMouseDown={handleResizeStart}
+        className="absolute top-0 -right-1.5 w-3 h-full cursor-col-resize z-10 group"
+      >
+        <div className={`absolute top-0 right-1.5 w-[2px] h-full transition-colors group-hover:bg-primary/25 ${isResizing ? 'bg-primary/40' : ''}`} />
+      </div>
+      {isResizing && <div className="fixed inset-0 z-50 cursor-col-resize" />}
     </div>
   )
 })

@@ -119,14 +119,14 @@ export const VoiceInputPill = forwardRef<HTMLDivElement, Props>(function VoiceIn
 
   const bodyClass =
     mode === 'locked'
-      ? 'bg-gradient-to-br from-emerald-600 to-emerald-500 border border-emerald-500/40 shadow-[0_4px_24px_rgba(16,185,129,0.25),inset_0_1px_2px_rgba(255,255,255,0.08)]'
+      ? 'glass-heavy border-emerald-500/40 shadow-[0_4px_24px_rgba(16,185,129,0.25),inset_0_1px_2px_rgba(255,255,255,0.08)]'
       : mode === 'holding'
-        ? 'bg-gradient-to-br from-slate-800 to-slate-900 border border-red-500 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4),0_0_24px_rgba(239,68,68,0.15)]'
-        : 'bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]'
+        ? 'glass-heavy border-red-500 shadow-[0_0_24px_rgba(239,68,68,0.15)]'
+        : 'glass-heavy'
 
   const knobClass =
     mode === 'locked'
-      ? 'bg-white/18 backdrop-blur border border-white/12'
+      ? 'bg-white/25 backdrop-blur-md border border-white/15'
       : mode === 'holding'
         ? 'bg-gradient-to-br from-red-500 to-red-600 shadow-[0_3px_16px_rgba(239,68,68,0.45)]'
         : 'bg-gradient-to-br from-blue-500 to-blue-600 shadow-[0_3px_12px_rgba(59,130,246,0.3)]'
