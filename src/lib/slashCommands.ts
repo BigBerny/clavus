@@ -21,6 +21,7 @@ export interface SlashContext {
   clearChat: () => void
   regenerateLast: () => void
   showHelp: () => void
+  showStatus: () => void
   toast: (msg: string) => void
   /** Best-effort sync to hermes-webui. Failures are swallowed. */
   syncReasoningToHermes?: (level: ReasoningLevel) => Promise<void>
@@ -172,14 +173,7 @@ async function handleTasks(args: string, ctx: SlashContext): Promise<SlashResult
 }
 
 function handleStatus(ctx: SlashContext): SlashResult {
-  const presetId = ctx.getPresetId()
-  const preset = MODEL_PRESETS.find((p) => p.id === presetId)
-  const reasoning = ctx.threadId ? ctx.getReasoningOverride(ctx.threadId) : null
-  const parts = [
-    `Model: ${preset?.label ?? presetId}`,
-    `Reasoning: ${reasoning ?? 'default'}`,
-  ]
-  ctx.toast(parts.join('\n'))
+  ctx.showStatus()
   return { handled: true }
 }
 

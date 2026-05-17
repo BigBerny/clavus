@@ -8,6 +8,7 @@ import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspace
 import { useThreadsStore } from '../../state/threads'
 import { useDraftsStore } from '../../state/drafts'
 import { VoiceInputPill } from '../voice/VoiceInputPill'
+import StatusModal from './StatusModal'
 import {
   SLASH_COMMANDS,
   filterSlashCommands,
@@ -103,10 +104,13 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     const before = value.slice(0, caret)
     const at = before.lastIndexOf('@')
     if (at === -1) return
-    // Insert as a markdown link the RichMessageRenderer will detect as a MarksenseCard.
-    // Format mirrors the existing /file/<filename> pattern.
+    // Insert as a markdown link the RichMessageRenderer will detect as a FileLinkCard.
+    // Uses the unified `#/file/<encodedPath>` deep-link format so the same URL
+    // works inside Clavus (renders as a card, opens a column) and outside (in
+    // Telegram, email, bookmarks — opens Clavus and lands on the file).
     const filename = path.split('/').pop() || path
-    const link = `[${filename}](https://mac-mini-von-janis.taild2ad59.ts.net/file/${encodeURIComponent(filename)}) `
+    const trimmed = path.startsWith('/') ? path.slice(1) : path
+    const link = `[${filename}](${window.location.origin}/#/file/${encodeURIComponent(trimmed)}) `
     const next = value.slice(0, at) + link + value.slice(caret)
     setValue(next.slice(0, 10000))
     setAtQuery(null)
@@ -226,6 +230,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   // Help overlay
   const [helpOpen, setHelpOpen] = useState(false)
+  // Status modal
+  const [statusOpen, setStatusOpen] = useState(false)
 
   // Slash command palette
   const showSlashPalette = value.startsWith('/') && !isStreaming
@@ -261,6 +267,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         else showToast('Retry is unavailable')
       },
       showHelp: () => setHelpOpen(true),
+      showStatus: () => setStatusOpen(true),
       toast: showToast,
       syncReasoningToHermes,
     })
@@ -858,6 +865,9 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           </div>
         )}
       </div>
+      {statusOpen && (
+        <StatusModal threadId={threadId ?? null} onClose={() => setStatusOpen(false)} />
+      )}
       {helpOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeSlideIn_0.15s_ease-out]"
