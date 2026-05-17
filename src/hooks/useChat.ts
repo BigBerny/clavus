@@ -4,9 +4,9 @@ import { useUIStore } from '../state/ui.ts'
 import { sendChatStream, generateTitleViaOpenRouter, recoverResponse } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
-import { usePresetStore } from '../state/preset.ts'
+import { useModelStore } from '../state/preset.ts'
 import { useChatSettingsStore } from '../state/chatSettings.ts'
-import { MODEL_PRESETS } from '../gateway/presets.ts'
+import { MODEL_OPTIONS } from '../gateway/presets.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 
@@ -109,11 +109,11 @@ export function useChat() {
     setConnectionStatus('connected')
 
     const config = getConfig()
-    // Apply selected model preset
-    const selectedPresetId = usePresetStore.getState().selectedPresetId
-    const preset = MODEL_PRESETS.find((p) => p.id === selectedPresetId)
-    if (preset) {
-      config.model = preset.model
+    // Apply selected model
+    const selectedModelId = useModelStore.getState().selectedModelId
+    const modelOption = MODEL_OPTIONS.find((m) => m.id === selectedModelId)
+    if (modelOption) {
+      config.model = modelOption.model
     }
 
     const apiMessages: ChatCompletionMessage[] = store
@@ -169,18 +169,18 @@ export function useChat() {
               outputTokens: usage.outputTokens,
               totalTokens: usage.totalTokens,
             })
-            // Use model from response if available, fallback to preset
-            const modelLabel = usage.model || preset?.shortLabel
+            // Use model from response if available, fallback to selected model
+            const modelLabel = usage.model || modelOption?.shortLabel
             if (modelLabel) {
               store.getState().setMessageModel(threadId, assistantId, modelLabel)
             }
           },
           onDone: () => {
             store.getState().finalizeMessage(threadId, assistantId)
-            // Fallback: set model from preset if onUsage didn't fire
+            // Fallback: set model from selection if onUsage didn't fire
             const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
-            if (!msg?.model && preset) {
-              store.getState().setMessageModel(threadId, assistantId, preset.shortLabel)
+            if (!msg?.model && modelOption) {
+              store.getState().setMessageModel(threadId, assistantId, modelOption.shortLabel)
             }
             store.getState().setStreaming(threadId, false)
             store.getState().setAbortController(threadId, null)
@@ -204,8 +204,7 @@ export function useChat() {
         {
           conversationId: threadId,
           reasoningEffort:
-            useChatSettingsStore.getState().getReasoningOverride(threadId) ??
-            preset?.reasoningEffort,
+            useChatSettingsStore.getState().getEffectiveReasoning(threadId) ?? undefined,
         },
       )
     } catch (error) {

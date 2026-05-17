@@ -6,7 +6,8 @@ import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
-import { useTabsStore, ensureChatTab, type ChatTab, type FileTab, type RecipeTab, type MarksenseTab } from './state/tabs.ts'
+import { useTabsStore, ensureChatTab, openOrFocusFinderTab, type ChatTab, type FileTab, type MarksenseTab, type FinderTab } from './state/tabs.ts'
+import { applyRoute, getCurrentRoute, onRouteChange, pushHash, type Route } from './state/router.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
 import { getConfig, hasToken } from './gateway/config.ts'
@@ -19,12 +20,10 @@ import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
 
 // Lazy-loaded components (code splitting)
-const FileBrowser = lazy(() => import('./components/layout/FileBrowser.tsx').then(m => ({ default: m.FileBrowser })))
-const FileExplorerColumn = lazy(() => import('./components/files/FileExplorerColumn.tsx').then(m => ({ default: m.FileExplorerColumn })))
 const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
-const RecipePanel = lazy(() => import('./components/recipes/RecipePanel.tsx').then(m => ({ default: m.RecipePanel })))
 const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
 const FileViewerPanel = lazy(() => import('./components/files/FileViewerPanel.tsx').then(m => ({ default: m.FileViewerPanel })))
+const FinderPanel = lazy(() => import('./components/files/FinderPanel.tsx').then(m => ({ default: m.FinderPanel })))
 const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
 const RealtimeChat = lazy(() => import('./components/realtime/RealtimeChat.tsx').then(m => ({ default: m.RealtimeChat })))
 
@@ -96,10 +95,6 @@ export function App() {
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
-  const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
-  const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
-  const fileExplorerOpen = useUIStore((s) => s.fileExplorerOpen)
-  const setFileExplorerOpen = useUIStore((s) => s.setFileExplorerOpen)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const tabs = useTabsStore((s) => s.tabs)
   const closeTab = useTabsStore((s) => s.closeTab)
@@ -115,6 +110,26 @@ export function App() {
     _setVisiblePanel(prev => {
       if (next === 'home' && prev !== 'home') {
         // console.warn('[CLAVUS-DEBUG] visiblePanel → home (was:', prev, ')', new Error().stack)
+      }
+      if (next !== prev) {
+        // Reflect the visible panel in the URL hash so it can be deep-linked.
+        const tabs = useTabsStore.getState().tabs
+        const tab = tabs.find(t => t.id === next)
+        let route: Route
+        if (next === 'home' || !tab) {
+          route = { kind: 'home' }
+        } else if (tab.type === 'chat') {
+          route = { kind: 'chat', threadId: (tab as ChatTab).threadId }
+        } else if (tab.type === 'marksense') {
+          route = { kind: 'file', path: (tab as MarksenseTab).path }
+        } else if (tab.type === 'finder') {
+          // Finder tab doesn't have its own URL — fall back to home for the
+          // hash so deep-links don't try to recreate ephemeral preview state.
+          route = { kind: 'home' }
+        } else {
+          route = { kind: 'file', path: (tab as FileTab).path }
+        }
+        pushHash(route, true)
       }
       return next
     })
@@ -135,6 +150,8 @@ export function App() {
   // Used to commit a mid-animation snap when a second swipe interrupts the first.
   const lastSwipeDirection = useRef<-1 | 0 | 1>(0)
   const userGestureEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Panel index when gesture started — used to clamp scroll to ±1 panel per swipe
+  const gestureStartPanelIndex = useRef<number | null>(null)
   // Track if initial scroll has been done
   const initialScrollDone = useRef(false)
   const [initialReady, setInitialReady] = useState(false)
@@ -200,6 +217,7 @@ export function App() {
     [tabs]
   )
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const logKeyboardScroll = useCallback((_event: string, _details: Record<string, unknown> = {}) => {
     // Disabled to reduce log noise — re-enable for scroll debugging
@@ -393,6 +411,24 @@ export function App() {
     }
   }, [navigateToThread])
 
+  // ── Deep-link router ────────────────────────────────────────────────────
+  // On mount: apply the route from the URL hash (e.g. #/chat/abc).
+  // On hashchange (back/forward): re-apply the route.
+  useEffect(() => {
+    const apply = (route: Route | null) => {
+      if (!route) return
+      const tabId = applyRoute(route)
+      if (tabId === null) {
+        setVisiblePanel('home')
+      } else {
+        setVisiblePanel(tabId)
+      }
+    }
+    apply(getCurrentRoute())
+    const unsub = onRouteChange(apply)
+    return unsub
+  }, [setVisiblePanel])
+
   useEffect(() => {
     if (needsToken) return
     syncFromServer().then(() => checkPendingNavigation())
@@ -420,48 +456,18 @@ export function App() {
     }
     window.addEventListener('clavus:app-resume', handleAppResume)
 
-    // Handle inline Marksense doc opening from chat
-    const handleOpenMarksense = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { url?: string; path?: string; title: string }
-      const docTitle = detail.title || 'Document'
-
-      // Extract workspace path from URL or use path directly
-      let filePath = detail.path
-      if (!filePath && detail.url) {
-        // Extract path from Marksense URL like .../file/SOUL.md
-        const match = detail.url.match(/\/file\/(.+)$/)
-        if (match) {
-          filePath = '/' + decodeURIComponent(match[1])
-        }
-      }
-      if (!filePath) return
-
-      if (isDesktop) {
-        // Desktop: open as Canvas side panel with direct Tiptap editor
-        setCanvasTitle(docTitle)
-        setCanvasOpen(true)
-        // Load file content for the editor
-        fetch(`/api/documents${filePath}`)
-          .then(r => r.json())
-          .then(data => setCanvasContent(data.content || ''))
-          .catch(() => setCanvasContent(''))
-      }
-      // Both mobile & desktop: open/update as a Marksense tab
-      const tabId = `marksense-${filePath}`
-      useTabsStore.getState().openTab({
-        id: tabId,
-        type: 'marksense',
-        title: docTitle,
-        path: filePath,
-        openedAt: Date.now(),
-        updatedAt: Date.now(),
-      } satisfies MarksenseTab)
-      if (!isDesktop) {
+    // Handle inline file opening from chat links (markdown + other types).
+    // The router picks the right tab kind based on file extension.
+    const handleOpenFile = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { path?: string; title?: string }
+      if (!detail?.path) return
+      const tabId = applyRoute({ kind: 'file', path: detail.path, title: detail.title })
+      if (tabId) {
         setVisiblePanel(tabId)
-        scrollToTabRef.current(tabId)
+        if (!isDesktop) scrollToTabRef.current(tabId)
       }
     }
-    window.addEventListener('clavus:open-marksense', handleOpenMarksense)
+    window.addEventListener('clavus:open-file', handleOpenFile)
 
     const handleOpenFileTab = (e: Event) => {
       const detail = (e as CustomEvent).detail as { tabId: string }
@@ -475,7 +481,7 @@ export function App() {
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('clavus:app-resume', handleAppResume)
-      window.removeEventListener('clavus:open-marksense', handleOpenMarksense)
+      window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
   }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop])
@@ -566,6 +572,7 @@ export function App() {
         clearTimeout(userGestureEndTimer.current)
         userGestureEndTimer.current = setTimeout(() => {
           isUserHorizontalGesture.current = false
+          gestureStartPanelIndex.current = null
           userGestureEndTimer.current = null
           logKeyboardScroll('gesture-end-cleared')
         }, 300)
@@ -625,8 +632,28 @@ export function App() {
           return
         }
         const scrollLeft = container.scrollLeft
-        const panelIndex = Math.round(scrollLeft / containerWidth)
+        let panelIndex = Math.round(scrollLeft / containerWidth)
         const rawPanelIndex = scrollLeft / containerWidth
+
+        // Clamp to ±1 panel from where the gesture started so fast swipes
+        // never skip over conversations.
+        const startIdx = gestureStartPanelIndex.current
+        if (startIdx != null) {
+          panelIndex = Math.max(startIdx - 1, Math.min(startIdx + 1, panelIndex))
+        }
+
+        // If native momentum scroll overshot the clamped panel, snap back
+        const clampedLeft = panelIndex * containerWidth
+        if (Math.abs(container.scrollLeft - clampedLeft) > 2) {
+          isProgrammaticScroll.current = true
+          container.style.scrollSnapType = 'none'
+          container.scrollLeft = clampedLeft
+          requestAnimationFrame(() => {
+            container.style.scrollSnapType = 'x mandatory'
+            isProgrammaticScroll.current = false
+          })
+        }
+
         const nextPanel = panelIndex >= sortedTabs.length ? 'home' : sortedTabs[panelIndex]?.id
 
         // Total panels: sortedTabs.length + 1 (home)
@@ -833,6 +860,11 @@ export function App() {
     setVisiblePanel(newThreadId)
   }, [switchThread])
 
+  const handleOpenFinder = useCallback(() => {
+    const id = openOrFocusFinderTab()
+    setVisiblePanel(id)
+  }, [setVisiblePanel])
+
   const handleDesktopCloseTab = useCallback((tabId: string) => {
     closeTab(tabId)
     if (visiblePanel === tabId) {
@@ -919,6 +951,12 @@ export function App() {
 
     gestureStartPoint.current = { x: event.clientX, y: event.clientY }
     isUserHorizontalGesture.current = false
+    // Record which panel this gesture starts on so we can clamp to ±1
+    const sc = scrollContainerRef.current
+    const cw = sc?.clientWidth
+    gestureStartPanelIndex.current = sc && cw
+      ? Math.round(sc.scrollLeft / cw)
+      : null
     logKeyboardScroll('gesture-pending', {
       pointerType: event.pointerType,
       startX: event.clientX,
@@ -956,6 +994,8 @@ export function App() {
 
   const markHorizontalGestureEnd = useCallback(() => {
     gestureStartPoint.current = null
+    // Keep gestureStartPanelIndex alive until the gesture-end timer fires so
+    // inertial scroll events are still clamped.
     if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
     if (!isUserHorizontalGesture.current) {
       logKeyboardScroll('gesture-cancelled-before-horizontal')
@@ -965,6 +1005,7 @@ export function App() {
     // Keep accepting inertial/snap scroll events after the finger leaves.
     userGestureEndTimer.current = setTimeout(() => {
       isUserHorizontalGesture.current = false
+      gestureStartPanelIndex.current = null
       userGestureEndTimer.current = null
       logKeyboardScroll('gesture-end-cleared')
     }, 900)
@@ -982,6 +1023,16 @@ export function App() {
 
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
+      {/* macOS-style window chrome — desktop only (decorative). */}
+      {isDesktop && (
+        <div className="h-7 shrink-0 flex items-center px-4 border-b border-border bg-background/60 select-none">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]" />
+          </div>
+        </div>
+      )}
       {/* Connection status banners */}
       {connectionStatus === 'disconnected' && (
         <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15">
@@ -1017,43 +1068,13 @@ export function App() {
             activeTabId={visiblePanel}
             onSelectTab={handleDesktopSelectTab}
             onNewChat={handleDesktopNewChat}
+            onGoHome={() => setVisiblePanel('home')}
             onCloseTab={handleDesktopCloseTab}
-            fileExplorerOpen={fileExplorerOpen}
-            onToggleFileExplorer={() => setFileExplorerOpen(!fileExplorerOpen)}
+            onOpenDoc={(path, title) => {
+              const tabId = applyRoute({ kind: 'file', path, title })
+              if (tabId) setVisiblePanel(tabId)
+            }}
           />
-        )}
-
-        {/* File Explorer (desktop only) */}
-        {isDesktop && fileExplorerOpen && (
-          <Suspense fallback={null}>
-            <FileExplorerColumn
-              onClose={() => setFileExplorerOpen(false)}
-              onSelectFile={(path, title, isMd) => {
-                if (isMd) {
-                  // Open markdown files in the canvas editor (right panel)
-                  setCanvasTitle(title)
-                  setCanvasOpen(true)
-                  // Load file content into canvas editor
-                  fetch(`/api/documents${path}`)
-                    .then(r => r.json())
-                    .then(data => setCanvasContent(data.content || ''))
-                    .catch(() => setCanvasContent(''))
-                } else {
-                  // Open non-markdown files in the file viewer tab
-                  const tabId = `file-${path}`
-                  useTabsStore.getState().openTab({
-                    id: tabId,
-                    type: 'file',
-                    title,
-                    path,
-                    openedAt: Date.now(),
-                    updatedAt: Date.now(),
-                  } satisfies FileTab)
-                  setVisiblePanel(tabId)
-                }
-              }}
-            />
-          </Suspense>
         )}
 
         {/* Content area */}
@@ -1079,23 +1100,24 @@ export function App() {
                       threadId={(visibleTab as ChatTab).threadId}
                     />
                   )}
-                  {visibleTab?.type === 'recipe' && (
-                    <RecipePanel
-                      recipeId={(visibleTab as RecipeTab).recipeId}
-                      isVisible={true}
-                    />
-                  )}
                   {visibleTab?.type === 'marksense' && (
                     <MarksensePanel
                       path={(visibleTab as MarksenseTab).path}
                       title={visibleTab.title}
                       isVisible={true}
+                      onOpenFinder={handleOpenFinder}
                     />
                   )}
                   {visibleTab?.type === 'file' && (
                     <FileViewerPanel
                       path={(visibleTab as FileTab).path}
                       title={visibleTab.title}
+                      isVisible={true}
+                    />
+                  )}
+                  {visibleTab?.type === 'finder' && (
+                    <FinderPanel
+                      tab={visibleTab as FinderTab}
                       isVisible={true}
                     />
                   )}
@@ -1139,7 +1161,7 @@ export function App() {
                 <div
                   key={tab.id}
                   ref={setPanelRef(tab.id)}
-                  className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
+                  className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
                   style={{ touchAction: 'pan-x pan-y' }}
                   {...(!isActive ? { inert: true } : {})}
                 >
@@ -1150,23 +1172,24 @@ export function App() {
                           threadId={(tab as ChatTab).threadId}
                         />
                       )}
-                      {tab.type === 'recipe' && (
-                        <RecipePanel
-                          recipeId={(tab as RecipeTab).recipeId}
-                          isVisible={isActive}
-                        />
-                      )}
                       {tab.type === 'marksense' && (
                         <MarksensePanel
                           path={(tab as MarksenseTab).path}
                           title={tab.title}
                           isVisible={isActive}
+                          onOpenFinder={handleOpenFinder}
                         />
                       )}
                       {tab.type === 'file' && (
                         <FileViewerPanel
                           path={(tab as FileTab).path}
                           title={tab.title}
+                          isVisible={isActive}
+                        />
+                      )}
+                      {tab.type === 'finder' && (
+                        <FinderPanel
+                          tab={tab as FinderTab}
                           isVisible={isActive}
                         />
                       )}
@@ -1179,7 +1202,7 @@ export function App() {
           {/* Home panel (rightmost) */}
           <div
             ref={setPanelRef('home')}
-            className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
+            className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 overflow-hidden box-border"
             {...(visiblePanel !== 'home' ? { inert: true } : {})}
           >
           <HomeScreen
@@ -1205,6 +1228,7 @@ export function App() {
               onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               threadId={visiblePanel !== 'home' ? visiblePanel : null}
+              draftKey={visiblePanel}
               onRetry={visiblePanel !== 'home' ? () => {
                 const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
                 const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
@@ -1221,12 +1245,6 @@ export function App() {
         <DebugOverlay />
       </Suspense>
 
-      <Suspense fallback={null}>
-        <FileBrowser
-          open={fileBrowserOpen}
-          onClose={() => setFileBrowserOpen(false)}
-        />
-      </Suspense>
       {composeChannel && (
         <Suspense fallback={null}>
           <ComposeFlow

@@ -7,11 +7,13 @@ function makeCtx(overrides: Partial<SlashContext> = {}): SlashContext & { _toast
     threadId: 'thread-1',
     setReasoningOverride: vi.fn(),
     getReasoningOverride: vi.fn(() => null),
-    setPresetId: vi.fn(),
-    getPresetId: vi.fn(() => 'opus'),
+    setGlobalReasoning: vi.fn(),
+    setModelId: vi.fn(),
+    getModelId: vi.fn(() => 'gpt'),
     clearChat: vi.fn(),
     regenerateLast: vi.fn(),
     showHelp: vi.fn(),
+    showStatus: vi.fn(),
     toast: (msg: string) => { toasts.push(msg) },
     syncReasoningToHermes: vi.fn(async () => {}),
     ...overrides,
@@ -27,7 +29,7 @@ describe('parseSlash', () => {
     expect(parseSlash('/reasoning high')).toEqual({ name: 'reasoning', args: 'high' })
   })
   it('preserves extra whitespace inside args', () => {
-    expect(parseSlash('/model gpt-low')).toEqual({ name: 'model', args: 'gpt-low' })
+    expect(parseSlash('/model gpt')).toEqual({ name: 'model', args: 'gpt' })
   })
   it('returns null for non-slash input', () => {
     expect(parseSlash('hello')).toBeNull()
@@ -105,18 +107,48 @@ describe('tryRunSlashCommand', () => {
     expect(ctx._toasts[0]).toBe('Reasoning: medium')
   })
 
-  it('/model gpt-low switches preset', async () => {
+  it('/reasoning auto clears per-thread override', async () => {
     const ctx = makeCtx()
-    const result = await tryRunSlashCommand('/model gpt-low', ctx)
+    const result = await tryRunSlashCommand('/reasoning auto', ctx)
     expect(result.handled).toBe(true)
-    expect(ctx.setPresetId).toHaveBeenCalledWith('gpt-low')
+    expect(ctx.setReasoningOverride).toHaveBeenCalledWith('thread-1', null)
+    expect(ctx._toasts).toContain('Reasoning: auto')
   })
 
-  it('/model with unknown preset does not switch', async () => {
+  it('/reasoning auto without thread sets global reasoning to null', async () => {
+    const ctx = makeCtx({ threadId: null })
+    const result = await tryRunSlashCommand('/reasoning auto', ctx)
+    expect(result.handled).toBe(true)
+    expect(ctx.setGlobalReasoning).toHaveBeenCalledWith(null)
+  })
+
+  it('/reasoning high without thread sets global reasoning', async () => {
+    const ctx = makeCtx({ threadId: null })
+    const result = await tryRunSlashCommand('/reasoning high', ctx)
+    expect(result.handled).toBe(true)
+    expect(ctx.setGlobalReasoning).toHaveBeenCalledWith('high')
+    expect(ctx.setReasoningOverride).not.toHaveBeenCalled()
+  })
+
+  it('/model gpt switches model', async () => {
+    const ctx = makeCtx()
+    const result = await tryRunSlashCommand('/model gpt', ctx)
+    expect(result.handled).toBe(true)
+    expect(ctx.setModelId).toHaveBeenCalledWith('gpt')
+  })
+
+  it('/model opus switches model', async () => {
+    const ctx = makeCtx()
+    const result = await tryRunSlashCommand('/model opus', ctx)
+    expect(result.handled).toBe(true)
+    expect(ctx.setModelId).toHaveBeenCalledWith('opus')
+  })
+
+  it('/model with unknown id does not switch', async () => {
     const ctx = makeCtx()
     const result = await tryRunSlashCommand('/model foobar', ctx)
     expect(result.handled).toBe(true)
-    expect(ctx.setPresetId).not.toHaveBeenCalled()
+    expect(ctx.setModelId).not.toHaveBeenCalled()
   })
 
   it('/clear invokes clearChat', async () => {
@@ -140,17 +172,17 @@ describe('tryRunSlashCommand', () => {
     expect(ctx.showHelp).toHaveBeenCalled()
   })
 
-  it('pass-through commands like /tasks return handled=false', async () => {
+  it('/tasks is handled locally', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
     const ctx = makeCtx()
     const result = await tryRunSlashCommand('/tasks', ctx)
-    expect(result.handled).toBe(false)
+    expect(result.handled).toBe(true)
   })
 
-  it('without an open thread, /reasoning toasts and does not crash', async () => {
+  it('without an open thread, /reasoning reports auto', async () => {
     const ctx = makeCtx({ threadId: null })
-    const result = await tryRunSlashCommand('/reasoning high', ctx)
+    const result = await tryRunSlashCommand('/reasoning', ctx)
     expect(result.handled).toBe(true)
-    expect(ctx.setReasoningOverride).not.toHaveBeenCalled()
-    expect(ctx._toasts[0]).toMatch(/Open a chat/)
+    expect(ctx._toasts[0]).toMatch(/auto/)
   })
 })

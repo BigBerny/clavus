@@ -64,3 +64,72 @@ export async function deleteFile(path: string, apiBase = WORKSPACE_API): Promise
 export function getFileUrl(path: string, apiBase = WORKSPACE_API): string {
   return `${apiBase}/raw${path}`
 }
+
+/**
+ * Flatten a directory listing to a list of file paths only.
+ * Used by the @-mention picker to do client-side fuzzy filtering.
+ */
+function flattenFiles(entries: FileEntry[], acc: string[] = []): string[] {
+  for (const e of entries) {
+    if (e.type === 'file') acc.push(e.path)
+    else if (e.children) flattenFiles(e.children, acc)
+  }
+  return acc
+}
+
+/** In-process cache: avoid re-listing the workspace on every keystroke. */
+let workspaceFilesCache: { files: string[]; loadedAt: number } | null = null
+const CACHE_TTL_MS = 30_000
+
+export async function listAllWorkspaceFiles(apiBase = DOCUMENTS_API): Promise<string[]> {
+  if (workspaceFilesCache && Date.now() - workspaceFilesCache.loadedAt < CACHE_TTL_MS) {
+    return workspaceFilesCache.files
+  }
+  try {
+    const listing = await listDir('/', true, apiBase)
+    const files = flattenFiles(listing.entries)
+    workspaceFilesCache = { files, loadedAt: Date.now() }
+    return files
+  } catch {
+    return workspaceFilesCache?.files ?? []
+  }
+}
+
+export interface FileSearchResult {
+  path: string
+  title: string  // last segment without extension
+  folder: string // parent directory display (e.g. "Travel")
+}
+
+/**
+ * Score-based filter across cached workspace files. Filename matches outrank
+ * folder matches. Returns up to `limit` results.
+ */
+export function searchWorkspaceFiles(query: string, files: string[], limit = 8): FileSearchResult[] {
+  const q = query.trim().toLowerCase()
+  // Empty query: show most-recently-cached files
+  const candidates = !q
+    ? files.slice(0, limit)
+    : files
+        .map((p) => {
+          const lower = p.toLowerCase()
+          const filename = lower.split('/').pop() || ''
+          const score =
+            (filename.startsWith(q) ? 100 : 0) +
+            (filename.includes(q) ? 50 : 0) +
+            (lower.includes(q) ? 10 : 0)
+          return { p, score }
+        })
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map((x) => x.p)
+
+  return candidates.map((path) => {
+    const segments = path.split('/').filter(Boolean)
+    const filename = segments.pop() || path
+    const title = filename.replace(/\.[^.]+$/, '')
+    const folder = segments.length > 0 ? segments[segments.length - 1] : 'Workspace'
+    return { path, title, folder }
+  })
+}

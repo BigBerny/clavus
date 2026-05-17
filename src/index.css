@@ -4,22 +4,95 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-accent: #6366f1;
-  --color-accent-hover: #4f46e5;
-  --color-surface-dark: #1c1c1e;
-  --color-surface-dark-2: #242426;
-  --color-surface-dark-3: #2c2c2e;
-  --color-surface-light: #ffffff;
-  --color-surface-light-2: #f4f5f7;
-  --color-surface-light-3: #e5e7eb;
-  --color-text-dark: #e4e5e9;
-  --color-text-dark-muted: #8e8e93;
-  --color-text-light: #111318;
-  --color-text-light-muted: #6b7280;
-  --color-border-dark: rgba(255, 255, 255, 0.08);
-  --color-border-light: #e5e7eb;
-  --color-selection-dark: rgba(255, 255, 255, 0.08);
-  --color-selection-light: rgba(0, 0, 0, 0.05);
+  /* === New mockup palette (warm cream / charcoal) =========================
+     These are the primary tokens for new components going forward. Existing
+     legacy tokens (--color-surface-*, --color-text-*, --color-border-*) are
+     re-pointed to these values below for backward compatibility. */
+
+  /* Light mode (default values; .dark class overrides at the bottom) */
+  --color-background: oklch(0.985 0.008 80);
+  --color-foreground: oklch(0.18 0.012 60);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.18 0.012 60);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.18 0.012 60);
+  --color-primary: oklch(0.52 0.18 280);
+  --color-primary-foreground: oklch(0.99 0 0);
+  --color-secondary: oklch(0.96 0.01 80);
+  --color-secondary-foreground: oklch(0.25 0.012 60);
+  --color-muted: oklch(0.96 0.01 80);
+  --color-muted-foreground: oklch(0.5 0.012 60);
+  --color-accent-soft: oklch(0.95 0.012 80);
+  --color-accent-soft-foreground: oklch(0.22 0.012 60);
+  --color-destructive: oklch(0.62 0.22 25);
+  --color-destructive-foreground: oklch(0.99 0 0);
+  --color-border: oklch(0.91 0.008 80);
+  --color-input: oklch(0.91 0.008 80);
+  --color-ring: oklch(0.52 0.18 280);
+
+  /* Category accent colors (warm, not neon) */
+  --color-cat-chat: oklch(0.6 0.14 255);
+  --color-cat-doc: oklch(0.68 0.13 65);
+  --color-cat-voice: oklch(0.62 0.11 160);
+  --color-cat-rose: oklch(0.66 0.16 20);
+  --color-cat-violet: oklch(0.6 0.16 300);
+
+  --radius: 0.625rem;
+  --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+
+  /* === Existing token compatibility =======================================
+     These are re-pointed to the new mockup palette so every component that
+     uses the old names instantly picks up the new look without code changes.
+     They'll be removed in phase 12 of the migration. */
+  --color-accent: oklch(0.52 0.18 280);          /* indigo primary */
+  --color-accent-hover: oklch(0.45 0.18 280);
+  --color-surface-light: oklch(0.985 0.008 80);  /* warm cream bg */
+  --color-surface-light-2: oklch(0.96 0.01 80);  /* secondary surface */
+  --color-surface-light-3: oklch(0.93 0.012 80); /* tertiary surface */
+  --color-surface-dark: oklch(0.165 0.006 50);   /* warm charcoal bg */
+  --color-surface-dark-2: oklch(0.21 0.006 50);
+  --color-surface-dark-3: oklch(0.25 0.006 50);
+  --color-text-light: oklch(0.18 0.012 60);
+  --color-text-light-muted: oklch(0.5 0.012 60);
+  --color-text-dark: oklch(0.95 0.005 80);
+  --color-text-dark-muted: oklch(0.68 0.008 60);
+  --color-border-light: oklch(0.91 0.008 80);
+  --color-border-dark: oklch(0.27 0.006 50);
+  --color-selection-light: oklch(0.91 0.008 80 / 0.5);
+  --color-selection-dark: oklch(0.4 0.006 50 / 0.4);
+}
+
+/* Dark mode overrides — toggled via .dark class on <html> */
+.dark {
+  --color-background: oklch(0.165 0.006 50);
+  --color-foreground: oklch(0.95 0.005 80);
+  --color-card: oklch(0.21 0.006 50);
+  --color-card-foreground: oklch(0.95 0.005 80);
+  --color-popover: oklch(0.21 0.006 50);
+  --color-popover-foreground: oklch(0.95 0.005 80);
+  --color-primary: oklch(0.72 0.15 280);
+  --color-primary-foreground: oklch(0.18 0.012 60);
+  --color-secondary: oklch(0.25 0.006 50);
+  --color-secondary-foreground: oklch(0.95 0.005 80);
+  --color-muted: oklch(0.25 0.006 50);
+  --color-muted-foreground: oklch(0.68 0.008 60);
+  --color-accent-soft: oklch(0.27 0.008 50);
+  --color-accent-soft-foreground: oklch(0.95 0.005 80);
+  --color-destructive: oklch(0.62 0.22 25);
+  --color-destructive-foreground: oklch(0.99 0 0);
+  --color-border: oklch(0.27 0.006 50);
+  --color-input: oklch(0.27 0.006 50);
+  --color-ring: oklch(0.72 0.15 280);
+
+  --color-cat-chat: oklch(0.72 0.13 255);
+  --color-cat-doc: oklch(0.78 0.12 65);
+  --color-cat-voice: oklch(0.72 0.1 160);
+  --color-cat-rose: oklch(0.76 0.14 20);
+  --color-cat-violet: oklch(0.72 0.14 300);
+
+  /* Legacy aliases for dark mode */
+  --color-accent: oklch(0.72 0.15 280);
+  --color-accent-hover: oklch(0.78 0.15 280);
 }
 
 :root {
@@ -186,7 +259,7 @@ button.inline-btn {
   opacity: 0.85;
 }
 .dark .chat-glass-top {
-  background: linear-gradient(to bottom, #1c1c1e 0%, transparent 100%);
+  background: linear-gradient(to bottom, var(--color-surface-dark) 0%, transparent 100%);
   opacity: 0.9;
 }
 
@@ -195,7 +268,7 @@ button.inline-btn {
   background: var(--color-surface-light);
 }
 .dark .chat-bg {
-  background: #1c1c1e;
+  background: var(--color-surface-dark);
 }
 
 /* Message fade + slide animation */
@@ -368,10 +441,10 @@ textarea::-webkit-scrollbar {
 
 /* Highlight.js code theme overrides */
 .dark pre code.hljs {
-  background: #242426;
+  background: var(--color-surface-dark-2);
 }
 pre code.hljs {
-  background: #f4f5f7;
+  background: var(--color-surface-light-2);
 }
 
 /* Prose overrides for markdown */
@@ -435,4 +508,55 @@ html.theme-ready *,
 html.theme-ready *::before,
 html.theme-ready *::after {
   transition: background-color 0.2s ease, color 0.15s ease, border-color 0.2s ease;
+}
+
+/* ========================================================================
+   New mockup-derived utilities — used by restyled components in later phases
+   ======================================================================== */
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  /* Subtle scrollbar (macOS-like) */
+  .scrollbar-fine::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-fine::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-fine::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--color-foreground) 12%, transparent);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar-fine::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--color-foreground) 20%, transparent);
+    background-clip: content-box;
+  }
+
+  /* Soft elevation for app windows / cards */
+  .elev-window {
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--color-foreground) 8%, transparent),
+      0 1px 2px color-mix(in oklch, var(--color-foreground) 6%, transparent),
+      0 24px 60px -20px color-mix(in oklch, var(--color-foreground) 25%, transparent);
+  }
+  .elev-card {
+    box-shadow:
+      0 1px 2px color-mix(in oklch, var(--color-foreground) 6%, transparent),
+      0 0 0 0.5px color-mix(in oklch, var(--color-foreground) 6%, transparent);
+  }
+
+  /* Gradient backdrop for "outside" the desktop window */
+  .backdrop-warm {
+    background:
+      radial-gradient(60% 50% at 30% 0%, color-mix(in oklch, var(--color-cat-violet) 22%, transparent), transparent 70%),
+      radial-gradient(50% 60% at 90% 100%, color-mix(in oklch, var(--color-cat-doc) 18%, transparent), transparent 70%),
+      var(--color-background);
+  }
 }

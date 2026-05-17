@@ -6,16 +6,20 @@ const STORAGE_KEY = 'clavus-chat-settings'
 
 interface PersistedShape {
   reasoningOverride: Record<string, ReasoningLevel>
+  globalReasoning: ReasoningLevel | null
 }
 
 function load(): PersistedShape {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return { reasoningOverride: {} }
+    if (!raw) return { reasoningOverride: {}, globalReasoning: null }
     const parsed = JSON.parse(raw) as Partial<PersistedShape>
-    return { reasoningOverride: parsed.reasoningOverride ?? {} }
+    return {
+      reasoningOverride: parsed.reasoningOverride ?? {},
+      globalReasoning: parsed.globalReasoning ?? null,
+    }
   } catch {
-    return { reasoningOverride: {} }
+    return { reasoningOverride: {}, globalReasoning: null }
   }
 }
 
@@ -29,23 +33,47 @@ function save(state: PersistedShape) {
 
 interface ChatSettingsState {
   reasoningOverride: Record<string, ReasoningLevel>
+  globalReasoning: ReasoningLevel | null
   setReasoningOverride: (threadId: string, level: ReasoningLevel | null) => void
   getReasoningOverride: (threadId: string) => ReasoningLevel | null
+  setGlobalReasoning: (level: ReasoningLevel | null) => void
+  getEffectiveReasoning: (threadId: string | null) => ReasoningLevel | null
 }
 
-export const useChatSettingsStore = create<ChatSettingsState>((set, get) => ({
-  reasoningOverride: load().reasoningOverride,
+function persist(get: () => ChatSettingsState) {
+  save({ reasoningOverride: get().reasoningOverride, globalReasoning: get().globalReasoning })
+}
 
-  setReasoningOverride: (threadId, level) => {
-    const next = { ...get().reasoningOverride }
-    if (level === null) delete next[threadId]
-    else next[threadId] = level
-    set({ reasoningOverride: next })
-    save({ reasoningOverride: next })
-  },
+export const useChatSettingsStore = create<ChatSettingsState>((set, get) => {
+  const initial = load()
+  return {
+    reasoningOverride: initial.reasoningOverride,
+    globalReasoning: initial.globalReasoning,
 
-  getReasoningOverride: (threadId) => get().reasoningOverride[threadId] ?? null,
-}))
+    setReasoningOverride: (threadId, level) => {
+      const next = { ...get().reasoningOverride }
+      if (level === null) delete next[threadId]
+      else next[threadId] = level
+      set({ reasoningOverride: next })
+      persist(get)
+    },
+
+    getReasoningOverride: (threadId) => get().reasoningOverride[threadId] ?? null,
+
+    setGlobalReasoning: (level) => {
+      set({ globalReasoning: level })
+      persist(get)
+    },
+
+    getEffectiveReasoning: (threadId) => {
+      if (threadId) {
+        const override = get().reasoningOverride[threadId]
+        if (override) return override
+      }
+      return get().globalReasoning
+    },
+  }
+})
 
 export const VALID_REASONING_LEVELS: ReasoningLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
 

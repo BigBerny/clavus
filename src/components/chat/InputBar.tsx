@@ -1,10 +1,14 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { haptic, isNative } from '../../lib/native'
-import { usePresetStore } from '../../state/preset'
+import { useModelStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
-import { MODEL_PRESETS } from '../../gateway/presets'
+import { MODEL_OPTIONS } from '../../gateway/presets'
+import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspaceApi'
+import { useThreadsStore } from '../../state/threads'
+import { useDraftsStore } from '../../state/drafts'
 import { VoiceInputPill } from '../voice/VoiceInputPill'
+import StatusModal from './StatusModal'
 import {
   SLASH_COMMANDS,
   filterSlashCommands,
@@ -26,18 +30,100 @@ interface Props {
   /** Resend the last user message in this thread (used by /retry). */
   onRetry?: () => void
   talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void; interrupt: () => void }
+  /** Stable key for draft persistence — e.g. 'home', a thread id, or a doc path. */
+  draftKey?: string
 }
 
 const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 
-export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode }: Props) {
-  const [value, setValue] = useState('')
+export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
+  // Initialize with the persisted draft for this column (or empty if none).
+  const [value, setValue] = useState(() => (draftKey ? useDraftsStore.getState().getDraft(draftKey) : ''))
+
+  // When the column (draftKey) changes — e.g. user swipes between conversations —
+  // first flush whatever is currently in the textarea to the OLD draft key, then
+  // swap the textarea's content to the NEW key's draft. This way each column
+  // truly behaves like its own input field.
+  const lastDraftKey = useRef<string | undefined>(draftKey)
+  const valueRef = useRef(value)
+  useEffect(() => { valueRef.current = value }, [value])
+  useEffect(() => {
+    if (lastDraftKey.current === draftKey) return
+    // Flush the in-flight edit to the previous key before swapping.
+    if (lastDraftKey.current !== undefined) {
+      useDraftsStore.getState().setDraft(lastDraftKey.current, valueRef.current)
+    }
+    lastDraftKey.current = draftKey
+    setValue(draftKey ? useDraftsStore.getState().getDraft(draftKey) : '')
+  }, [draftKey])
+
+  // Persist edits whenever the draftKey is set (debounced inside the store)
+  useEffect(() => {
+    if (!draftKey) return
+    useDraftsStore.getState().setDraft(draftKey, value)
+  }, [value, draftKey])
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [slashIndex, setSlashIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [menuState, setMenuState] = useState<'closed' | 'open' | 'closing'>('closed')
+  // @-mention palette state
+  const [atQuery, setAtQuery] = useState<string | null>(null) // null = closed
+  const [atIndex, setAtIndex] = useState(0)
+  const [workspaceFiles, setWorkspaceFiles] = useState<string[]>([])
+
+  // Lazy-load workspace file index when the user first types @
+  useEffect(() => {
+    if (atQuery !== null && workspaceFiles.length === 0) {
+      listAllWorkspaceFiles().then(setWorkspaceFiles)
+    }
+  }, [atQuery, workspaceFiles.length])
+
+  const atMatches = useMemo(() => {
+    if (atQuery === null) return []
+    return searchWorkspaceFiles(atQuery, workspaceFiles)
+  }, [atQuery, workspaceFiles])
+
+  const detectAtTrigger = useCallback((text: string, caret: number) => {
+    const before = text.slice(0, caret)
+    const at = before.lastIndexOf('@')
+    if (at === -1) { setAtQuery(null); return }
+    const segment = before.slice(at + 1)
+    if (/[\s\n]/.test(segment)) { setAtQuery(null); return }
+    const charBefore = at === 0 ? ' ' : before[at - 1]
+    if (!/\s/.test(charBefore)) { setAtQuery(null); return }
+    setAtQuery(segment)
+    setAtIndex(0)
+  }, [])
+
+  const insertAtMention = useCallback((path: string) => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const caret = ta.selectionStart
+    const before = value.slice(0, caret)
+    const at = before.lastIndexOf('@')
+    if (at === -1) return
+    // Insert as a markdown link the RichMessageRenderer will detect as a FileLinkCard.
+    // Uses the unified `#/file/<encodedPath>` deep-link format so the same URL
+    // works inside Clavus (renders as a card, opens a column) and outside (in
+    // Telegram, email, bookmarks — opens Clavus and lands on the file).
+    const filename = path.split('/').pop() || path
+    const trimmed = path.startsWith('/') ? path.slice(1) : path
+    const link = `[${filename}](${window.location.origin}/#/file/${encodeURIComponent(trimmed)}) `
+    const next = value.slice(0, at) + link + value.slice(caret)
+    setValue(next.slice(0, 10000))
+    setAtQuery(null)
+    // Record the linked doc on the active thread immediately
+    if (threadId) {
+      useThreadsStore.getState().addLinkedDoc(threadId, { path, title: filename })
+    }
+    requestAnimationFrame(() => {
+      ta.focus()
+      const pos = at + link.length
+      ta.setSelectionRange(pos, pos)
+    })
+  }, [value, threadId])
   const menuRef = useRef<HTMLDivElement>(null)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
 
@@ -144,6 +230,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   // Help overlay
   const [helpOpen, setHelpOpen] = useState(false)
+  // Status modal
+  const [statusOpen, setStatusOpen] = useState(false)
 
   // Slash command palette
   const showSlashPalette = value.startsWith('/') && !isStreaming
@@ -171,14 +259,16 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       threadId: threadId ?? null,
       setReasoningOverride: (tid, level) => useChatSettingsStore.getState().setReasoningOverride(tid, level),
       getReasoningOverride: (tid) => useChatSettingsStore.getState().getReasoningOverride(tid),
-      setPresetId: (id) => usePresetStore.getState().setSelectedPresetId(id),
-      getPresetId: () => usePresetStore.getState().selectedPresetId,
+      setModelId: (id) => useModelStore.getState().setSelectedModelId(id),
+      getModelId: () => useModelStore.getState().selectedModelId,
+      setGlobalReasoning: (level) => useChatSettingsStore.getState().setGlobalReasoning(level),
       clearChat: () => onClear?.(),
       regenerateLast: () => {
         if (onRetry) onRetry()
         else showToast('Retry is unavailable')
       },
       showHelp: () => setHelpOpen(true),
+      showStatus: () => setStatusOpen(true),
       toast: showToast,
       syncReasoningToHermes,
     })
@@ -344,8 +434,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     }
   }, [pendingImages.length])
 
-  const { selectedPresetId, setSelectedPresetId } = usePresetStore()
-  const currentPreset = MODEL_PRESETS.find((p) => p.id === selectedPresetId) || MODEL_PRESETS[0]
+  const { selectedModelId, setSelectedModelId } = useModelStore()
+  const currentModel = MODEL_OPTIONS.find((m) => m.id === selectedModelId) || MODEL_OPTIONS[0]
 
   const menuVisible = menuState !== 'closed'
 
@@ -424,7 +514,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   return (
     <div
-      className={`bg-surface-light dark:bg-surface-dark border-t border-border-light dark:border-border-dark safe-area-bottom relative ${dragOver ? 'ring-2 ring-accent ring-inset' : ''}`}
+      className={`bg-background border-t border-border safe-area-bottom relative ${dragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -443,6 +533,50 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             <div className="px-3 py-1.5 rounded-full bg-accent/12 text-accent text-xs font-medium">
               {toast}
             </div>
+          </div>
+        )}
+        {/* @-mention file picker */}
+        {atQuery !== null && (
+          <div className="mb-2 rounded-xl bg-card border border-border overflow-hidden shadow-lg animate-[fadeSlideIn_0.2s_ease-out]" role="listbox" aria-label="Mention a file">
+            <div className="px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground font-medium border-b border-border flex items-center gap-1.5">
+              <span>@ Attach file</span>
+              {atQuery && <span className="opacity-70 normal-case tracking-normal">— "{atQuery}"</span>}
+              <span className="ml-auto normal-case tracking-normal text-[10px] opacity-70">↑↓ · ↵ select · esc</span>
+            </div>
+            {atMatches.length === 0 ? (
+              <div className="px-3 py-3 text-[12.5px] text-muted-foreground text-center">
+                {workspaceFiles.length === 0 ? 'Loading workspace…' : `No files match "${atQuery}"`}
+              </div>
+            ) : (
+              <div className="max-h-[260px] overflow-y-auto scrollbar-fine">
+                {atMatches.map((f, i) => (
+                  <button
+                    key={f.path}
+                    role="option"
+                    aria-selected={i === atIndex}
+                    onMouseEnter={() => setAtIndex(i)}
+                    onClick={() => insertAtMention(f.path)}
+                    className={`inline-btn w-full text-left px-3 py-2 flex items-start gap-2.5 text-[13px] transition-colors border-b border-border/40 last:border-0 ${
+                      i === atIndex ? 'bg-accent-soft' : 'hover:bg-accent-soft/60'
+                    }`}
+                  >
+                    <div
+                      className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-px"
+                      style={{ background: 'color-mix(in oklch, var(--color-cat-doc) 16%, transparent)' }}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-cat-doc)' }}>
+                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{f.title}</div>
+                      <div className="text-[11.5px] text-muted-foreground truncate">{f.folder} · {f.path}</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {showSlashPalette && filteredCommands.length > 0 && (
@@ -535,80 +669,25 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           </div>
         )}
 
-        {/* Options menu panel */}
-        {menuVisible && (
-          <div
-            ref={menuRef}
-            className={`mb-2 rounded-2xl bg-surface-light-2/90 dark:bg-surface-dark-2/90 backdrop-blur-xl border border-surface-light-3/20 dark:border-surface-dark-3/20 shadow-lg shadow-black/15 overflow-hidden ${
-              menuState === 'open' ? 'animate-[menuIn_0.2s_ease-out_both]' : 'animate-[menuOut_0.18s_ease-in_both]'
-            }`}
-            onAnimationEnd={() => { if (menuState === 'closing') setMenuState('closed') }}
-          >
-            <div className="flex items-center gap-2 p-2">
-              {/* Model selection pills */}
-              <div className="flex-1 flex items-center gap-1.5">
-                {MODEL_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    onPointerDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setSelectedPresetId(preset.id)
-                      closeMenu()
-                    }}
-                    className={`flex-1 px-2 py-2.5 rounded-xl text-[13px] font-medium text-center transition-all ${
-                      preset.id === selectedPresetId
-                        ? 'bg-accent/15 text-accent shadow-sm'
-                        : 'text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50'
-                    }`}
-                  >
-                    {preset.shortLabel}
-                  </button>
-                ))}
-              </div>
-              {/* Attach file button */}
-              <button
-                onPointerDown={(e) => e.preventDefault()}
-                onClick={() => { handleAttachClick(); closeMenu() }}
-                disabled={pendingImages.length >= MAX_IMAGES}
-                className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full text-text-light-muted dark:text-text-dark-muted hover:text-accent active:scale-95 transition-all disabled:opacity-30"
-                aria-label="Attach file"
-                title="Attach file"
-              >
-                <PaperclipIcon />
-              </button>
-            </div>
-          </div>
-        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,application/pdf,audio/*,video/*,.txt,.md,.json,.csv,.xml,.html"
+          multiple
+          onChange={handleFileChange}
+          className="hidden"
+          aria-hidden="true"
+        />
 
-        <div className="flex items-center gap-2">
-          {/* Menu / close button — always visible */}
-          <button
-            ref={menuBtnRef}
-            onPointerDown={(e) => e.preventDefault()}
-            onClick={toggleMenu}
-            className="inline-btn flex-none w-11 h-11 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all"
-            aria-label={menuVisible ? 'Close options' : 'Options'}
-            title={menuVisible ? 'Close' : `Options (${currentPreset.shortLabel})`}
-          >
-            {menuVisible ? <CloseIcon /> : <MenuIcon />}
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,application/pdf,audio/*,video/*,.txt,.md,.json,.csv,.xml,.html"
-            multiple
-            onChange={handleFileChange}
-            className="hidden"
-            aria-hidden="true"
-          />
-
+        {/* ─── Unified composer card ────────────────────────────────── */}
+        <div className="relative rounded-2xl bg-card border border-border shadow-sm transition-shadow focus-within:shadow-md focus-within:border-ring/40">
           {isRecording ? (
-            <div className="flex-1 flex items-center gap-2 rounded-2xl px-4 py-2.5 bg-surface-light-2 dark:bg-surface-dark-2 border border-red-500/30 h-[44px]">
+            <div className="flex items-center gap-3 px-4 py-3">
               <div className="w-2 h-2 rounded-full bg-red-500 recording-pulse flex-shrink-0" />
-              <div className="flex items-center justify-center gap-[3px] h-7 flex-1">
-                {/* Interpolate 8 levels to ~20 bars for richer waveform */}
-                {Array.from({ length: 20 }, (_, i) => {
-                  const idx = (i / 20) * (voice.levels.length - 1)
+              <span className="text-[13px] text-foreground/85">Recording</span>
+              <div className="flex-1 flex items-center justify-center gap-[3px] h-5">
+                {Array.from({ length: 32 }, (_, i) => {
+                  const idx = (i / 32) * (voice.levels.length - 1)
                   const lo = Math.floor(idx)
                   const hi = Math.min(lo + 1, voice.levels.length - 1)
                   const frac = idx - lo
@@ -616,13 +695,13 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
                   return (
                     <div
                       key={i}
-                      className="w-[3px] rounded-full bg-red-400/80 transition-all duration-75 ease-out"
-                      style={{ height: `${Math.max(3, val * 28)}px` }}
+                      className="w-[2px] rounded-full bg-red-400/80 transition-all duration-75 ease-out"
+                      style={{ height: `${Math.max(3, val * 20)}px` }}
                     />
                   )
                 })}
               </div>
-              <span className="text-[12px] text-text-light-muted dark:text-text-dark-muted font-mono tabular-nums flex-shrink-0">
+              <span className="text-[12px] text-muted-foreground font-mono tabular-nums flex-shrink-0">
                 {voice.formattedDuration}
               </span>
             </div>
@@ -630,121 +709,164 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
             <textarea
               ref={textareaRef}
               value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onFocus={() => {
-                onFocusInput?.()
+              onChange={(e) => {
+                setValue(e.target.value)
+                detectAtTrigger(e.target.value, e.target.selectionStart)
               }}
-              placeholder={isHome ? "Start new conversation" : "Message..."}
+              onKeyDown={(e) => {
+                if (atQuery !== null && atMatches.length > 0) {
+                  if (e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    setAtIndex((i) => (i + 1) % atMatches.length)
+                    return
+                  }
+                  if (e.key === 'ArrowUp') {
+                    e.preventDefault()
+                    setAtIndex((i) => (i - 1 + atMatches.length) % atMatches.length)
+                    return
+                  }
+                  if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault()
+                    insertAtMention(atMatches[atIndex].path)
+                    return
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault()
+                    setAtQuery(null)
+                    return
+                  }
+                }
+                handleKeyDown(e)
+              }}
+              onPaste={handlePaste}
+              onFocus={() => { onFocusInput?.() }}
+              placeholder={isHome ? 'Ask anything, or type / for commands…' : 'Message…'}
               rows={1}
               disabled={isTranscribing}
               aria-label="Chat message input"
               maxLength={10000}
-              className="flex-1 resize-none rounded-2xl px-4 py-2.5 bg-surface-light-2/80 dark:bg-surface-dark-2/80 border border-surface-light-3/30 dark:border-surface-dark-3/30 text-text-light dark:text-text-dark placeholder:text-text-light-muted/55 dark:placeholder:text-text-dark-muted/55 text-[16px] leading-relaxed focus:outline-none focus:ring-2 focus:ring-accent/25 focus:border-accent/15 focus:bg-surface-light-2 dark:focus:bg-surface-dark-2 disabled:opacity-50 transition-all overflow-hidden"
+              className="w-full bg-transparent resize-none focus:outline-none placeholder:text-muted-foreground/70 px-4 pt-3 pb-1 text-[15px] leading-[1.5] text-foreground"
             />
           )}
 
-          {/* Character count near limit */}
+          {/* Toolbar row */}
+          <div className="flex items-end justify-between gap-2 px-2 pb-2 pt-1">
+            <div className="flex items-center gap-0.5 min-w-0">
+              {/* Model picker */}
+              <ModelPill
+                modelId={selectedModelId}
+                onChange={setSelectedModelId}
+              />
+              {/* Reasoning picker */}
+              <ReasoningPill threadId={threadId ?? null} />
+              <div className="w-px h-4 bg-border mx-1.5 hidden sm:block" />
+              {/* Attach file */}
+              <IconBtn
+                title="Attach file"
+                onClick={handleAttachClick}
+                disabled={pendingImages.length >= MAX_IMAGES}
+              >
+                <PaperclipMini />
+              </IconBtn>
+              {/* @ mention trigger */}
+              <IconBtn
+                title="Mention a file (@)"
+                onClick={() => {
+                  const ta = textareaRef.current
+                  if (!ta) return
+                  ta.focus()
+                  // Insert "@" so detectAtTrigger fires naturally
+                  const caret = ta.selectionStart
+                  const before = value.slice(0, caret)
+                  const needsSpace = caret > 0 && !/\s/.test(value[caret - 1])
+                  const ins = needsSpace ? ' @' : '@'
+                  const next = before + ins + value.slice(caret)
+                  setValue(next)
+                  requestAnimationFrame(() => {
+                    const pos = (before + ins).length
+                    ta.setSelectionRange(pos, pos)
+                    setAtQuery('')
+                    setAtIndex(0)
+                  })
+                }}
+              >
+                <AtSignMini />
+              </IconBtn>
+            </div>
+
+            <div className="flex items-center gap-1 flex-none">
+              {isRecording ? (
+                <>
+                  <button
+                    onClick={voice.stopAndInsert}
+                    title="Stop & insert into box (don't send)"
+                    className="h-8 px-2.5 rounded-md flex items-center gap-1.5 text-[12px] font-medium text-foreground bg-secondary border border-border hover:bg-accent-soft transition-colors"
+                    aria-label="Insert"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                    Insert
+                  </button>
+                  <button
+                    onClick={voice.stop}
+                    title="Stop & send"
+                    className="h-8 w-8 rounded-md flex items-center justify-center bg-primary text-primary-foreground hover:opacity-90 shadow-sm transition-opacity"
+                    aria-label="Stop and send"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                  </button>
+                </>
+              ) : isStreaming && hasContent ? (
+                <>
+                  <IconBtn title="Stop generating" onClick={onAbort} variant="danger">
+                    <StopMini />
+                  </IconBtn>
+                  <SendBtn onClick={handleSubmit} pulse={sendAnim} />
+                </>
+              ) : isStreaming ? (
+                <IconBtn title="Stop generating" onClick={onAbort} variant="danger">
+                  <StopMini />
+                </IconBtn>
+              ) : (
+                <>
+                  <IconBtn
+                    title="Voice input (tap or hold)"
+                    onClick={handleMicClick}
+                    onPointerDown={handleMicPointerDown}
+                    onPointerUp={handleMicPointerUp}
+                    onPointerLeave={handleMicPointerUp}
+                  >
+                    <MicMini />
+                  </IconBtn>
+                  <SendBtn onClick={handleSubmit} disabled={!hasContent} pulse={sendAnim} />
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Character count near limit (overlay top-right of toolbar) */}
           {value.length > 9000 && (
-            <span className={`self-center text-[11px] font-mono tabular-nums ${
-              value.length > 9800 ? 'text-red-400' : 'text-text-light-muted/60 dark:text-text-dark-muted/60'
+            <div className={`absolute right-3 -top-5 text-[11px] font-mono tabular-nums ${
+              value.length > 9800 ? 'text-red-400' : 'text-muted-foreground/60'
             }`}>
               {value.length.toLocaleString()}/10,000
-            </span>
-          )}
-
-          {isRecording ? (
-            /* Two-button flow when recording: Insert + Send */
-            <div className="flex items-center gap-1.5 flex-none">
-              <button
-                onClick={voice.stopAndInsert}
-                className="w-11 h-11 flex items-center justify-center rounded-full bg-surface-light-3 dark:bg-surface-dark-3 text-text-light dark:text-text-dark hover:bg-surface-light-3/80 dark:hover:bg-surface-dark-3/80 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
-                aria-label="Stop and insert text"
-                title="Insert text"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
-              </button>
-              <button
-                onClick={voice.stop}
-                onPointerUp={handleMicPointerUp}
-                className="w-11 h-11 flex items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 active:scale-95 transition-all voice-pulse animate-[btnFadeIn_0.15s_ease-out] touch-none"
-                aria-label="Stop and send"
-                title="Send"
-              >
-                <ArrowUpIcon />
-              </button>
             </div>
-          ) : (
-          <div className="flex-none flex items-center gap-1.5">
-            {isStreaming && hasContent ? (
-              /* Streaming + user typed text: stop to interrupt, send to queue */
-              <>
-                <button
-                  onClick={onAbort}
-                  className="w-9 h-9 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out]"
-                  aria-label="Stop generating"
-                  title="Stop generating"
-                >
-                  <StopIcon />
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
-                  aria-label="Queue message"
-                  title="Send (queues after current response)"
-                >
-                  <ArrowUpIcon />
-                </button>
-              </>
-            ) : isTranscribing ? (
-              <button
-                disabled
-                className="w-11 h-11 flex items-center justify-center rounded-full bg-surface-light-3 dark:bg-surface-dark-3 text-text-light-muted dark:text-text-dark-muted opacity-50 cursor-not-allowed"
-                aria-label="Transcribing audio"
-                title="Transcribing"
-              >
-                <MicIcon />
-              </button>
-            ) : hasContent ? (
-              <button
-                onClick={handleSubmit}
-                className={`w-11 h-11 flex items-center justify-center rounded-full bg-accent text-white hover:bg-accent-hover active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] ${sendAnim ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
-                aria-label="Send message"
-                title="Send"
-              >
-                <ArrowUpIcon />
-              </button>
-            ) : (
-              <div className="flex items-center gap-1">
-                {/* Stop button next to mic during streaming */}
-                {isStreaming && (
-                  <button
-                    onClick={onAbort}
-                    className="w-9 h-9 flex items-center justify-center rounded-full bg-red-500/15 text-red-400 hover:bg-red-500/25 active:scale-95 transition-all"
-                    aria-label="Stop generating"
-                    title="Stop"
-                  >
-                    <StopIcon />
-                  </button>
-                )}
-                <button
-                  onClick={handleMicClick}
-                  onPointerDown={handleMicPointerDown}
-                  onPointerUp={handleMicPointerUp}
-                  onPointerLeave={handleMicPointerUp}
-                  className="w-11 h-11 flex items-center justify-center rounded-full bg-accent/15 dark:bg-accent/20 text-accent hover:bg-accent hover:text-white active:scale-95 transition-all animate-[btnFadeIn_0.15s_ease-out] touch-none"
-                  aria-label="Hold to record, tap to toggle"
-                  title="Voice input (tap or hold)"
-                >
-                  <MicIcon />
-                </button>
-              </div>
-            )}
-          </div>
           )}
         </div>
+
+        {/* Hint row — desktop only (mouse + keyboard hints don't apply on touch) */}
+        {!isRecording && !isTranscribing && (
+          <div className="hidden md:flex text-[10.5px] text-muted-foreground/70 mt-2 px-1 items-center gap-3 flex-wrap">
+            <span>↵ to send</span>
+            <span>⇧↵ for new line</span>
+            <span className="opacity-50">·</span>
+            <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">/</kbd> commands</span>
+            <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">@</kbd> attach a file</span>
+          </div>
+        )}
       </div>
+      {statusOpen && (
+        <StatusModal threadId={threadId ?? null} onClose={() => setStatusOpen(false)} />
+      )}
       {helpOpen && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-[fadeSlideIn_0.15s_ease-out]"
@@ -811,6 +933,42 @@ function ArrowUpIcon() {
   )
 }
 
+const REASONING_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
+
+function ReasoningPicker({ threadId, onChange }: { threadId: string; onChange?: () => void }) {
+  // Subscribe to the override for this thread so the active state stays in sync.
+  const current = useChatSettingsStore((s) => s.reasoningOverride[threadId] ?? null)
+  return (
+    <div className="flex items-center gap-2 px-2 pb-2 -mt-1">
+      <span className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground pl-1 pr-2 shrink-0">
+        Reasoning
+      </span>
+      <div className="flex-1 flex items-center gap-1">
+        {REASONING_LEVELS.map((level) => {
+          const isActive = current === level
+          return (
+            <button
+              key={level}
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => {
+                useChatSettingsStore.getState().setReasoningOverride(threadId, level)
+                onChange?.()
+              }}
+              className={`flex-1 px-1 py-1.5 rounded-md text-[11px] font-medium text-center transition-all ${
+                isActive
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:bg-accent-soft'
+              }`}
+            >
+              {level === 'xhigh' ? 'x-high' : level}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function StopIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -834,5 +992,265 @@ function MenuIcon() {
       <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
       <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>
     </svg>
+  )
+}
+
+// ── Small toolbar primitives (mockup-style) ────────────────────────────────
+
+function PaperclipMini() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+    </svg>
+  )
+}
+
+function AtSignMini() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/>
+    </svg>
+  )
+}
+
+function MicMini() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  )
+}
+
+function StopMini() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="6" y="6" width="12" height="12" rx="2"/>
+    </svg>
+  )
+}
+
+function SparklesMini() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+    </svg>
+  )
+}
+
+function ChevronMini({ rotated }: { rotated?: boolean }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`opacity-60 transition-transform ${rotated ? 'rotate-180' : ''}`}>
+      <path d="m6 9 6 6 6-6"/>
+    </svg>
+  )
+}
+
+function CheckMini() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary">
+      <path d="M20 6 9 17l-5-5"/>
+    </svg>
+  )
+}
+
+function IconBtn({
+  children,
+  title,
+  onClick,
+  onPointerDown,
+  onPointerUp,
+  onPointerLeave,
+  disabled,
+  variant = 'default',
+}: {
+  children: React.ReactNode
+  title: string
+  onClick?: () => void
+  onPointerDown?: () => void
+  onPointerUp?: () => void
+  onPointerLeave?: () => void
+  disabled?: boolean
+  variant?: 'default' | 'danger'
+}) {
+  const cls = variant === 'danger'
+    ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
+    : 'text-muted-foreground hover:text-foreground hover:bg-accent-soft'
+  return (
+    <button
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
+      disabled={disabled}
+      className={`inline-btn w-8 h-8 rounded-md flex items-center justify-center transition-colors disabled:opacity-30 touch-none ${cls}`}
+    >
+      {children}
+    </button>
+  )
+}
+
+function SendBtn({ onClick, disabled, pulse }: { onClick: () => void; disabled?: boolean; pulse?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label="Send"
+      title="Send"
+      className={`inline-btn h-8 w-8 rounded-md flex items-center justify-center transition-all touch-none ${
+        disabled ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground hover:opacity-90 shadow-sm'
+      } ${pulse ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 19V5"/>
+        <path d="m5 12 7-7 7 7"/>
+      </svg>
+    </button>
+  )
+}
+
+// Inline dropdown pill for model selection
+function ModelPill({ modelId, onChange }: { modelId: string; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+  const current = MODEL_OPTIONS.find((m) => m.id === modelId) || MODEL_OPTIONS[0]
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`inline-btn h-7 px-2 rounded-md text-[11.5px] flex items-center gap-1.5 transition-colors ${
+          open ? 'bg-accent-soft text-foreground' : 'text-foreground/75 hover:text-foreground hover:bg-accent-soft'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-violet)' }} />
+        <span className="shrink-0"><SparklesMini /></span>
+        <span className="truncate max-w-[110px]">{current.shortLabel}</span>
+        <ChevronMini rotated={open} />
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 mb-2 z-30 min-w-[240px] rounded-xl bg-popover border border-border shadow-xl overflow-hidden">
+          <div className="px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground font-medium border-b border-border">
+            Model
+          </div>
+          <div className="py-1">
+            {MODEL_OPTIONS.map((m) => (
+              <button
+                type="button"
+                key={m.id}
+                onClick={() => { onChange(m.id); setOpen(false) }}
+                className={`inline-btn w-full text-left px-3 py-2 flex items-center gap-2.5 text-[13px] transition-colors ${
+                  m.id === modelId ? 'bg-accent-soft/60' : 'hover:bg-accent-soft'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-violet)' }} />
+                <span className="flex-1 min-w-0">
+                  <span className="block font-medium text-foreground">{m.label}</span>
+                </span>
+                {m.id === modelId && <CheckMini />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Inline dropdown pill for reasoning level
+const REASONING_DESCRIPTIONS: Record<string, string> = {
+  auto: 'Auto — server default',
+  none: 'No reasoning',
+  minimal: 'Minimal — quick replies',
+  low: 'Low — light deliberation',
+  medium: 'Medium — balanced',
+  high: 'High — careful thinking',
+  xhigh: 'X-high — maximum reasoning',
+}
+
+function ReasoningPill({ threadId }: { threadId: string | null }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const effective = useChatSettingsStore((s) => s.getEffectiveReasoning(threadId))
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleSelect = (level: string) => {
+    const store = useChatSettingsStore.getState()
+    if (level === 'auto') {
+      if (threadId) store.setReasoningOverride(threadId, null)
+      else store.setGlobalReasoning(null)
+    } else {
+      const typedLevel = level as import('../../state/chatSettings').ReasoningLevel
+      if (threadId) store.setReasoningOverride(threadId, typedLevel)
+      else store.setGlobalReasoning(typedLevel)
+    }
+    setOpen(false)
+  }
+
+  const displayLabel = effective ? (effective === 'xhigh' ? 'x-high' : effective) : 'auto'
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={`inline-btn h-7 px-2 rounded-md text-[11.5px] flex items-center gap-1.5 transition-colors ${
+          open ? 'bg-accent-soft text-foreground' : 'text-foreground/75 hover:text-foreground hover:bg-accent-soft'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-chat)' }} />
+        <span className="truncate max-w-[110px]">{displayLabel}</span>
+        <ChevronMini rotated={open} />
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 mb-2 z-30 min-w-[240px] rounded-xl bg-popover border border-border shadow-xl overflow-hidden">
+          <div className="px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground font-medium border-b border-border">
+            Reasoning
+          </div>
+          <div className="py-1">
+            {(['auto','none','minimal','low','medium','high','xhigh'] as const).map((level) => {
+              const isActive = level === 'auto' ? effective === null : effective === level
+              return (
+                <button
+                  type="button"
+                  key={level}
+                  onClick={() => handleSelect(level)}
+                  className={`inline-btn w-full text-left px-3 py-2 flex items-center gap-2.5 text-[13px] transition-colors ${
+                    isActive ? 'bg-accent-soft/60' : 'hover:bg-accent-soft'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-chat)' }} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block font-medium text-foreground">{level === 'xhigh' ? 'x-high' : level}</span>
+                    <span className="block text-[11.5px] text-muted-foreground mt-0.5">{REASONING_DESCRIPTIONS[level]}</span>
+                  </span>
+                  {isActive && <CheckMini />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

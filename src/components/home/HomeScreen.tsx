@@ -1,121 +1,33 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
-import { useThreadsStore, type Thread, loadThreadMessages } from '../../state/threads'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useThreadsStore, type Thread } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
-import { useTabsStore, type Tab, type ChatTab, type RecipeTab, type MarksenseTab } from '../../state/tabs'
-import { useUIStore } from '../../state/ui'
+import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab } from '../../state/tabs'
+
+// ── helpers ────────────────────────────────────────────────────────────────
+
+function greeting(date: Date): string {
+  const h = date.getHours()
+  if (h < 5) return 'Still up'
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  if (h < 22) return 'Good evening'
+  return 'Late night'
+}
+
+function formatDateLabel(date: Date): string {
+  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+}
 
 function relativeTime(timestamp: number): string {
   const diff = Math.floor((Date.now() - timestamp) / 1000)
-  if (diff < 60) return 'just now'
+  if (diff < 60) return 'now'
   const mins = Math.floor(diff / 60)
-  if (mins < 60) return `${mins}m ago`
+  if (mins < 60) return `${mins}m`
   const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
+  if (hours < 24) return `${hours}h`
   const days = Math.floor(hours / 24)
-  if (days < 7) return `${days}d ago`
+  if (days < 7) return `${days}d`
   return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-}
-
-
-interface QuickActionsProps {
-  onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
-  onOpenTab?: (tab: Tab) => void
-  onOpenRealtime?: () => void
-}
-
-function QuickActions({ onCompose, onOpenTab, onOpenRealtime }: QuickActionsProps) {
-  const openMarksense = useCallback(() => {
-    // Toggle the file explorer column (desktop) or open file browser modal (mobile)
-    const isDesktop = window.innerWidth >= 768
-    if (isDesktop) {
-      useUIStore.getState().setFileExplorerOpen(true)
-    } else {
-      useUIStore.getState().setFileBrowserOpen(true)
-    }
-  }, [])
-
-  const openRecipes = useCallback(() => {
-    const tabId = 'recipes-browser'
-    const tab: RecipeTab = {
-      id: tabId,
-      type: 'recipe',
-      title: 'Rezepte',
-      recipeId: 0, // 0 means show the list
-      openedAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-    useTabsStore.getState().openTab(tab)
-    onOpenTab?.(tab)
-  }, [onOpenTab])
-
-  return (
-    <div className="px-5 pt-1 pb-1 space-y-2">
-      {/* Full-width cards for Marksense and Recipes */}
-      <button
-        onClick={openMarksense}
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
-      >
-        <div className="w-9 h-9 rounded-lg bg-surface-light-3 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0 text-text-light-muted dark:text-text-dark-muted">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/></svg>
-        </div>
-        <div className="min-w-0">
-          <p className="text-[14px] font-medium leading-tight">Marksense</p>
-          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Open knowledge base</p>
-        </div>
-      </button>
-
-      <button
-        onClick={openRecipes}
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
-      >
-        <div className="w-9 h-9 rounded-lg bg-surface-light-3 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0 text-text-light-muted dark:text-text-dark-muted">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/></svg>
-        </div>
-        <div className="min-w-0">
-          <p className="text-[14px] font-medium leading-tight">Recipes</p>
-          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Browse & search recipes</p>
-        </div>
-      </button>
-
-      <button
-        onClick={onOpenRealtime}
-        className="flex items-center gap-4 w-full px-4 py-3.5 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-left text-text-light dark:text-text-dark"
-      >
-        <div className="w-9 h-9 rounded-lg bg-surface-light-3 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0 text-text-light-muted dark:text-text-dark-muted">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        </div>
-        <div className="min-w-0">
-          <p className="text-[14px] font-medium leading-tight">GPT Realtime</p>
-          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted leading-snug">Voice chat with GPT</p>
-        </div>
-      </button>
-
-      {/* Messaging channels in one row */}
-      <div className="grid grid-cols-3 gap-2">
-        <button
-          onClick={() => onCompose?.('messaging')}
-          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-text-light dark:text-text-dark"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          <span className="text-[12px] font-medium">Message</span>
-        </button>
-        <button
-          onClick={() => onCompose?.('slack')}
-          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-text-light dark:text-text-dark"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted"><rect width="3" height="8" x="13" y="2" rx="1.5"/><path d="M19 8.5V10h1.5A1.5 1.5 0 1 0 19 8.5"/><rect width="3" height="8" x="8" y="14" rx="1.5"/><path d="M5 15.5V14H3.5A1.5 1.5 0 1 0 5 15.5"/><rect width="8" height="3" x="14" y="13" rx="1.5"/><path d="M15.5 19H14v1.5a1.5 1.5 0 1 0 1.5-1.5"/><rect width="8" height="3" x="2" y="8" rx="1.5"/><path d="M8.5 5H10V3.5A1.5 1.5 0 1 0 8.5 5"/></svg>
-          <span className="text-[12px] font-medium">Slack</span>
-        </button>
-        <button
-          onClick={() => onCompose?.('email')}
-          className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark hover:bg-surface-light-3 dark:hover:bg-surface-dark-3 transition-colors duration-150 text-text-light dark:text-text-dark"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-          <span className="text-[12px] font-medium">Email</span>
-        </button>
-      </div>
-    </div>
-  )
 }
 
 function stripMarkdown(text: string): string {
@@ -136,58 +48,161 @@ function stripMarkdown(text: string): string {
     .trim()
 }
 
-// Tab type icons
-function TabIcon({ type }: { type: Tab['type'] }) {
-  const className = "text-text-light-muted dark:text-text-dark-muted"
-  if (type === 'recipe') {
-    return (
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z"/><line x1="6" y1="17" x2="18" y2="17"/>
-      </svg>
-    )
-  }
-  if (type === 'marksense') {
-    return (
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20"/>
-      </svg>
-    )
-  }
-  // chat
+/** Pick a stable category accent for a tab — mirrors DesktopSidebar.accentForTab */
+function accentForTab(tab: Tab): string {
+  if (tab.type === 'marksense' || tab.type === 'file') return 'cat-doc'
+  const accents = ['cat-chat', 'cat-violet', 'cat-rose', 'cat-voice']
+  let h = 0
+  for (let i = 0; i < tab.id.length; i++) h = (h * 31 + tab.id.charCodeAt(i)) >>> 0
+  return accents[h % accents.length]
+}
+
+// ── icons ──────────────────────────────────────────────────────────────────
+
+const SparkleIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
+  </svg>
+)
+
+const FinderIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+    <polyline points="14 2 14 8 20 8"/>
+  </svg>
+)
+
+const MicIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+    <line x1="12" y1="19" x2="12" y2="23"/>
+    <line x1="8" y1="23" x2="16" y2="23"/>
+  </svg>
+)
+
+const ArrowUpRight = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M7 7h10v10"/>
+    <path d="M7 17 17 7"/>
+  </svg>
+)
+
+const FileChipIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+    <polyline points="14 2 14 8 20 8"/>
+  </svg>
+)
+
+const ChatIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+  </svg>
+)
+
+const SlackIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="3" height="8" x="13" y="2" rx="1.5"/>
+    <path d="M19 8.5V10h1.5A1.5 1.5 0 1 0 19 8.5"/>
+    <rect width="3" height="8" x="8" y="14" rx="1.5"/>
+    <path d="M5 15.5V14H3.5A1.5 1.5 0 1 0 5 15.5"/>
+    <rect width="8" height="3" x="14" y="13" rx="1.5"/>
+    <path d="M15.5 19H14v1.5a1.5 1.5 0 1 0 1.5-1.5"/>
+    <rect width="8" height="3" x="2" y="8" rx="1.5"/>
+    <path d="M8.5 5H10V3.5A1.5 1.5 0 1 0 8.5 5"/>
+  </svg>
+)
+
+const EmailIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="16" x="2" y="4" rx="2"/>
+    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+  </svg>
+)
+
+// ── action tiles ───────────────────────────────────────────────────────────
+
+interface ActionTileProps {
+  title: string
+  description: string
+  icon: React.ReactNode
+  accent: 'cat-doc' | 'cat-voice'
+  onClick: () => void
+}
+
+function ActionTile({ title, description, icon, accent, onClick }: ActionTileProps) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-    </svg>
+    <button
+      onClick={onClick}
+      className="inline-btn group text-left p-4 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all hover:shadow-sm"
+    >
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center mb-3"
+        style={{
+          background: `color-mix(in oklch, var(--color-${accent}) 16%, transparent)`,
+          color: `var(--color-${accent})`,
+        }}
+      >
+        {icon}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[14px] font-medium text-foreground">{title}</div>
+          <div className="text-[12px] text-muted-foreground mt-0.5 leading-snug">{description}</div>
+        </div>
+        <span className="text-muted-foreground opacity-0 group-hover:opacity-100 -translate-x-1 group-hover:translate-x-0 transition-all shrink-0">
+          {ArrowUpRight}
+        </span>
+      </div>
+    </button>
   )
 }
 
-function tabIconBgClass(_type: Tab['type']): string {
-  return 'bg-surface-light-2 dark:bg-surface-dark-3'
-}
+// ── recent tab card (swipe left to archive) ────────────────────────────────
 
-function getTabPreview(tab: Tab): string {
-  if (tab.type === 'chat') {
-    // Get last message preview from the thread
-    const threads = useThreadsStore.getState().threads
-    const thread = threads.find(t => t.id === (tab as ChatTab).threadId)
-    return thread?.lastMessagePreview ? stripMarkdown(thread.lastMessagePreview) : ''
-  }
-  if (tab.type === 'recipe') return 'Recipe'
-  if (tab.type === 'marksense') return 'Knowledge base'
-  return ''
-}
+const ArchiveSvg = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="5" x="2" y="3" rx="1"/>
+    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
+    <path d="M10 12h4"/>
+  </svg>
+)
 
-function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; onDelete: () => void }) {
-  const preview = useMemo(() => getTabPreview(tab), [tab])
+function RecentCard({ tab, thread, onSelect, onOpenDoc, onArchive }: {
+  tab: Tab
+  thread?: Thread
+  onSelect: () => void
+  onOpenDoc?: (path: string) => void
+  /** Called when the user swipes left past the threshold.
+   *  - For chat tabs: archives the underlying Thread.
+   *  - For marksense / file tabs: closes the column. File on disk unchanged. */
+  onArchive?: () => void
+}) {
+  const accent = accentForTab(tab)
+  const preview = useMemo(() => {
+    if (tab.type === 'chat' && thread?.lastMessagePreview) {
+      return stripMarkdown(thread.lastMessagePreview)
+    }
+    if (tab.type === 'marksense') return 'Document'
+    if (tab.type === 'file') return 'File'
+    return ''
+  }, [tab, thread])
 
+  // Swipe-left to archive (chat) or close (doc/file)
+  const swipeable = !!onArchive
+  const isDocLike = tab.type !== 'chat'
+  const swipeLabel = isDocLike ? 'Close' : 'Archive'
   const [offsetX, setOffsetX] = useState(0)
   const [swiping, setSwiping] = useState(false)
   const startX = useRef(0)
   const startY = useRef(0)
   const direction = useRef<'none' | 'h' | 'v'>('none')
   const itemRef = useRef<HTMLDivElement>(null)
+  const SWIPE_THRESHOLD = 80
 
   useEffect(() => {
+    if (!swipeable) return
     const el = itemRef.current
     if (!el) return
 
@@ -198,7 +213,6 @@ function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; 
       direction.current = 'none'
       setSwiping(true)
     }
-
     const onMove = (e: TouchEvent) => {
       if (e.touches.length !== 1) return
       const dx = e.touches[0].clientX - startX.current
@@ -213,19 +227,18 @@ function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; 
         setOffsetX(dx)
       }
     }
-
     const onEnd = () => {
       setSwiping(false)
       direction.current = 'none'
-      setOffsetX(prev => {
-        if (prev < -100) {
-          setTimeout(onDelete, 200)
-          return -500
+      setOffsetX((prev) => {
+        if (prev < -SWIPE_THRESHOLD) {
+          // Slide out, then archive after the animation
+          setTimeout(() => onArchive?.(), 180)
+          return -600
         }
         return 0
       })
     }
-
     el.addEventListener('touchstart', onStart, { passive: true })
     el.addEventListener('touchmove', onMove, { passive: false })
     el.addEventListener('touchend', onEnd, { passive: true })
@@ -236,200 +249,98 @@ function TabItem({ tab, onSelect, onDelete }: { tab: Tab; onSelect: () => void; 
       el.removeEventListener('touchend', onEnd)
       el.removeEventListener('touchcancel', onEnd)
     }
-  }, [onDelete])
+  }, [swipeable, onArchive])
+
+  const revealedWidth = Math.min(Math.abs(offsetX), 120)
 
   return (
     <div ref={itemRef} className="relative overflow-hidden rounded-xl">
-      {offsetX < 0 && (
-        <div className="absolute top-0 bottom-0 right-0 flex items-center justify-end px-5 bg-red-500/90 rounded-r-xl" style={{ width: `${Math.abs(offsetX)}px` }}>
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+      {/* Archive reveal behind the card */}
+      {swipeable && offsetX < 0 && (
+        <div
+          className="absolute top-0 bottom-0 right-0 flex items-center justify-end pr-5 rounded-r-xl"
+          style={{
+            width: `${revealedWidth}px`,
+            background: `color-mix(in oklch, var(--color-cat-doc) ${Math.min(60, revealedWidth * 0.6)}%, transparent)`,
+            color: 'var(--color-cat-doc)',
+          }}
+        >
+          {revealedWidth > 30 && (
+            <span className="flex items-center gap-1.5 text-[12px] font-medium text-foreground">
+              {ArchiveSvg}
+              {revealedWidth > 70 && swipeLabel}
+            </span>
+          )}
         </div>
       )}
       <button
         onClick={onSelect}
-        className={`w-full flex items-center gap-3 px-3 py-3 bg-surface-light dark:bg-surface-dark hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 transition-all duration-150 text-left group relative ${offsetX < 0 ? 'rounded-l-xl rounded-r-none' : 'rounded-xl'}`}
+        className="inline-btn w-full text-left p-3.5 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all block"
         style={{
           transform: `translateX(${offsetX}px)`,
-          transition: swiping ? 'none' : 'transform 0.2s ease-out',
+          transition: swiping ? 'none' : 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.22s',
+          opacity: offsetX < -SWIPE_THRESHOLD * 2 ? 0 : 1,
         }}
       >
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors duration-150 ${tabIconBgClass(tab.type)}`}>
-          <TabIcon type={tab.type} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline justify-between gap-2">
-            <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate">
-              {tab.title}
-            </p>
-            <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 flex-shrink-0 tabular-nums">
-              {relativeTime(tab.updatedAt)}
-            </span>
+        <div className="flex items-start gap-3">
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0 mt-2"
+            style={{ background: `var(--color-${accent})` }}
+          />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-[14px] font-medium truncate text-foreground">{tab.title || 'Untitled'}</div>
+              <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                {relativeTime(tab.updatedAt)}
+              </div>
+            </div>
+            {preview && (
+              <div className="text-[12.5px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
+            )}
+            {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {thread.linkedDocs.map((d) => (
+                  <span
+                    key={d.path}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onOpenDoc?.(d.path)
+                    }}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-secondary text-[11.5px] text-foreground/85 hover:bg-accent-soft border border-border cursor-pointer"
+                  >
+                    <span style={{ color: 'var(--color-cat-doc)' }}>{FileChipIcon}</span>
+                    <span className="truncate max-w-[160px]">{d.title || d.path.split('/').filter(Boolean).pop()}</span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          {preview && (
-            <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
-              {preview}
-            </p>
-          )}
         </div>
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-text-light-muted/20 dark:text-text-dark-muted/20 group-hover:text-accent/50 transition-colors"><polyline points="9 18 15 12 9 6"/></svg>
       </button>
     </div>
   )
 }
 
-function PreviousConversations({ onRestore }: { onRestore: (thread: Thread) => void }) {
-  const threads = useThreadsStore((s) => s.threads)
-  const tabs = useTabsStore((s) => s.tabs)
-  const [expanded, setExpanded] = useState(false)
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [searching, setSearching] = useState(false)
-  const messageIndexRef = useRef<Map<string, string> | null>(null)
+// ── channel tile ───────────────────────────────────────────────────────────
 
-  // Debounce search input (300ms)
-  useEffect(() => {
-    if (!search.trim()) {
-      setDebouncedSearch('')
-      setSearching(false)
-      return
-    }
-    setSearching(true)
-    const timer = setTimeout(() => {
-      setDebouncedSearch(search)
-      setSearching(false)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [search])
-
-  const activeTabIds = useMemo(() => new Set(
-    tabs.filter(t => t.type === 'chat').map(t => (t as ChatTab).threadId)
-  ), [tabs])
-
-  const inactiveThreads = useMemo(() =>
-    threads
-      .filter(t => !activeTabIds.has(t.id))
-      .sort((a, b) => b.updatedAt - a.updatedAt),
-    [threads, activeTabIds]
-  )
-
-  // Build message index lazily on first search
-  const getMessageIndex = useCallback(() => {
-    if (messageIndexRef.current) return messageIndexRef.current
-    const index = new Map<string, string>()
-    for (const thread of inactiveThreads) {
-      const msgs = loadThreadMessages(thread.id)
-      const text = msgs
-        .map(m => m.content || '')
-        .join(' ')
-        .toLowerCase()
-      index.set(thread.id, text)
-    }
-    messageIndexRef.current = index
-    return index
-  }, [inactiveThreads])
-
-  // Invalidate index when threads change
-  useEffect(() => {
-    messageIndexRef.current = null
-  }, [inactiveThreads])
-
-  const previousThreads = useMemo(() => {
-    if (!debouncedSearch.trim()) return inactiveThreads
-    const q = debouncedSearch.toLowerCase()
-    const index = getMessageIndex()
-    return inactiveThreads.filter(t =>
-      t.title.toLowerCase().includes(q) ||
-      t.lastMessagePreview?.toLowerCase().includes(q) ||
-      (index.get(t.id) || '').includes(q)
-    )
-  }, [inactiveThreads, debouncedSearch, getMessageIndex])
-
-  if (inactiveThreads.length === 0 && !search) return null
-
+function ChannelTile({ label, icon, accent, onClick }: {
+  label: string
+  icon: React.ReactNode
+  accent: string
+  onClick: () => void
+}) {
   return (
-    <div className="px-5 pt-5">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 mb-1 group"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"
-          fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`text-text-light-muted dark:text-text-dark-muted transition-transform duration-200 ${expanded ? 'rotate-90' : ''}`}
-        >
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
-        <p className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">
-          Previous
-        </p>
-        <span className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40 tabular-nums">
-          {debouncedSearch ? previousThreads.length : inactiveThreads.length}
-        </span>
-      </button>
-      {expanded && (
-        <>
-          <div className="relative mb-2">
-            <svg
-              xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-light-muted/40 dark:text-text-dark-muted/40 pointer-events-none"
-            >
-              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-            </svg>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search conversations..."
-              className="w-full pl-8 pr-3 py-2 text-[13px] rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 border border-border-light dark:border-border-dark text-text-light dark:text-text-dark placeholder:text-text-light-muted/40 dark:placeholder:text-text-dark-muted/40 outline-none focus:border-accent/40 transition-colors"
-            />
-          </div>
-          <div className="space-y-0.5 max-h-[50vh] overflow-y-auto overscroll-y-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
-            {previousThreads.map((thread) => (
-              <button
-                key={thread.id}
-                onClick={() => onRestore(thread)}
-                className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 transition-colors duration-150 text-left group"
-              >
-                <div className="w-9 h-9 rounded-xl bg-surface-light-2 dark:bg-surface-dark-3 flex items-center justify-center flex-shrink-0">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted">
-                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <p className="text-[14px] font-medium text-text-light dark:text-text-dark truncate">
-                      {thread.title}
-                    </p>
-                    <span className="text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 flex-shrink-0 tabular-nums">
-                      {relativeTime(thread.updatedAt)}
-                    </span>
-                  </div>
-                  {thread.lastMessagePreview && (
-                    <p className="text-[12px] text-text-light-muted/70 dark:text-text-dark-muted/70 truncate mt-0.5 leading-snug">
-                      {stripMarkdown(thread.lastMessagePreview)}
-                    </p>
-                  )}
-                </div>
-                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="flex-shrink-0 text-text-light-muted/20 dark:text-text-dark-muted/20 group-hover:text-accent/50 transition-colors"><polyline points="9 18 15 12 9 6"/></svg>
-              </button>
-            ))}
-            {searching && (
-              <p className="text-[13px] text-text-light-muted/50 dark:text-text-dark-muted/50 text-center py-4">
-                Searching...
-              </p>
-            )}
-            {!searching && previousThreads.length === 0 && search && (
-              <p className="text-[13px] text-text-light-muted/50 dark:text-text-dark-muted/50 text-center py-4">
-                No matches
-              </p>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+    <button
+      onClick={onClick}
+      className="inline-btn flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl bg-card border border-border hover:bg-secondary/50 transition-all"
+    >
+      <span style={{ color: `var(--color-${accent})` }}>{icon}</span>
+      <span className="text-[12px] font-medium text-foreground">{label}</span>
+    </button>
   )
 }
+
+// ── main ───────────────────────────────────────────────────────────────────
 
 export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, onOpenRealtime }: {
   onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
@@ -439,121 +350,162 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   onOpenRealtime?: () => void
 }) {
   const tabs = useTabsStore((s) => s.tabs)
-  const closeTab = useTabsStore((s) => s.closeTab)
-  const [showAll, setShowAll] = useState(false)
-  const [twentyFourHoursAgo] = useState(() => Date.now() - 24 * 60 * 60 * 1000)
+  const threads = useThreadsStore((s) => s.threads)
 
-  const sortedTabs = useMemo(() =>
-    [...tabs].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt)),
-    [tabs]
-  )
+  const [now] = useState(() => new Date())
 
+  // Recent: today's tabs, sorted by updatedAt, capped at 6
   const recentTabs = useMemo(() => {
-    if (showAll) return sortedTabs
-    const recent = sortedTabs.filter(t => t.updatedAt > twentyFourHoursAgo)
-    return recent.slice(0, 5)
-  }, [sortedTabs, showAll, twentyFourHoursAgo])
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000
+    return [...tabs]
+      .filter((t) => {
+        // Hide tabs whose thread is archived
+        if (t.type !== 'chat') return t.updatedAt > dayAgo
+        const th = threads.find((x) => x.id === (t as ChatTab).threadId)
+        return !th?.archived && t.updatedAt > dayAgo
+      })
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 6)
+  }, [tabs, threads])
 
-  const hasMore = sortedTabs.length > recentTabs.length
-  const handleDelete = useCallback((tabId: string) => {
-    // For chat tabs, also clean up thread data
-    const tab = tabs.find(t => t.id === tabId)
-    if (tab?.type === 'chat') {
-      const threadId = (tab as ChatTab).threadId
-      const ts = useChatStore.getState().threadStates[threadId]
-      if (ts?.isStreaming) {
-        ts.abortController?.abort()
-      }
-      const rest = { ...useChatStore.getState().threadStates }
-      delete rest[threadId]
-      useChatStore.setState({ threadStates: rest })
-      useThreadsStore.getState().deleteThread(threadId)
-    }
-    closeTab(tabId)
-  }, [tabs, closeTab])
-
-  const handleSelectTab = useCallback((tabId: string) => {
-    if (onSelectTab) {
-      onSelectTab(tabId)
-    }
+  const openFinder = useCallback(() => {
+    const id = openOrFocusFinderTab()
+    onSelectTab?.(id)
   }, [onSelectTab])
 
-  const handleOpenTab = useCallback((tab: Tab) => {
-    if (onSelectTab) {
-      onSelectTab(tab.id)
+  const handleOpenDoc = useCallback((path: string) => {
+    // Open as a marksense tab so it sits next to its parent conversation
+    const docId = `marksense:${path}`
+    const existing = useTabsStore.getState().tabs.find(
+      (t) => t.type === 'marksense' && (t as { path?: string }).path === path,
+    )
+    if (existing) {
+      useTabsStore.getState().openTab(existing)
+      onSelectTab?.(existing.id)
+      return
     }
-  }, [onSelectTab])
-
-  const handleRestoreThread = useCallback((thread: Thread) => {
-    const tab: ChatTab = {
-      id: thread.id,
-      type: 'chat',
-      threadId: thread.id,
-      title: thread.title,
+    useTabsStore.getState().openTab({
+      id: docId,
+      type: 'marksense',
+      title: path.split('/').filter(Boolean).pop() || 'Document',
+      path,
       openedAt: Date.now(),
       updatedAt: Date.now(),
-    }
-    useTabsStore.getState().openTab(tab)
-    onSelectTab?.(thread.id)
+    })
+    onSelectTab?.(docId)
   }, [onSelectTab])
 
   return (
-    <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0" style={{ WebkitOverflowScrolling: 'touch' }}>
-      <div className="max-w-[900px] mx-auto min-h-full flex flex-col pb-4" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
-        <div className="flex-1" />
+    <div className="flex-1 overflow-y-auto overscroll-y-contain min-h-0 scrollbar-fine" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="max-w-[720px] mx-auto px-6 pt-8 pb-6" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 2rem)' }}>
+        {/* Greeting */}
+        <header className="mb-7">
+          <div className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-2">
+            <span style={{ color: 'var(--color-cat-violet)' }}>{SparkleIcon}</span>
+            {formatDateLabel(now)}
+          </div>
+          <h1 className="font-display text-[28px] md:text-[32px] leading-tight font-semibold tracking-tight text-foreground">
+            {greeting(now)}.
+          </h1>
+          <p className="text-[15px] text-muted-foreground mt-1.5">
+            What would you like to think about?
+          </p>
+        </header>
+
         {/* Push notification prompt */}
         {pushState === 'prompt' && onEnablePush && (
-          <div className="mx-5 mt-6 mb-2">
-            <button
-              onClick={onEnablePush}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-accent/10 hover:bg-accent/15 transition-colors text-left"
-            >
-              <span className="text-xl">🔔</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-text-light dark:text-text-dark">Enable notifications</p>
-                <p className="text-[11px] text-text-light-muted dark:text-text-dark-muted">Get notified when Jane sends you a message</p>
-              </div>
-              <svg className="w-4 h-4 text-accent shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>
-            </button>
-          </div>
+          <button
+            onClick={onEnablePush}
+            className="inline-btn w-full mb-5 flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 transition-colors text-left"
+          >
+            <span className="text-xl">🔔</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-foreground">Enable notifications</p>
+              <p className="text-[11px] text-muted-foreground">Get notified when Jane sends you a message</p>
+            </div>
+            <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+          </button>
         )}
 
-        <div className="pt-2">
-          <QuickActions onCompose={onCompose} onOpenTab={handleOpenTab} onOpenRealtime={onOpenRealtime} />
-        </div>
+        {/* Quick action tiles */}
+        <section className="mb-7">
+          <div className="grid grid-cols-2 gap-2.5">
+            <ActionTile
+              title="Finder"
+              description="Notes, drafts & documents"
+              icon={FinderIcon}
+              accent="cat-doc"
+              onClick={openFinder}
+            />
+            <ActionTile
+              title="Voice mode"
+              description="Talk in real time"
+              icon={MicIcon}
+              accent="cat-voice"
+              onClick={() => onOpenRealtime?.()}
+            />
+          </div>
+        </section>
 
+        {/* Pick up where you left off */}
         {recentTabs.length > 0 && (
-          <div className="px-5 pt-6">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">
-                Recent
-              </p>
+          <section className="mb-7">
+            <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-3">
+              Pick up where you left off
+            </h2>
+            <div className="space-y-1.5">
+              {recentTabs.map((tab) => {
+                const thread = tab.type === 'chat'
+                  ? threads.find((t) => t.id === (tab as ChatTab).threadId)
+                  : undefined
+                return (
+                  <RecentCard
+                    key={tab.id}
+                    tab={tab}
+                    thread={thread}
+                    onSelect={() => onSelectTab?.(tab.id)}
+                    onOpenDoc={handleOpenDoc}
+                    onArchive={() => {
+                      if (tab.type === 'chat' && thread) {
+                        useThreadsStore.getState().archiveThread(thread.id)
+                      } else {
+                        // Marksense / file tab: just close the column. File on disk is untouched.
+                        useTabsStore.getState().closeTab(tab.id)
+                      }
+                    }}
+                  />
+                )
+              })}
             </div>
-            <div className="space-y-0.5">
-              {recentTabs.map((tab) => (
-                <TabItem
-                  key={tab.id}
-                  tab={tab}
-                  onSelect={() => handleSelectTab(tab.id)}
-                  onDelete={() => handleDelete(tab.id)}
-                />
-              ))}
-            </div>
-            {!showAll && hasMore && (
-              <button
-                onClick={() => setShowAll(true)}
-                className="inline-btn w-full mt-3 py-2.5 text-[13px] text-accent/80 hover:text-accent font-medium transition-colors rounded-xl hover:bg-accent/5"
-              >
-                Show more
-              </button>
-            )}
-          </div>
+          </section>
         )}
 
-        <PreviousConversations onRestore={handleRestoreThread} />
-
-        <div className="flex-1" />
+        {/* Compose to other channels */}
+        <section>
+          <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-3">
+            Compose
+          </h2>
+          <div className="grid grid-cols-3 gap-2">
+            <ChannelTile label="Message" icon={ChatIcon} accent="cat-chat" onClick={() => onCompose?.('messaging')} />
+            <ChannelTile label="Slack" icon={SlackIcon} accent="cat-voice" onClick={() => onCompose?.('slack')} />
+            <ChannelTile label="Email" icon={EmailIcon} accent="cat-doc" onClick={() => onCompose?.('email')} />
+          </div>
+        </section>
       </div>
     </div>
   )
+}
+
+// Cleanup: side-effect free helper kept for chat store guard (was used in the
+// old swipe-to-delete tab item; preserved for callers that import it).
+export function _cleanupChatStoreForTabDeletion(tabId: string) {
+  const tab = useTabsStore.getState().tabs.find((t) => t.id === tabId)
+  if (tab?.type === 'chat') {
+    const threadId = (tab as ChatTab).threadId
+    const ts = useChatStore.getState().threadStates[threadId]
+    if (ts?.isStreaming) ts.abortController?.abort()
+    const rest = { ...useChatStore.getState().threadStates }
+    delete rest[threadId]
+    useChatStore.setState({ threadStates: rest })
+  }
 }

@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react'
-import { usePresetStore } from '../../state/preset'
-import { MODEL_PRESETS } from '../../gateway/presets'
+import { useModelStore } from '../../state/preset'
+import { MODEL_OPTIONS } from '../../gateway/presets'
 
 export function ModelPickerButton() {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const { selectedPresetId, setSelectedPresetId } = usePresetStore()
-  const current = MODEL_PRESETS.find((p) => p.id === selectedPresetId) || MODEL_PRESETS[0]
+  const { selectedModelId, setSelectedModelId } = useModelStore()
+  const current = MODEL_OPTIONS.find((m) => m.id === selectedModelId) || MODEL_OPTIONS[0]
 
   // Close on outside click
   useEffect(() => {
@@ -35,25 +35,20 @@ export function ModelPickerButton() {
 
       {open && (
         <div className="absolute bottom-full left-0 mb-2 min-w-[160px] rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/40 dark:border-surface-dark-3/40 shadow-lg shadow-black/20 overflow-hidden animate-[fadeSlideIn_0.12s_ease-out] z-50">
-          {MODEL_PRESETS.map((preset) => (
+          {MODEL_OPTIONS.map((m) => (
             <button
-              key={preset.id}
+              key={m.id}
               onClick={() => {
-                setSelectedPresetId(preset.id)
+                setSelectedModelId(m.id)
                 setOpen(false)
               }}
               className={`w-full px-3.5 py-2.5 text-left text-[13px] transition-colors ${
-                preset.id === selectedPresetId
+                m.id === selectedModelId
                   ? 'bg-accent/12 text-accent font-medium'
                   : 'text-text-light dark:text-text-dark hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50'
               }`}
             >
-              <div className="font-medium">{preset.label}</div>
-              {preset.reasoningEffort && (
-                <div className="text-[10px] text-text-light-muted/60 dark:text-text-dark-muted/60 mt-0.5">
-                  Reasoning: {preset.reasoningEffort}
-                </div>
-              )}
+              <div className="font-medium">{m.label}</div>
             </button>
           ))}
         </div>

@@ -7,7 +7,6 @@ import nodePath from 'path'
 import { execSync } from 'node:child_process'
 import webpush from 'web-push'
 import Database from 'better-sqlite3'
-import { createRecipe, updateRecipe, getRecipeWithDetails, getAllRecipes, searchRecipes, deleteRecipe, markCooked, markOpened, checkDuplicate, IMAGES_DIR } from './server/recipes-db.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const DOCUMENTS_ROOT = nodePath.join(process.env.HOME || '', 'Documents/Workspace')
@@ -598,185 +597,6 @@ function openaiRealtimeProxy() {
   }
 }
 
-function recipesApiPlugin() {
-  async function readBody(req: any): Promise<string> {
-    const chunks: Buffer[] = []
-    for await (const chunk of req) chunks.push(Buffer.from(chunk))
-    return Buffer.concat(chunks).toString('utf-8')
-  }
-
-  async function downloadImage(imageUrl: string): Promise<string> {
-    try {
-      const response = await fetch(imageUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Clavus/1.0)' },
-        redirect: 'follow',
-      })
-      if (!response.ok) return ''
-      const contentType = response.headers.get('content-type') || ''
-      let ext = '.jpg'
-      if (contentType.includes('png')) ext = '.png'
-      else if (contentType.includes('webp')) ext = '.webp'
-      else if (contentType.includes('gif')) ext = '.gif'
-      const fileName = `recipe-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`
-      const filePath = nodePath.join(IMAGES_DIR, fileName)
-      const buffer = Buffer.from(await response.arrayBuffer())
-      fs.writeFileSync(filePath, buffer)
-      return fileName
-    } catch {
-      return ''
-    }
-  }
-
-  const attach = (server: any) => {
-    // Serve recipe images at /recipe-images/
-    server.middlewares.use((req: any, res: any, next: any) => {
-        if (!req.url?.startsWith('/recipe-images/')) return next()
-        const fileName = decodeURIComponent(req.url.replace('/recipe-images/', ''))
-        const filePath = nodePath.join(IMAGES_DIR, fileName)
-        if (!filePath.startsWith(IMAGES_DIR)) { res.statusCode = 403; res.end(); return }
-        if (!fs.existsSync(filePath)) { res.statusCode = 404; res.end(); return }
-        const ext = nodePath.extname(filePath).toLowerCase()
-        const mimeMap: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.gif': 'image/gif' }
-        res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream')
-        res.setHeader('Cache-Control', 'public, max-age=86400')
-        fs.createReadStream(filePath).pipe(res)
-    })
-
-    server.middlewares.use(async (req: any, res: any, next: any) => {
-        if (!req.url?.startsWith('/api/recipes')) return next()
-
-        res.setHeader('Content-Type', 'application/json')
-
-        try {
-          // GET /api/recipes/search?q=...
-          if (req.url.startsWith('/api/recipes/search') && req.method === 'GET') {
-            const url = new URL(req.url, 'http://localhost')
-            const q = url.searchParams.get('q') || ''
-            if (!q.trim()) {
-              res.end(JSON.stringify([]))
-              return
-            }
-            try {
-              const results = searchRecipes(q.trim())
-              res.end(JSON.stringify(results))
-            } catch {
-              res.end(JSON.stringify([]))
-            }
-            return
-          }
-
-          // POST /api/recipes/bring - Add items to Bring! shopping list
-          if (req.url === '/api/recipes/bring' && req.method === 'POST') {
-            const body = JSON.parse(await readBody(req))
-            const items: { name: string; spec: string }[] = body.items || []
-            const pythonPath = nodePath.join(process.env.HOME || '', '.openclaw/workspace/.venvs/bring/bin/python3')
-            const scriptPath = nodePath.join(process.env.HOME || '', '.openclaw/workspace/scripts/bring.py')
-            const { execSync } = await import('child_process')
-            const results: { item: string; ok: boolean; error?: string }[] = []
-            for (const item of items) {
-              try {
-                execSync(`${pythonPath} ${scriptPath} add "${item.name.replace(/"/g, '\\"')}" "${(item.spec || '').replace(/"/g, '\\"')}"`, { timeout: 15000 })
-                results.push({ item: item.name, ok: true })
-              } catch (err: any) {
-                results.push({ item: item.name, ok: false, error: err.message })
-              }
-            }
-            res.end(JSON.stringify({ ok: true, results }))
-            return
-          }
-
-          // POST /api/recipes/:id/cook
-          const cookMatch = req.url.match(/^\/api\/recipes\/(\d+)\/cook$/)
-          if (cookMatch && req.method === 'POST') {
-            markCooked(parseInt(cookMatch[1]))
-            res.end(JSON.stringify({ ok: true }))
-            return
-          }
-
-          // POST /api/recipes/:id/open - track last opened
-          const openMatch = req.url.match(/^\/api\/recipes\/(\d+)\/open$/)
-          if (openMatch && req.method === 'POST') {
-            markOpened(parseInt(openMatch[1]))
-            res.end(JSON.stringify({ ok: true }))
-            return
-          }
-
-          // GET/PUT/DELETE /api/recipes/:id
-          const idMatch = req.url.match(/^\/api\/recipes\/(\d+)$/)
-          if (idMatch && req.method === 'GET') {
-            const recipe = getRecipeWithDetails(parseInt(idMatch[1]))
-            if (!recipe) {
-              res.statusCode = 404
-              res.end(JSON.stringify({ error: 'Not found' }))
-              return
-            }
-            res.end(JSON.stringify(recipe))
-            return
-          }
-          if (idMatch && req.method === 'PUT') {
-            const body = JSON.parse(await readBody(req))
-            // Download image if image_url provided
-            if (body.image_url && !body.image_path) {
-              const fileName = await downloadImage(body.image_url)
-              if (fileName) body.image_path = fileName
-            }
-            updateRecipe(parseInt(idMatch[1]), body)
-            const updated = getRecipeWithDetails(parseInt(idMatch[1]))
-            res.end(JSON.stringify(updated))
-            return
-          }
-          if (idMatch && req.method === 'DELETE') {
-            deleteRecipe(parseInt(idMatch[1]))
-            res.end(JSON.stringify({ ok: true }))
-            return
-          }
-
-          // GET /api/recipes
-          if (req.url === '/api/recipes' && req.method === 'GET') {
-            const recipes = getAllRecipes()
-            res.end(JSON.stringify(recipes))
-            return
-          }
-
-          // POST /api/recipes
-          if (req.url === '/api/recipes' && req.method === 'POST') {
-            const body = JSON.parse(await readBody(req))
-            if (!body.force) {
-              const dup = checkDuplicate(body.title, body.source_url)
-              if (dup) {
-                res.statusCode = 409
-                res.end(JSON.stringify({ error: 'Duplicate recipe', existing: dup }))
-                return
-              }
-            }
-            // Download image if image_url provided
-            if (body.image_url && !body.image_path) {
-              const fileName = await downloadImage(body.image_url)
-              if (fileName) body.image_path = fileName
-            }
-            const id = createRecipe(body)
-            const recipe = getRecipeWithDetails(id)
-            res.statusCode = 201
-            res.end(JSON.stringify(recipe))
-            return
-          }
-
-          res.statusCode = 404
-          res.end(JSON.stringify({ error: 'Not found' }))
-        } catch (err: any) {
-          res.statusCode = 500
-          res.end(JSON.stringify({ error: err.message }))
-        }
-    })
-  }
-
-  return {
-    name: 'recipes-api',
-    configureServer: attach,
-    configurePreviewServer: attach,
-  }
-}
-
 function hermesResponsesPlugin() {
   const RESPONSE_STORE_DB = nodePath.join(process.env.HOME || '', '.hermes/response_store.db')
   let db: InstanceType<typeof Database> | null = null
@@ -981,7 +801,6 @@ export default defineConfig({
   plugins: [
     responsesProxyPlugin(),
     threadsApiPlugin(),
-    recipesApiPlugin(),
     elevenLabsProxy(),
     openaiRealtimeProxy(),
     workspacePlugin(),

@@ -306,6 +306,7 @@ export function ChatView({ messages, title, threadId }: Props) {
                     onSpeak={tts.speak}
                     showAvatar={showAvatar}
                     isLastInGroup={isLastInGroup}
+                    threadId={threadId}
                   />
                 </div>
               )

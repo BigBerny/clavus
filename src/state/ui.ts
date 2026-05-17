@@ -3,16 +3,13 @@ import { create } from 'zustand'
 export type ThemeChoice = 'dark' | 'light' | 'system'
 type ResolvedTheme = 'dark' | 'light'
 
-export type AppView = 'home' | 'chat' | 'recipes' | 'recipe-detail' | 'cook-mode'
+export type AppView = 'home' | 'chat'
 
 interface UIState {
   themeChoice: ThemeChoice
   resolvedTheme: ResolvedTheme
   connectionStatus: 'connected' | 'disconnected' | 'checking' | 'reconnecting'
   currentView: AppView
-  fileBrowserOpen: boolean
-  fileExplorerOpen: boolean
-  selectedRecipeId: number | null
   gatewayUrl: string
   gatewayToken: string
   elevenLabsApiKey: string
@@ -20,9 +17,6 @@ interface UIState {
   setThemeChoice: (choice: ThemeChoice) => void
   setConnectionStatus: (status: UIState['connectionStatus']) => void
   setCurrentView: (view: AppView) => void
-  setFileBrowserOpen: (open: boolean) => void
-  setFileExplorerOpen: (open: boolean) => void
-  setSelectedRecipeId: (id: number | null) => void
   setGatewayUrl: (url: string) => void
   setGatewayToken: (token: string) => void
   setElevenLabsApiKey: (key: string) => void
@@ -58,9 +52,6 @@ export const useUIStore = create<UIState>((set) => ({
   resolvedTheme: initialResolved,
   connectionStatus: 'checking',
   currentView: 'home',
-  fileBrowserOpen: false,
-  fileExplorerOpen: false,
-  selectedRecipeId: null,
   gatewayUrl: localStorage.getItem('clavus-hermes-url') || localStorage.getItem('clavus-gateway-url') || '',
   gatewayToken: localStorage.getItem('clavus-hermes-token') || localStorage.getItem('clavus-gateway-token') || '',
   elevenLabsApiKey: localStorage.getItem('clavus-elevenlabs-key') || '',
@@ -74,9 +65,6 @@ export const useUIStore = create<UIState>((set) => ({
 
   setConnectionStatus: (status) => set({ connectionStatus: status }),
   setCurrentView: (view) => set({ currentView: view }),
-  setFileBrowserOpen: (open) => set({ fileBrowserOpen: open }),
-  setFileExplorerOpen: (open) => set({ fileExplorerOpen: open }),
-  setSelectedRecipeId: (id) => set({ selectedRecipeId: id }),
 
   setGatewayUrl: (url) => {
     localStorage.setItem('clavus-hermes-url', url)
