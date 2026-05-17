@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useThreadsStore, type Thread } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
-import { useTabsStore, type Tab, type ChatTab } from '../../state/tabs'
-import { useUIStore } from '../../state/ui'
+import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab } from '../../state/tabs'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -370,10 +369,9 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   }, [tabs, threads])
 
   const openFinder = useCallback(() => {
-    const isDesktop = window.innerWidth >= 768
-    if (isDesktop) useUIStore.getState().setFileExplorerOpen(true)
-    else useUIStore.getState().setFileBrowserOpen(true)
-  }, [])
+    const id = openOrFocusFinderTab()
+    onSelectTab?.(id)
+  }, [onSelectTab])
 
   const handleOpenDoc = useCallback((path: string) => {
     // Open as a marksense tab so it sits next to its parent conversation

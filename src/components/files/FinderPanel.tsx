@@ -1,7 +1,19 @@
-import { useState, useCallback } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useFileExplorer } from '../../hooks/useFileExplorer'
-import { useTabsStore, type MarksenseTab, type FileTab } from '../../state/tabs'
+import { useTabsStore, type FinderTab } from '../../state/tabs'
+import { getFileTypeInfo } from '../../lib/fileTypes'
 import type { FileEntry } from '../../lib/workspaceApi'
+
+const MarksensePanel = lazy(() =>
+  import('../marksense/MarksensePanel').then(m => ({ default: m.MarksensePanel }))
+)
+const FileViewerPanel = lazy(() =>
+  import('./FileViewerPanel').then(m => ({ default: m.FileViewerPanel }))
+)
+
+function isMarkdownFile(name: string): boolean {
+  return getFileTypeInfo(name).kind === 'markdown'
+}
 
 function fileIcon(entry: FileEntry, expanded?: boolean) {
   if (entry.type === 'dir') {
@@ -18,24 +30,52 @@ function fileIcon(entry: FileEntry, expanded?: boolean) {
   return <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted/60 dark:text-text-dark-muted/60 shrink-0"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
 }
 
-const MARKDOWN_EXTS = new Set(['md', 'mdx', 'markdown', 'txt'])
-
-function isMarkdown(name: string): boolean {
-  const ext = name.split('.').pop()?.toLowerCase() || ''
-  return MARKDOWN_EXTS.has(ext)
+function flattenFiles(entries: FileEntry[], acc: FileEntry[] = []): FileEntry[] {
+  for (const e of entries) {
+    if (e.type === 'file') acc.push(e)
+    else if (e.children) flattenFiles(e.children, acc)
+  }
+  return acc
 }
 
-interface FileExplorerColumnProps {
-  onClose: () => void
-  onSelectFile: (path: string, title: string, isMarkdown: boolean) => void
+function rankFiles(files: FileEntry[], q: string): FileEntry[] {
+  return files
+    .map(f => {
+      const name = f.name.toLowerCase()
+      const path = f.path.toLowerCase()
+      const folder = path.slice(0, -name.length - 1)
+      const score =
+        (name.startsWith(q) ? 100 : 0) +
+        (name.includes(q) ? 50 : 0) +
+        (folder.includes(q) ? 10 : 0)
+      return { f, score }
+    })
+    .filter(x => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(x => x.f)
 }
 
-function FileTreeItem({ entry, depth, expandedDirs, onToggleDir, onSelectFile }: {
+function highlightMatch(text: string, query: string): React.ReactNode {
+  const i = text.toLowerCase().indexOf(query)
+  if (i === -1) return text
+  return (
+    <>
+      {text.slice(0, i)}
+      <mark className="bg-accent/20 text-accent rounded px-0.5">{text.slice(i, i + query.length)}</mark>
+      {text.slice(i + query.length)}
+    </>
+  )
+}
+
+function FileTreeItem({
+  entry, depth, expandedDirs, selectedPath, onToggleDir, onSelectFile,
+}: {
   entry: FileEntry
   depth: number
   expandedDirs: Set<string>
+  selectedPath: string | null
   onToggleDir: (path: string) => void
-  onSelectFile: (path: string, title: string, isMarkdown: boolean) => void
+  onSelectFile: (path: string, title: string) => void
 }) {
   const isExpanded = expandedDirs.has(entry.path)
 
@@ -63,6 +103,7 @@ function FileTreeItem({ entry, depth, expandedDirs, onToggleDir, onSelectFile }:
             entry={child}
             depth={depth + 1}
             expandedDirs={expandedDirs}
+            selectedPath={selectedPath}
             onToggleDir={onToggleDir}
             onSelectFile={onSelectFile}
           />
@@ -71,30 +112,68 @@ function FileTreeItem({ entry, depth, expandedDirs, onToggleDir, onSelectFile }:
     )
   }
 
+  const isSelected = selectedPath === entry.path
   return (
     <button
-      onClick={() => onSelectFile(entry.path, entry.name, isMarkdown(entry.name))}
-      className="flex items-center gap-2 w-full px-2 py-1 text-left rounded-md hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 transition-colors"
+      onClick={() => onSelectFile(entry.path, entry.name)}
+      className={`flex items-center gap-2 w-full px-2 py-1 text-left rounded-md transition-colors ${
+        isSelected
+          ? 'bg-primary/10 text-primary'
+          : 'hover:bg-surface-light-2 dark:hover:bg-surface-dark-2'
+      }`}
       style={{ paddingLeft: `${24 + depth * 16}px` }}
     >
       {fileIcon(entry)}
-      <span className="text-[13px] text-text-light dark:text-text-dark truncate">{entry.name}</span>
+      <span className="text-[13px] truncate">{entry.name}</span>
     </button>
   )
 }
 
-export function FileExplorerColumn({ onClose, onSelectFile }: FileExplorerColumnProps) {
+function SearchResultRow({ file, query, selected, onSelectFile }: {
+  file: FileEntry
+  query: string
+  selected: boolean
+  onSelectFile: (path: string, title: string) => void
+}) {
+  const segments = file.path.split('/').filter(Boolean)
+  const filename = segments[segments.length - 1] || file.path
+  const folder = segments.slice(0, -1).join(' / ') || 'Workspace'
+  return (
+    <button
+      onClick={() => onSelectFile(file.path, file.name)}
+      className={`w-full px-2 py-1.5 rounded-md transition-colors text-left flex items-start gap-2 ${
+        selected
+          ? 'bg-primary/10 text-primary'
+          : 'hover:bg-surface-light-2 dark:hover:bg-surface-dark-2'
+      }`}
+    >
+      {fileIcon(file)}
+      <div className="flex-1 min-w-0">
+        <div className="text-[13px] truncate">
+          {highlightMatch(filename, query)}
+        </div>
+        <div className="text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 truncate mt-0.5">
+          {folder}
+        </div>
+      </div>
+    </button>
+  )
+}
+
+function FileTreePane({
+  selectedPath,
+  onSelectFile,
+}: {
+  selectedPath: string | null
+  onSelectFile: (path: string, title: string) => void
+}) {
   const { entries, loading, error, expandedDirs, toggleDir, refresh } = useFileExplorer('/')
   const [filter, setFilter] = useState('')
-
   const query = filter.trim().toLowerCase()
-
-  // When the user is typing a query, surface a flat ranked list of file matches
-  // across the whole tree (recursive). Otherwise render the directory tree.
   const searchResults = query ? rankFiles(flattenFiles(entries), query) : []
 
   return (
-    <div className="flex flex-col h-full w-[260px] xl:w-[280px] shrink-0 border-r border-surface-light-3/20 dark:border-surface-dark-3/20 bg-surface-light dark:bg-surface-dark">
+    <div className="flex flex-col h-full min-h-0 bg-surface-light dark:bg-surface-dark">
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-surface-light-3/20 dark:border-surface-dark-3/20 shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted shrink-0"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
@@ -106,17 +185,10 @@ export function FileExplorerColumn({ onClose, onSelectFile }: FileExplorerColumn
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
         </button>
-        <button
-          onClick={onClose}
-          className="inline-btn w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors"
-          aria-label="Close files"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-        </button>
       </div>
 
       {/* Search box */}
-      <div className="px-2 py-2 border-b border-surface-light-3/10 dark:border-surface-dark-3/10">
+      <div className="px-2 py-2 border-b border-surface-light-3/10 dark:border-surface-dark-3/10 shrink-0">
         <div className="relative">
           <svg
             xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
@@ -153,7 +225,6 @@ export function FileExplorerColumn({ onClose, onSelectFile }: FileExplorerColumn
         ) : error ? (
           <div className="px-3 py-4 text-[12px] text-red-400">{error}</div>
         ) : query ? (
-          // Flat search results, ranked by relevance
           searchResults.length === 0 ? (
             <div className="px-3 py-4 text-[12px] text-text-light-muted dark:text-text-dark-muted">
               No files match "{filter}"
@@ -164,6 +235,7 @@ export function FileExplorerColumn({ onClose, onSelectFile }: FileExplorerColumn
                 key={f.path}
                 file={f}
                 query={query}
+                selected={selectedPath === f.path}
                 onSelectFile={onSelectFile}
               />
             ))
@@ -178,6 +250,7 @@ export function FileExplorerColumn({ onClose, onSelectFile }: FileExplorerColumn
                 entry={entry}
                 depth={0}
                 expandedDirs={expandedDirs}
+                selectedPath={selectedPath}
                 onToggleDir={toggleDir}
                 onSelectFile={onSelectFile}
               />
@@ -189,69 +262,131 @@ export function FileExplorerColumn({ onClose, onSelectFile }: FileExplorerColumn
   )
 }
 
-// ── Search support ─────────────────────────────────────────────────────────
-
-/** Flatten the recursive directory tree into a list of files (skip dirs). */
-function flattenFiles(entries: FileEntry[], acc: FileEntry[] = []): FileEntry[] {
-  for (const e of entries) {
-    if (e.type === 'file') acc.push(e)
-    else if (e.children) flattenFiles(e.children, acc)
-  }
-  return acc
-}
-
-/** Rank files: filename prefix > filename substring > folder match. */
-function rankFiles(files: FileEntry[], q: string): FileEntry[] {
-  return files
-    .map(f => {
-      const name = f.name.toLowerCase()
-      const path = f.path.toLowerCase()
-      const folder = path.slice(0, -name.length - 1) // strip /name from /a/b/name
-      const score =
-        (name.startsWith(q) ? 100 : 0) +
-        (name.includes(q) ? 50 : 0) +
-        (folder.includes(q) ? 10 : 0)
-      return { f, score }
-    })
-    .filter(x => x.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .map(x => x.f)
-}
-
-function SearchResultRow({ file, query, onSelectFile }: {
-  file: FileEntry
-  query: string
-  onSelectFile: (path: string, title: string, isMarkdown: boolean) => void
-}) {
-  const segments = file.path.split('/').filter(Boolean)
-  const filename = segments[segments.length - 1] || file.path
-  const folder = segments.slice(0, -1).join(' / ') || 'Workspace'
+function EmptyPreview() {
   return (
-    <button
-      onClick={() => onSelectFile(file.path, file.name, isMarkdown(file.name))}
-      className="w-full px-2 py-1.5 rounded-md hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 transition-colors text-left flex items-start gap-2"
-    >
-      {fileIcon(file)}
-      <div className="flex-1 min-w-0">
-        <div className="text-[13px] text-text-light dark:text-text-dark truncate">
-          {highlightMatch(filename, query)}
+    <div className="flex-1 min-h-0 flex items-center justify-center text-center px-6 bg-background">
+      <div className="max-w-xs space-y-2">
+        <div className="w-12 h-12 mx-auto rounded-2xl bg-surface-light-2 dark:bg-surface-dark-2 flex items-center justify-center text-text-light-muted dark:text-text-dark-muted">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
-        <div className="text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 truncate mt-0.5">
-          {folder}
-        </div>
+        <h2 className="text-[14px] font-medium text-text-light dark:text-text-dark">Select a file</h2>
+        <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted">
+          Pick a file from the list to preview it here.
+        </p>
       </div>
-    </button>
+    </div>
   )
 }
 
-function highlightMatch(text: string, query: string): React.ReactNode {
-  const i = text.toLowerCase().indexOf(query)
-  if (i === -1) return text
+function PreviewPane({
+  selectedPath,
+  selectedTitle,
+  isVisible,
+  showBackButton,
+  onBack,
+}: {
+  selectedPath: string | null
+  selectedTitle: string | null
+  isVisible: boolean
+  showBackButton: boolean
+  onBack: () => void
+}) {
+  if (!selectedPath || !selectedTitle) return <EmptyPreview />
+
+  const isMd = isMarkdownFile(selectedTitle)
+
   return (
-    <>
-      {text.slice(0, i)}
-      <mark className="bg-accent/20 text-accent rounded px-0.5">{text.slice(i, i + query.length)}</mark>
-      {text.slice(i + query.length)}
-    </>
+    <div className="flex-1 min-h-0 flex flex-col">
+      {showBackButton && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-background shrink-0">
+          <button
+            onClick={onBack}
+            className="inline-btn h-7 px-2 rounded-md flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
+            aria-label="Back to files"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            <span>Files</span>
+          </button>
+        </div>
+      )}
+      <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+        {isMd ? (
+          <MarksensePanel
+            key={selectedPath}
+            path={selectedPath}
+            title={selectedTitle}
+            isVisible={isVisible}
+          />
+        ) : (
+          <FileViewerPanel
+            key={selectedPath}
+            path={selectedPath}
+            title={selectedTitle}
+            isVisible={isVisible}
+          />
+        )}
+      </Suspense>
+    </div>
+  )
+}
+
+export function FinderPanel({ tab, isVisible }: { tab: FinderTab; isVisible: boolean }) {
+  const setFinderSelection = useTabsStore((s) => s.setFinderSelection)
+
+  // Responsive: 2-pane on desktop, single-pane navigation on mobile.
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768)
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  const handleSelect = (path: string, title: string) => {
+    setFinderSelection(tab.id, path, title)
+  }
+  const handleBack = () => {
+    setFinderSelection(tab.id, null, null)
+  }
+
+  const treePane = useMemo(() => (
+    <FileTreePane selectedPath={tab.selectedPath} onSelectFile={handleSelect} />
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ), [tab.selectedPath])
+
+  if (isDesktop) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-row">
+        <div className="w-[260px] xl:w-[300px] shrink-0 border-r border-surface-light-3/20 dark:border-surface-dark-3/20 flex flex-col min-h-0">
+          {treePane}
+        </div>
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+          <PreviewPane
+            selectedPath={tab.selectedPath}
+            selectedTitle={tab.selectedTitle}
+            isVisible={isVisible}
+            showBackButton={false}
+            onBack={handleBack}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // Mobile: file tree by default, swap to preview when a file is selected.
+  return (
+    <div className="flex-1 min-h-0 flex flex-col">
+      {tab.selectedPath ? (
+        <PreviewPane
+          selectedPath={tab.selectedPath}
+          selectedTitle={tab.selectedTitle}
+          isVisible={isVisible}
+          showBackButton={true}
+          onBack={handleBack}
+        />
+      ) : (
+        treePane
+      )}
+    </div>
   )
 }

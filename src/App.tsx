@@ -6,7 +6,7 @@ import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer } from './state/threads.ts'
 import { useChatStore } from './state/chat.ts'
-import { useTabsStore, ensureChatTab, type ChatTab, type FileTab, type MarksenseTab } from './state/tabs.ts'
+import { useTabsStore, ensureChatTab, openOrFocusFinderTab, type ChatTab, type FileTab, type MarksenseTab, type FinderTab } from './state/tabs.ts'
 import { applyRoute, getCurrentRoute, onRouteChange, pushHash, type Route } from './state/router.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
 import { checkGateway } from './gateway/chat.ts'
@@ -20,11 +20,10 @@ import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
 
 // Lazy-loaded components (code splitting)
-const FileBrowser = lazy(() => import('./components/layout/FileBrowser.tsx').then(m => ({ default: m.FileBrowser })))
-const FileExplorerColumn = lazy(() => import('./components/files/FileExplorerColumn.tsx').then(m => ({ default: m.FileExplorerColumn })))
 const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
 const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
 const FileViewerPanel = lazy(() => import('./components/files/FileViewerPanel.tsx').then(m => ({ default: m.FileViewerPanel })))
+const FinderPanel = lazy(() => import('./components/files/FinderPanel.tsx').then(m => ({ default: m.FinderPanel })))
 const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
 const RealtimeChat = lazy(() => import('./components/realtime/RealtimeChat.tsx').then(m => ({ default: m.RealtimeChat })))
 
@@ -96,10 +95,6 @@ export function App() {
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
-  const fileBrowserOpen = useUIStore((s) => s.fileBrowserOpen)
-  const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
-  const fileExplorerOpen = useUIStore((s) => s.fileExplorerOpen)
-  const setFileExplorerOpen = useUIStore((s) => s.setFileExplorerOpen)
   const switchThread = useThreadsStore((s) => s.switchThread)
   const tabs = useTabsStore((s) => s.tabs)
   const closeTab = useTabsStore((s) => s.closeTab)
@@ -127,6 +122,10 @@ export function App() {
           route = { kind: 'chat', threadId: (tab as ChatTab).threadId }
         } else if (tab.type === 'marksense') {
           route = { kind: 'file', path: (tab as MarksenseTab).path }
+        } else if (tab.type === 'finder') {
+          // Finder tab doesn't have its own URL — fall back to home for the
+          // hash so deep-links don't try to recreate ephemeral preview state.
+          route = { kind: 'home' }
         } else {
           route = { kind: 'file', path: (tab as FileTab).path }
         }
@@ -861,6 +860,11 @@ export function App() {
     setVisiblePanel(newThreadId)
   }, [switchThread])
 
+  const handleOpenFinder = useCallback(() => {
+    const id = openOrFocusFinderTab()
+    setVisiblePanel(id)
+  }, [setVisiblePanel])
+
   const handleDesktopCloseTab = useCallback((tabId: string) => {
     closeTab(tabId)
     if (visiblePanel === tabId) {
@@ -1066,41 +1070,11 @@ export function App() {
             onNewChat={handleDesktopNewChat}
             onGoHome={() => setVisiblePanel('home')}
             onCloseTab={handleDesktopCloseTab}
-            fileExplorerOpen={fileExplorerOpen}
-            onToggleFileExplorer={() => setFileExplorerOpen(!fileExplorerOpen)}
             onOpenDoc={(path, title) => {
               const tabId = applyRoute({ kind: 'file', path, title })
               if (tabId) setVisiblePanel(tabId)
             }}
           />
-        )}
-
-        {/* File Explorer (desktop only) */}
-        {isDesktop && fileExplorerOpen && (
-          <Suspense fallback={null}>
-            <FileExplorerColumn
-              onClose={() => setFileExplorerOpen(false)}
-              onSelectFile={(path, title, isMd) => {
-                if (isMd) {
-                  // Open markdown as its own marksense tab (sits in the tab list)
-                  const tabId = applyRoute({ kind: 'file', path, title })
-                  if (tabId) setVisiblePanel(tabId)
-                } else {
-                  // Open non-markdown files in the file viewer tab
-                  const tabId = `file-${path}`
-                  useTabsStore.getState().openTab({
-                    id: tabId,
-                    type: 'file',
-                    title,
-                    path,
-                    openedAt: Date.now(),
-                    updatedAt: Date.now(),
-                  } satisfies FileTab)
-                  setVisiblePanel(tabId)
-                }
-              }}
-            />
-          </Suspense>
         )}
 
         {/* Content area */}
@@ -1131,12 +1105,19 @@ export function App() {
                       path={(visibleTab as MarksenseTab).path}
                       title={visibleTab.title}
                       isVisible={true}
+                      onOpenFinder={handleOpenFinder}
                     />
                   )}
                   {visibleTab?.type === 'file' && (
                     <FileViewerPanel
                       path={(visibleTab as FileTab).path}
                       title={visibleTab.title}
+                      isVisible={true}
+                    />
+                  )}
+                  {visibleTab?.type === 'finder' && (
+                    <FinderPanel
+                      tab={visibleTab as FinderTab}
                       isVisible={true}
                     />
                   )}
@@ -1196,12 +1177,19 @@ export function App() {
                           path={(tab as MarksenseTab).path}
                           title={tab.title}
                           isVisible={isActive}
+                          onOpenFinder={handleOpenFinder}
                         />
                       )}
                       {tab.type === 'file' && (
                         <FileViewerPanel
                           path={(tab as FileTab).path}
                           title={tab.title}
+                          isVisible={isActive}
+                        />
+                      )}
+                      {tab.type === 'finder' && (
+                        <FinderPanel
+                          tab={tab as FinderTab}
                           isVisible={isActive}
                         />
                       )}
@@ -1257,12 +1245,6 @@ export function App() {
         <DebugOverlay />
       </Suspense>
 
-      <Suspense fallback={null}>
-        <FileBrowser
-          open={fileBrowserOpen}
-          onClose={() => setFileBrowserOpen(false)}
-        />
-      </Suspense>
       {composeChannel && (
         <Suspense fallback={null}>
           <ComposeFlow

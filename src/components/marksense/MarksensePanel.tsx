@@ -1,17 +1,19 @@
 import { useEffect, useState, Suspense, lazy } from 'react'
 import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
-import { useUIStore } from '../../state/ui'
+import { openOrFocusFinderTab } from '../../state/tabs'
 
 const MarksenseEditorInstance = lazy(() =>
   import('../../marksense').then(m => ({ default: m.MarksenseEditorInstance }))
 )
 
-export function MarksensePanel({ path, title, isVisible }: {
+export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   path?: string
   /** @deprecated Legacy URL-based prop */
   documentUrl?: string
   title: string
   isVisible: boolean
+  /** Called when the user clicks "Browse" in the header — App focuses the Finder tab. */
+  onOpenFinder?: () => void
 }) {
   // Track content + the path it belongs to. We compare against `path` on every
   // render so a path switch wipes stale content BEFORE we render the editor.
@@ -20,9 +22,6 @@ export function MarksensePanel({ path, title, isVisible }: {
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-  const fileExplorerOpen = useUIStore((s) => s.fileExplorerOpen)
-  const setFileExplorerOpen = useUIStore((s) => s.setFileExplorerOpen)
-  const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
 
   // If the path changed under us, drop the stale content immediately so the
   // editor doesn't mount with the wrong file's text.
@@ -56,8 +55,12 @@ export function MarksensePanel({ path, title, isVisible }: {
   const instanceId = `marksense-tab-${path || 'none'}`
 
   const openBrowser = () => {
-    if (window.innerWidth >= 768) setFileExplorerOpen(!fileExplorerOpen)
-    else setFileBrowserOpen(true)
+    if (onOpenFinder) {
+      onOpenFinder()
+      return
+    }
+    // Fallback: focus or open a Finder tab via the store directly.
+    openOrFocusFinderTab()
   }
 
   return (

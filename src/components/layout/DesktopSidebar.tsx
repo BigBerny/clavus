@@ -9,8 +9,6 @@ interface Props {
   onNewChat: () => void
   onGoHome: () => void
   onCloseTab: (tabId: string) => void
-  fileExplorerOpen?: boolean
-  onToggleFileExplorer?: () => void
   /**
    * Called when the user clicks a linked-doc row under a conversation.
    * Receives the doc path (e.g. '/travel/kyoto.md'); App opens a Marksense tab.
@@ -50,7 +48,7 @@ function groupFor(timestamp: number, now: number): GroupKey {
 
 /** Pick a stable category accent for a tab based on its type + id hash. */
 function accentForTab(tab: Tab): string {
-  if (tab.type === 'marksense' || tab.type === 'file') return 'cat-doc'
+  if (tab.type === 'marksense' || tab.type === 'file' || tab.type === 'finder') return 'cat-doc'
   // Spread chat tabs across the warm accent set deterministically by id hash
   const accents = ['cat-chat', 'cat-violet', 'cat-rose', 'cat-voice']
   let h = 0
@@ -84,8 +82,6 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   onNewChat,
   onGoHome,
   onCloseTab,
-  fileExplorerOpen,
-  onToggleFileExplorer,
   onOpenDoc,
 }: Props) {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
@@ -272,20 +268,8 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
       {/* Bottom actions */}
       <div className="border-t border-border px-3 py-2">
-        <button
-          onClick={onToggleFileExplorer}
-          className={`inline-btn w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-left transition-colors ${
-            fileExplorerOpen
-              ? 'bg-primary/10 text-primary'
-              : 'text-muted-foreground hover:text-foreground hover:bg-accent-soft'
-          }`}
-          aria-label="Toggle file explorer"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
-          <span className="text-[13px]">Finder</span>
-        </button>
         {/* Assistant identity */}
-        <div className="px-2 pt-2 pb-1 flex items-center gap-2">
+        <div className="px-2 pt-1 pb-1 flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-gradient-to-br from-[var(--color-cat-doc)] to-[var(--color-cat-rose)]" />
           <div className="flex-1 min-w-0">
             <div className="text-[12px] font-medium truncate text-foreground">Jane</div>

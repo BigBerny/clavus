@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type TabType = 'chat' | 'marksense' | 'file'
+export type TabType = 'chat' | 'marksense' | 'file' | 'finder'
 
 interface TabBase {
   id: string
@@ -28,13 +28,21 @@ export interface FileTab extends TabBase {
   path: string
 }
 
-export type Tab = ChatTab | MarksenseTab | FileTab
+export interface FinderTab extends TabBase {
+  type: 'finder'
+  /** Path of the file currently shown in the right preview pane, or null when none selected. */
+  selectedPath: string | null
+  selectedTitle: string | null
+}
+
+export type Tab = ChatTab | MarksenseTab | FileTab | FinderTab
 
 interface TabsState {
   tabs: Tab[]
   openTab: (tab: Tab) => void
   closeTab: (tabId: string) => Tab | undefined // returns neighbor to navigate to
   updateTab: (tabId: string, updates: Partial<Pick<TabBase, 'title' | 'updatedAt'>>) => void
+  setFinderSelection: (tabId: string, selectedPath: string | null, selectedTitle: string | null) => void
 }
 
 const TABS_KEY = 'clavus-tabs'
@@ -155,7 +163,40 @@ export const useTabsStore = create<TabsState>((set, get) => ({
       return { tabs }
     })
   },
+
+  setFinderSelection: (tabId, selectedPath, selectedTitle) => {
+    set((state) => {
+      const tabs = state.tabs.map(t =>
+        t.id === tabId && t.type === 'finder'
+          ? { ...t, selectedPath, selectedTitle, updatedAt: Date.now() }
+          : t
+      )
+      saveTabs(tabs)
+      return { tabs }
+    })
+  },
 }))
+
+/** Open the singleton Finder tab, or focus the existing one. Returns its id. */
+export const FINDER_TAB_ID = 'finder'
+export function openOrFocusFinderTab(): string {
+  const state = useTabsStore.getState()
+  const existing = state.tabs.find(t => t.type === 'finder')
+  if (existing) {
+    state.openTab(existing) // bumps updatedAt
+    return existing.id
+  }
+  state.openTab({
+    id: FINDER_TAB_ID,
+    type: 'finder',
+    title: 'Finder',
+    selectedPath: null,
+    selectedTitle: null,
+    openedAt: Date.now(),
+    updatedAt: Date.now(),
+  })
+  return FINDER_TAB_ID
+}
 
 // Helper: ensure a chat tab exists for a thread (called when creating new threads)
 export function ensureChatTab(threadId: string, title: string) {
