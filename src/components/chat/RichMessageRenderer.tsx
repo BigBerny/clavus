@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import { getFileTypeInfo, type FileViewerKind } from '../../lib/fileTypes'
 
 // ─── Code Block ──────────────────────────────────────────────────────────────
 
@@ -44,28 +45,41 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
   )
 }
 
-// ─── Marksense Card ──────────────────────────────────────────────────────────
+// ─── Workspace File Link Card ────────────────────────────────────────────────
 
-const MARKSENSE_PATTERN = /mac-mini-von-janis\.taild2ad59\.ts\.net\/file\//
-/** Extract workspace path from a Marksense URL or workspace file reference */
-function extractWorkspacePath(href: string): string | null {
-  // Marksense URL: .../file/SOUL.md
-  const urlMatch = href.match(/\/file\/(.+)$/)
-  if (urlMatch) return '/' + decodeURIComponent(urlMatch[1])
-  return null
+/**
+ * Detect a Clavus workspace-file deep link of the form `<origin>#/file/<encoded>`
+ * (or the legacy `#/doc/...` alias). Host-agnostic on purpose so links work
+ * across openclaw.random-hamster.win, the Tailscale host, and localhost in dev.
+ */
+function parseClavusFileUrl(href: string): { path: string; filename: string } | null {
+  try {
+    const url = new URL(href)
+    const hash = url.hash
+    let encoded: string | null = null
+    if (hash.startsWith('#/file/')) encoded = hash.slice('#/file/'.length)
+    else if (hash.startsWith('#/doc/')) encoded = hash.slice('#/doc/'.length) // legacy alias
+    if (!encoded) return null
+    const decoded = decodeURIComponent(encoded)
+    const path = decoded.startsWith('/') ? decoded : '/' + decoded
+    const filename = path.split('/').filter(Boolean).pop() || 'File'
+    return { path, filename }
+  } catch {
+    return null
+  }
 }
 
-function openMarksenseInline(href: string, title: string) {
-  const path = extractWorkspacePath(href)
-  window.dispatchEvent(new CustomEvent('clavus:open-marksense', {
-    detail: { url: href, path, title },
+function openFileInline(path: string, title: string) {
+  window.dispatchEvent(new CustomEvent('clavus:open-file', {
+    detail: { path, title },
   }))
 }
 
 function ExternalLink(threadId?: string) {
   return function ExternalLinkInner({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
-    if (href && MARKSENSE_PATTERN.test(href)) {
-      return <MarksenseCard href={href} threadId={threadId} />
+    if (href) {
+      const parsed = parseClavusFileUrl(href)
+      if (parsed) return <FileLinkCard href={href} path={parsed.path} filename={parsed.filename} threadId={threadId} />
     }
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline" {...props}>
@@ -75,113 +89,80 @@ function ExternalLink(threadId?: string) {
   }
 }
 
-function MarksenseCard({ href, threadId }: { href: string; threadId?: string }) {
-  const filename = decodeURIComponent(href.split('/file/').pop() || 'Document')
-  const workspacePath = extractWorkspacePath(href)
-  const [content, setContent] = useState<string | null>(null)
-  const [expanded, setExpanded] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [failed, setFailed] = useState(false)
-
-  // Side-effect: register this doc as linked to the current thread so the
-  // sidebar can render it as a sibling row under the conversation.
-  useEffect(() => {
-    if (!threadId || !workspacePath) return
-    // Dynamic import to avoid a circular ref on first render
-    import('../../state/threads').then(({ useThreadsStore }) => {
-      useThreadsStore.getState().addLinkedDoc(threadId, { path: workspacePath, title: filename })
-    })
-  }, [threadId, workspacePath, filename])
-
-  useEffect(() => {
-    if (!workspacePath) { setFailed(true); return }
-    setLoading(true)
-    fetch(`/api/workspace${workspacePath}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Failed')
-        return res.json()
-      })
-      .then(data => {
-        setContent(data.content || '')
-        setLoading(false)
-      })
-      .catch(() => {
-        setFailed(true)
-        setLoading(false)
-      })
-  }, [workspacePath])
-
-  if (failed) {
-    return (
-      <button onClick={() => openMarksenseInline(href, filename)} className="inline-btn w-full flex items-center gap-3 px-4 py-3 my-2 rounded-xl bg-accent/10 dark:bg-accent/15 border border-accent/20 hover:bg-accent/20 dark:hover:bg-accent/25 transition-colors text-left">
-        <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-accent/20 flex items-center justify-center">
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-accent truncate">{filename}</p>
-          <p className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Open in Marksense</p>
-        </div>
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted flex-shrink-0"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-      </button>
-    )
+function FileKindIcon({ kind }: { kind: FileViewerKind }) {
+  // Compact 14px icons rendered inside the card. Kept inline so the card stays
+  // a single self-contained component with no extra files to track.
+  switch (kind) {
+    case 'image':
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+      )
+    case 'pdf':
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h1.5a1.5 1.5 0 0 1 0 3H9z"/><path d="M14 13v3"/><path d="M14 13h2"/></svg>
+      )
+    case 'text':
+    case 'json':
+    case 'csv':
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+      )
+    case 'office':
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="20" x2="9" y2="9"/></svg>
+      )
+    case 'markdown':
+    default:
+      return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+      )
   }
+}
 
-  const lines = content?.split('\n') || []
-  const isLong = lines.length > 12
-  const displayContent = expanded ? content || '' : lines.slice(0, 10).join('\n')
+function FileLinkCard({ href, path, filename, threadId }: { href: string; path: string; filename: string; threadId?: string }) {
+  const info = getFileTypeInfo(filename)
+  const [copied, setCopied] = useState(false)
+
+  // Side-effect: only markdown files register with the thread's linked-docs
+  // sidebar (matches the existing addLinkedDoc design — non-md isn't tracked).
+  useEffect(() => {
+    if (!threadId || info.kind !== 'markdown') return
+    import('../../state/threads').then(({ useThreadsStore }) => {
+      useThreadsStore.getState().addLinkedDoc(threadId, { path, title: filename })
+    })
+  }, [threadId, path, filename, info.kind])
+
+  const copyLink = useCallback(() => {
+    navigator.clipboard.writeText(href)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }, [href])
 
   return (
-    <div className="my-2 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-2 border-b border-accent/15">
-        <div className="flex items-center gap-2 min-w-0">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <span className="text-[13px] font-medium text-accent truncate">{filename}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => {
-              const path = href.split('/file/').pop() || ''
-              navigator.clipboard.writeText(path)
-            }}
-            className="inline-btn px-1.5 py-1 rounded-md text-[11px] text-text-light-muted/40 dark:text-text-dark-muted/40 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
-            title="Copy file path"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-          </button>
-          <button
-            onClick={() => openMarksenseInline(href, filename)}
-            className="inline-btn flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-colors whitespace-nowrap"
-          >
-            Open
-          </button>
-        </div>
-      </div>
-      <div className="px-4 py-3">
-        {loading ? (
-          <div className="flex items-center gap-2 py-2">
-            <div className="voice-spinner" style={{ width: 14, height: 14, borderWidth: 1.5 }} />
-            <span className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Loading...</span>
-          </div>
+    <span className="my-2 inline-flex w-full items-center gap-2 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 px-3 py-2">
+      <FileKindIcon kind={info.kind} />
+      <span className="text-[13px] font-medium text-accent truncate min-w-0 flex-1" title={path}>{filename}</span>
+      <button
+        type="button"
+        onClick={copyLink}
+        className="inline-btn px-1.5 py-1 rounded-md text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-accent transition-colors flex-shrink-0"
+        title={copied ? 'Copied!' : 'Copy link'}
+        aria-label="Copy link"
+      >
+        {copied ? (
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         ) : (
-          <>
-            <div className={`prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 ${!expanded && isLong ? 'max-h-[200px] overflow-hidden relative' : ''}`}>
-              <Markdown remarkPlugins={[remarkGfm]}>{displayContent}</Markdown>
-              {!expanded && isLong && (
-                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-accent/5 dark:from-accent/8 to-transparent pointer-events-none" />
-              )}
-            </div>
-            {isLong && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="inline-btn mt-2 text-[12px] text-accent hover:text-accent/80 font-medium transition-colors"
-              >
-                {expanded ? 'Show less' : `Show more (${lines.length} lines)`}
-              </button>
-            )}
-          </>
+          <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         )}
-      </div>
-    </div>
+      </button>
+      <button
+        type="button"
+        onClick={() => openFileInline(path, filename)}
+        className="inline-btn flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-accent hover:bg-accent/10 transition-colors whitespace-nowrap flex-shrink-0"
+      >
+        Open
+      </button>
+    </span>
   )
 }
 

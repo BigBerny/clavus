@@ -5,20 +5,26 @@
  * bookmarked, shared, or pasted into a new tab and land on the same surface.
  *
  * Supported routes:
- *   #/home                — the home screen
- *   #/chat/<threadId>     — open or focus a chat tab
- *   #/doc/<encodedPath>   — open or focus a Marksense (.md) tab
+ *   #/home                 — the home screen
+ *   #/chat/<threadId>      — open or focus a chat tab
+ *   #/file/<encodedPath>   — open or focus a tab for any workspace file.
+ *                            Markdown files open in Marksense, other types
+ *                            open in the generic FileViewerPanel. The kind is
+ *                            decided by file extension via `getFileTypeInfo`.
+ *   #/doc/<encodedPath>    — legacy alias for `#/file/...`, kept so existing
+ *                            messages and bookmarks keep working.
  *
- * No URL routing library — a tiny hand-rolled module is plenty for three routes
+ * No URL routing library — a tiny hand-rolled module is plenty for these routes
  * and keeps the bundle lean.
  */
 
-import { useTabsStore, type MarksenseTab } from './tabs'
+import { getFileTypeInfo } from '../lib/fileTypes'
+import { useTabsStore, type FileTab, type MarksenseTab } from './tabs'
 
 export type Route =
   | { kind: 'home' }
   | { kind: 'chat'; threadId: string }
-  | { kind: 'doc'; path: string; title?: string }
+  | { kind: 'file'; path: string; title?: string }
 
 export function parseHash(hash: string): Route | null {
   if (!hash || hash === '#' || hash === '#/') return { kind: 'home' }
@@ -31,11 +37,13 @@ export function parseHash(hash: string): Route | null {
     if (!threadId) return null
     return { kind: 'chat', threadId }
   }
-  if (path.startsWith('doc/')) {
-    const encoded = path.slice('doc/'.length)
+  if (path.startsWith('file/') || path.startsWith('doc/')) {
+    // `doc/` is the legacy alias — kept so existing messages/bookmarks resolve.
+    const prefix = path.startsWith('file/') ? 'file/' : 'doc/'
+    const encoded = path.slice(prefix.length)
     const decoded = decodeURIComponent(encoded)
-    const docPath = decoded.startsWith('/') ? decoded : '/' + decoded
-    return { kind: 'doc', path: docPath }
+    const filePath = decoded.startsWith('/') ? decoded : '/' + decoded
+    return { kind: 'file', path: filePath }
   }
   return null
 }
@@ -46,9 +54,9 @@ export function formatRoute(route: Route): string {
       return '#/home'
     case 'chat':
       return `#/chat/${encodeURIComponent(route.threadId)}`
-    case 'doc': {
+    case 'file': {
       const trimmed = route.path.startsWith('/') ? route.path.slice(1) : route.path
-      return `#/doc/${encodeURIComponent(trimmed)}`
+      return `#/file/${encodeURIComponent(trimmed)}`
     }
   }
 }
@@ -124,22 +132,48 @@ export function applyRoute(route: Route): string | null {
     return route.threadId
   }
 
-  // route.kind === 'doc'
-  const docId = `marksense:${route.path}`
+  // route.kind === 'file'
+  // Pick the tab kind based on extension: markdown files get the Marksense
+  // editor; everything else gets the generic FileViewerPanel.
+  const filename = route.path.split('/').filter(Boolean).pop() || 'File'
+  const info = getFileTypeInfo(filename)
+  const title = route.title || filename
+
+  if (info.kind === 'markdown') {
+    const id = `marksense:${route.path}`
+    const existing = store.tabs.find(
+      (t) => t.type === 'marksense' && (t as MarksenseTab).path === route.path,
+    )
+    if (existing) {
+      store.openTab(existing)
+      return existing.id
+    }
+    store.openTab({
+      id,
+      type: 'marksense',
+      title,
+      path: route.path,
+      openedAt: Date.now(),
+      updatedAt: Date.now(),
+    })
+    return id
+  }
+
+  const id = `file:${route.path}`
   const existing = store.tabs.find(
-    (t) => t.type === 'marksense' && (t as MarksenseTab).path === route.path,
+    (t) => t.type === 'file' && (t as FileTab).path === route.path,
   )
   if (existing) {
     store.openTab(existing)
     return existing.id
   }
   store.openTab({
-    id: docId,
-    type: 'marksense',
-    title: route.title || route.path.split('/').filter(Boolean).pop() || 'Document',
+    id,
+    type: 'file',
+    title,
     path: route.path,
     openedAt: Date.now(),
     updatedAt: Date.now(),
   })
-  return docId
+  return id
 }

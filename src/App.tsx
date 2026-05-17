@@ -126,10 +126,9 @@ export function App() {
         } else if (tab.type === 'chat') {
           route = { kind: 'chat', threadId: (tab as ChatTab).threadId }
         } else if (tab.type === 'marksense') {
-          route = { kind: 'doc', path: (tab as MarksenseTab).path }
+          route = { kind: 'file', path: (tab as MarksenseTab).path }
         } else {
-          // 'file' tab — no canonical deep link for now; fall back to home
-          route = { kind: 'home' }
+          route = { kind: 'file', path: (tab as FileTab).path }
         }
         pushHash(route, true)
       }
@@ -458,31 +457,18 @@ export function App() {
     }
     window.addEventListener('clavus:app-resume', handleAppResume)
 
-    // Handle inline Marksense doc opening from chat
-    const handleOpenMarksense = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { url?: string; path?: string; title: string }
-      const docTitle = detail.title || 'Document'
-
-      // Extract workspace path from URL or use path directly
-      let filePath = detail.path
-      if (!filePath && detail.url) {
-        // Extract path from Marksense URL like .../file/SOUL.md
-        const match = detail.url.match(/\/file\/(.+)$/)
-        if (match) {
-          filePath = '/' + decodeURIComponent(match[1])
-        }
-      }
-      if (!filePath) return
-
-      // Always open the markdown as its own Marksense tab so it lives in the
-      // sidebar/tab strip — matches the unified-tab design from the mockup.
-      const tabId = applyRoute({ kind: 'doc', path: filePath, title: docTitle })
+    // Handle inline file opening from chat links (markdown + other types).
+    // The router picks the right tab kind based on file extension.
+    const handleOpenFile = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { path?: string; title?: string }
+      if (!detail?.path) return
+      const tabId = applyRoute({ kind: 'file', path: detail.path, title: detail.title })
       if (tabId) {
         setVisiblePanel(tabId)
         if (!isDesktop) scrollToTabRef.current(tabId)
       }
     }
-    window.addEventListener('clavus:open-marksense', handleOpenMarksense)
+    window.addEventListener('clavus:open-file', handleOpenFile)
 
     const handleOpenFileTab = (e: Event) => {
       const detail = (e as CustomEvent).detail as { tabId: string }
@@ -496,7 +482,7 @@ export function App() {
       navigator.serviceWorker?.removeEventListener('message', handleSWMessage)
       document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('clavus:app-resume', handleAppResume)
-      window.removeEventListener('clavus:open-marksense', handleOpenMarksense)
+      window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
   }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop])
@@ -1083,7 +1069,7 @@ export function App() {
             fileExplorerOpen={fileExplorerOpen}
             onToggleFileExplorer={() => setFileExplorerOpen(!fileExplorerOpen)}
             onOpenDoc={(path, title) => {
-              const tabId = applyRoute({ kind: 'doc', path, title })
+              const tabId = applyRoute({ kind: 'file', path, title })
               if (tabId) setVisiblePanel(tabId)
             }}
           />
@@ -1097,7 +1083,7 @@ export function App() {
               onSelectFile={(path, title, isMd) => {
                 if (isMd) {
                   // Open markdown as its own marksense tab (sits in the tab list)
-                  const tabId = applyRoute({ kind: 'doc', path, title })
+                  const tabId = applyRoute({ kind: 'file', path, title })
                   if (tabId) setVisiblePanel(tabId)
                 } else {
                   // Open non-markdown files in the file viewer tab
