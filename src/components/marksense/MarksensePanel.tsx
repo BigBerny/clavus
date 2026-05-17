@@ -13,23 +13,41 @@ export function MarksensePanel({ path, title, isVisible }: {
   title: string
   isVisible: boolean
 }) {
+  // Track content + the path it belongs to. We compare against `path` on every
+  // render so a path switch wipes stale content BEFORE we render the editor.
+  // The editor (MarksenseEditorInstance) only reads `content` once on mount, so
+  // we must never mount it with the previous file's content.
+  const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const fileExplorerOpen = useUIStore((s) => s.fileExplorerOpen)
   const setFileExplorerOpen = useUIStore((s) => s.setFileExplorerOpen)
   const setFileBrowserOpen = useUIStore((s) => s.setFileBrowserOpen)
 
+  // If the path changed under us, drop the stale content immediately so the
+  // editor doesn't mount with the wrong file's text.
+  const stale = loadedFor !== null && loadedFor !== path
+  const effectiveContent = stale ? null : content
+  const effectiveLoading = loading || stale
+
   useEffect(() => {
     if (!isVisible || !path) return
-
     setLoading(true)
+    setContent(null)
+    setLoadedFor(null)
+    const myPath = path
     fetch(`${DOCUMENTS_API}${path}`)
       .then(r => r.json())
       .then(data => {
+        // Guard against out-of-order responses: ignore if the user has since
+        // switched to a different doc.
+        if (myPath !== path) return
         setContent(data.content || '')
+        setLoadedFor(myPath)
         setLoading(false)
       })
       .catch(err => {
+        if (myPath !== path) return
         console.error('[MarksensePanel] load failed:', err)
         setLoading(false)
       })
@@ -78,12 +96,12 @@ export function MarksensePanel({ path, title, isVisible }: {
 
       {/* Editor */}
       <div className="flex-1 min-h-0 marksense-scope overflow-auto">
-        {loading ? (
+        {effectiveLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-6 h-6 border-2 border-text-light-muted/20 dark:border-text-dark-muted/20 border-t-text-light-muted/60 dark:border-t-text-dark-muted/60 rounded-full animate-spin" />
             <span className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Loading document...</span>
           </div>
-        ) : content !== null ? (
+        ) : effectiveContent !== null ? (
           <Suspense fallback={
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full text-text-light-muted dark:text-text-dark-muted" />
@@ -92,7 +110,7 @@ export function MarksensePanel({ path, title, isVisible }: {
             <MarksenseEditorInstance
               key={instanceId}
               instanceId={instanceId}
-              content={content}
+              content={effectiveContent}
               onSave={(markdown) => {
                 if (path) {
                   writeFile(path, markdown, DOCUMENTS_API).catch(err =>

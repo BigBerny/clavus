@@ -53,12 +53,19 @@ export function formatRoute(route: Route): string {
   }
 }
 
-/** Update the URL hash without triggering a page reload or extra history entry. */
-let suppressNextHashChange = false
+/**
+ * Update the URL hash without triggering a page reload.
+ *
+ * `replaceState`/`pushState` do NOT fire a hashchange event, so we just write
+ * the new value. We do not need a "suppress next" flag — the previous design
+ * used one but had a subtle bug: if pushHash bailed early because the hash
+ * already matched (e.g. the visiblePanel effect runs AFTER a user-triggered
+ * hashchange that already brought the hash to the right value), the flag
+ * stayed true and silently swallowed the NEXT real user navigation.
+ */
 export function pushHash(route: Route, replace = false) {
   const next = formatRoute(route)
   if (window.location.hash === next) return
-  suppressNextHashChange = true
   if (replace) {
     window.history.replaceState(window.history.state, '', next)
   } else {
@@ -66,13 +73,15 @@ export function pushHash(route: Route, replace = false) {
   }
 }
 
-/** Subscribe to back/forward navigation triggered by the user. Returns unsubscribe fn. */
+/**
+ * Subscribe to user-initiated hash changes (back/forward or direct edits).
+ * The handler is also called when our own setVisiblePanel-driven pushHash
+ * goes through history.* (which doesn't fire hashchange) — but in that case
+ * the handler's applyRoute is idempotent: same tab id, same visible panel,
+ * no work. So we don't bother suppressing.
+ */
 export function onRouteChange(handler: (route: Route | null) => void): () => void {
   const listener = () => {
-    if (suppressNextHashChange) {
-      suppressNextHashChange = false
-      return
-    }
     handler(parseHash(window.location.hash))
   }
   window.addEventListener('hashchange', listener)

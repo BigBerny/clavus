@@ -220,6 +220,7 @@ export function App() {
   )
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const logKeyboardScroll = useCallback((_event: string, _details: Record<string, unknown> = {}) => {
     // Disabled to reduce log noise — re-enable for scroll debugging
   }, [])
@@ -586,6 +587,7 @@ export function App() {
         clearTimeout(userGestureEndTimer.current)
         userGestureEndTimer.current = setTimeout(() => {
           isUserHorizontalGesture.current = false
+          gestureStartPanelIndex.current = null
           userGestureEndTimer.current = null
           logKeyboardScroll('gesture-end-cleared')
         }, 300)
@@ -645,8 +647,28 @@ export function App() {
           return
         }
         const scrollLeft = container.scrollLeft
-        const panelIndex = Math.round(scrollLeft / containerWidth)
+        let panelIndex = Math.round(scrollLeft / containerWidth)
         const rawPanelIndex = scrollLeft / containerWidth
+
+        // Clamp to ±1 panel from where the gesture started so fast swipes
+        // never skip over conversations.
+        const startIdx = gestureStartPanelIndex.current
+        if (startIdx != null) {
+          panelIndex = Math.max(startIdx - 1, Math.min(startIdx + 1, panelIndex))
+        }
+
+        // If native momentum scroll overshot the clamped panel, snap back
+        const clampedLeft = panelIndex * containerWidth
+        if (Math.abs(container.scrollLeft - clampedLeft) > 2) {
+          isProgrammaticScroll.current = true
+          container.style.scrollSnapType = 'none'
+          container.scrollLeft = clampedLeft
+          requestAnimationFrame(() => {
+            container.style.scrollSnapType = 'x mandatory'
+            isProgrammaticScroll.current = false
+          })
+        }
+
         const nextPanel = panelIndex >= sortedTabs.length ? 'home' : sortedTabs[panelIndex]?.id
 
         // Total panels: sortedTabs.length + 1 (home)
@@ -940,9 +962,10 @@ export function App() {
     gestureStartPoint.current = { x: event.clientX, y: event.clientY }
     isUserHorizontalGesture.current = false
     // Record which panel this gesture starts on so we can clamp to ±1
-    const cw = container?.clientWidth
-    gestureStartPanelIndex.current = container && cw
-      ? Math.round(container.scrollLeft / cw)
+    const sc = scrollContainerRef.current
+    const cw = sc?.clientWidth
+    gestureStartPanelIndex.current = sc && cw
+      ? Math.round(sc.scrollLeft / cw)
       : null
     logKeyboardScroll('gesture-pending', {
       pointerType: event.pointerType,
@@ -981,6 +1004,8 @@ export function App() {
 
   const markHorizontalGestureEnd = useCallback(() => {
     gestureStartPoint.current = null
+    // Keep gestureStartPanelIndex alive until the gesture-end timer fires so
+    // inertial scroll events are still clamped.
     if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
     if (!isUserHorizontalGesture.current) {
       logKeyboardScroll('gesture-cancelled-before-horizontal')
@@ -990,6 +1015,7 @@ export function App() {
     // Keep accepting inertial/snap scroll events after the finger leaves.
     userGestureEndTimer.current = setTimeout(() => {
       isUserHorizontalGesture.current = false
+      gestureStartPanelIndex.current = null
       userGestureEndTimer.current = null
       logKeyboardScroll('gesture-end-cleared')
     }, 900)
@@ -1052,6 +1078,7 @@ export function App() {
             activeTabId={visiblePanel}
             onSelectTab={handleDesktopSelectTab}
             onNewChat={handleDesktopNewChat}
+            onGoHome={() => setVisiblePanel('home')}
             onCloseTab={handleDesktopCloseTab}
             fileExplorerOpen={fileExplorerOpen}
             onToggleFileExplorer={() => setFileExplorerOpen(!fileExplorerOpen)}
@@ -1167,7 +1194,7 @@ export function App() {
                 <div
                   key={tab.id}
                   ref={setPanelRef(tab.id)}
-                  className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 box-border"
+                  className="basis-full max-w-full h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
                   style={{ touchAction: 'pan-x pan-y' }}
                   {...(!isActive ? { inert: true } : {})}
                 >
@@ -1201,7 +1228,7 @@ export function App() {
           {/* Home panel (rightmost) */}
           <div
             ref={setPanelRef('home')}
-            className="basis-full max-w-full h-full shrink-0 grow-0 snap-start flex flex-col min-h-0 overflow-hidden box-border"
+            className="basis-full max-w-full h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 overflow-hidden box-border"
             {...(visiblePanel !== 'home' ? { inert: true } : {})}
           >
           <HomeScreen

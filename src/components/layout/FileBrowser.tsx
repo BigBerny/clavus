@@ -1,10 +1,13 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useTabsStore } from '../../state/tabs.ts'
 
 interface FileEntry {
   name: string
   type: 'dir' | 'file'
   size?: number
+  /** Set when entry comes from a recursive listing */
+  path?: string
+  children?: FileEntry[]
 }
 
 interface DirResponse {
@@ -12,11 +15,40 @@ interface DirResponse {
   entries: FileEntry[]
 }
 
-// Categorize top-level paths as agent or user files
-const AGENT_PATHS = new Set(['SOUL.md', 'MEMORY.md', 'IDENTITY.md', 'TOOLS.md', 'AGENTS.md', 'HEARTBEAT.md', 'USER.md', 'skills', 'config', 'scripts'])
+interface SearchHit {
+  name: string
+  path: string
+  folder: string
+}
 
-function isAgentFile(name: string) {
-  return AGENT_PATHS.has(name)
+/** Walk a recursive directory tree, returning every file with its full path. */
+function flattenFiles(entries: FileEntry[], parent = '/', acc: SearchHit[] = []): SearchHit[] {
+  for (const e of entries) {
+    const full = parent === '/' ? `/${e.name}` : `${parent}/${e.name}`
+    if (e.type === 'file') {
+      const segments = full.split('/').filter(Boolean)
+      const folder = segments.slice(0, -1).join(' / ') || 'Workspace'
+      acc.push({ name: e.name, path: full, folder })
+    } else if (e.children) {
+      flattenFiles(e.children, full, acc)
+    }
+  }
+  return acc
+}
+
+function rankHits(hits: SearchHit[], q: string): SearchHit[] {
+  return hits
+    .map((h) => {
+      const n = h.name.toLowerCase()
+      const score =
+        (n.startsWith(q) ? 100 : 0) +
+        (n.includes(q) ? 50 : 0) +
+        (h.folder.toLowerCase().includes(q) ? 10 : 0)
+      return { h, score }
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((x) => x.h)
 }
 
 function fileIcon(entry: FileEntry) {
@@ -53,12 +85,14 @@ export function FileBrowser({ open, onClose }: Props) {
   const [entries, setEntries] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [allFiles, setAllFiles] = useState<SearchHit[] | null>(null)
 
   const fetchDir = useCallback(async (dirPath: string) => {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`/api/workspace${dirPath === '/' ? '' : dirPath}`)
+      const res = await fetch(`/api/documents${dirPath === '/' ? '' : dirPath}`)
       if (!res.ok) throw new Error('Failed to load')
       const data: DirResponse = await res.json()
       setEntries(data.entries)
@@ -68,6 +102,21 @@ export function FileBrowser({ open, onClose }: Props) {
     }
     setLoading(false)
   }, [])
+
+  // Lazy-load the recursive index the first time the user types in search.
+  useEffect(() => {
+    if (!open || !query.trim() || allFiles !== null) return
+    fetch('/api/documents/?recursive=true')
+      .then((r) => r.json())
+      .then((data: DirResponse) => setAllFiles(flattenFiles(data.entries)))
+      .catch(() => setAllFiles([]))
+  }, [open, query, allFiles])
+
+  const searchResults = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q || !allFiles) return null
+    return rankHits(allFiles, q).slice(0, 50)
+  }, [query, allFiles])
 
   const openFile = useCallback((filePath: string, name: string) => {
     const isMd = /\.md$/i.test(name)
@@ -128,11 +177,7 @@ export function FileBrowser({ open, onClose }: Props) {
 
   if (!open) return null
 
-  // Split entries into agent and user groups (only at root level)
   const isRoot = currentPath === '/'
-  const agentEntries = isRoot ? entries.filter(e => isAgentFile(e.name)) : []
-  const userEntries = isRoot ? entries.filter(e => !isAgentFile(e.name)) : entries
-
   const breadcrumbs = currentPath === '/' ? ['Workspace'] : ['Workspace', ...currentPath.split('/').filter(Boolean)]
 
   return (
@@ -175,8 +220,37 @@ export function FileBrowser({ open, onClose }: Props) {
           </div>
         </div>
 
-        {/* Breadcrumb */}
-        {currentPath !== '/' && (
+        {/* Search */}
+        <div className="px-3 py-2 border-b border-surface-light-3/30 dark:border-surface-dark-3/30">
+          <div className="relative">
+            <svg
+              xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-light-muted/50 dark:text-text-dark-muted/50 pointer-events-none"
+            >
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+            </svg>
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search files…"
+              className="w-full pl-8 pr-8 py-2 text-[14px] rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 border border-surface-light-3/30 dark:border-surface-dark-3/30 text-text-light dark:text-text-dark placeholder:text-text-light-muted/45 dark:placeholder:text-text-dark-muted/45 outline-none focus:border-accent/40"
+            />
+            {query && (
+              <button
+                onClick={() => setQuery('')}
+                className="inline-btn absolute right-1 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-md text-text-light-muted dark:text-text-dark-muted active:scale-95"
+                aria-label="Clear search"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Breadcrumb (hidden during search) */}
+        {!query && currentPath !== '/' && (
           <div className="px-4 py-1.5 border-b border-surface-light-3/30 dark:border-surface-dark-3/30">
             <div className="flex items-center gap-1 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 overflow-x-auto">
               {breadcrumbs.map((crumb, i) => {
@@ -204,67 +278,63 @@ export function FileBrowser({ open, onClose }: Props) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {loading && (
+          {/* Search results take over when there's a query */}
+          {query && (
+            searchResults === null ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="voice-spinner" />
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="px-4 py-8 text-center">
+                <p className="text-[13px] text-text-light-muted dark:text-text-dark-muted">No files match "{query}"</p>
+              </div>
+            ) : (
+              searchResults.map((hit) => (
+                <button
+                  key={hit.path}
+                  onClick={() => openFile(hit.path, hit.name)}
+                  className="inline-btn w-full flex items-start gap-3 px-4 py-2.5 text-left hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:bg-surface-light-2 dark:active:bg-surface-dark-2 transition-colors border-b border-surface-light-3/15 dark:border-surface-dark-3/15"
+                >
+                  {fileIcon({ name: hit.name, type: 'file' })}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-text-light dark:text-text-dark truncate">{hit.name}</div>
+                    <div className="text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 truncate mt-0.5">{hit.folder}</div>
+                  </div>
+                </button>
+              ))
+            )
+          )}
+
+          {!query && loading && (
             <div className="flex items-center justify-center py-12">
               <div className="voice-spinner" />
             </div>
           )}
 
-          {error && (
+          {!query && error && (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
 
-          {!loading && !error && (
+          {!query && !loading && !error && (
             <>
-              {isRoot && agentEntries.length > 0 && (
-                <div>
-                  <div className="px-4 pt-3 pb-1">
-                    <h3 className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">Agent</h3>
-                  </div>
-                  {agentEntries.map(entry => (
-                    <button
-                      key={entry.name}
-                      onClick={() => handleEntryClick(entry)}
-                      className="inline-btn w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:bg-surface-light-2 dark:active:bg-surface-dark-2 transition-colors"
-                    >
-                      {fileIcon(entry)}
-                      <span className="flex-1 text-sm text-text-light dark:text-text-dark truncate">{entry.name}</span>
-                      {entry.size !== undefined && (
-                        <span className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50">{formatSize(entry.size)}</span>
-                      )}
-                      {entry.type === 'dir' && (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted/30 dark:text-text-dark-muted/30"><path d="m9 18 6-6-6-6"/></svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {isRoot && userEntries.length > 0 && (
-                <div>
-                  <div className="px-4 pt-3 pb-1">
-                    <h3 className="text-[11px] font-medium text-text-light-muted dark:text-text-dark-muted">User</h3>
-                  </div>
-                  {userEntries.map(entry => (
-                    <button
-                      key={entry.name}
-                      onClick={() => handleEntryClick(entry)}
-                      className="inline-btn w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:bg-surface-light-2 dark:active:bg-surface-dark-2 transition-colors"
-                    >
-                      {fileIcon(entry)}
-                      <span className="flex-1 text-sm text-text-light dark:text-text-dark truncate">{entry.name}</span>
-                      {entry.size !== undefined && (
-                        <span className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50">{formatSize(entry.size)}</span>
-                      )}
-                      {entry.type === 'dir' && (
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted/30 dark:text-text-dark-muted/30"><path d="m9 18 6-6-6-6"/></svg>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {isRoot && entries.map(entry => (
+                <button
+                  key={entry.name}
+                  onClick={() => handleEntryClick(entry)}
+                  className="inline-btn w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-light-2/60 dark:hover:bg-surface-dark-2/60 active:bg-surface-light-2 dark:active:bg-surface-dark-2 transition-colors"
+                >
+                  {fileIcon(entry)}
+                  <span className="flex-1 text-sm text-text-light dark:text-text-dark truncate">{entry.name}</span>
+                  {entry.size !== undefined && (
+                    <span className="text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50">{formatSize(entry.size)}</span>
+                  )}
+                  {entry.type === 'dir' && (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted/30 dark:text-text-dark-muted/30"><path d="m9 18 6-6-6-6"/></svg>
+                  )}
+                </button>
+              ))}
 
               {!isRoot && entries.map(entry => (
                 <button

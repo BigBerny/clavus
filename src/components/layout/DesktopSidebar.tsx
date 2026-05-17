@@ -7,6 +7,7 @@ interface Props {
   activeTabId: string
   onSelectTab: (tabId: string) => void
   onNewChat: () => void
+  onGoHome: () => void
   onCloseTab: (tabId: string) => void
   fileExplorerOpen?: boolean
   onToggleFileExplorer?: () => void
@@ -64,8 +65,8 @@ const FileIcon = (
   </svg>
 )
 
-const PlusIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+const HomeIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
 )
 
 const ChevronRight = (
@@ -81,6 +82,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   activeTabId,
   onSelectTab,
   onNewChat,
+  onGoHome,
   onCloseTab,
   fileExplorerOpen,
   onToggleFileExplorer,
@@ -205,22 +207,22 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   return (
     <div className="w-[268px] h-full flex flex-col bg-secondary/40 border-r border-border">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+      <button
+        onClick={onGoHome}
+        className="inline-btn flex items-center justify-between w-full px-4 pt-3 pb-2 rounded-none cursor-pointer"
+        aria-label="Go to home"
+        title="Home"
+      >
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-[var(--color-cat-violet)] flex items-center justify-center text-primary-foreground text-sm font-semibold">
             C
           </div>
           <span className="font-display text-[15px] font-semibold tracking-tight text-foreground">Clavus</span>
         </div>
-        <button
-          onClick={onNewChat}
-          className="inline-btn w-7 h-7 flex items-center justify-center rounded-md bg-primary text-primary-foreground shadow-sm hover:opacity-90 transition-opacity"
-          aria-label="New chat"
-          title="New chat"
-        >
-          {PlusIcon}
-        </button>
-      </div>
+        <div className="w-7 h-7 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition-colors">
+          {HomeIcon}
+        </div>
+      </button>
 
       {/* Tab list */}
       <div className="flex-1 overflow-y-auto scrollbar-fine py-1">

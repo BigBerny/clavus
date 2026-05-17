@@ -140,10 +140,11 @@ describe('tryRunSlashCommand', () => {
     expect(ctx.showHelp).toHaveBeenCalled()
   })
 
-  it('pass-through commands like /tasks return handled=false', async () => {
+  it('/tasks is handled locally', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve([]) })
     const ctx = makeCtx()
     const result = await tryRunSlashCommand('/tasks', ctx)
-    expect(result.handled).toBe(false)
+    expect(result.handled).toBe(true)
   })
 
   it('without an open thread, /reasoning toasts and does not crash', async () => {

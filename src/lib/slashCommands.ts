@@ -51,10 +51,9 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { command: '/help', description: 'List available commands', local: true },
   { command: '/clear', description: 'Clear chat', local: true },
   { command: '/retry', description: 'Regenerate the last response', local: true },
-  // Pass-through to Hermes (kept for discoverability / habit)
-  { command: '/tasks', description: 'Show tasks', local: false },
-  { command: '/tasks list', description: 'List all tasks', local: false },
-  { command: '/status', description: 'Show status', local: false },
+  { command: '/tasks', description: 'Show tasks', local: true },
+  { command: '/tasks list', description: 'List all tasks', local: true },
+  { command: '/status', description: 'Show status', local: true },
 ]
 
 /** Parse "/cmd arg1 arg2" → { name: 'cmd', args: 'arg1 arg2' }. Returns null if not a slash command. */
@@ -97,6 +96,10 @@ export async function tryRunSlashCommand(input: string, ctx: SlashContext): Prom
     case 'retry':
       ctx.regenerateLast()
       return { handled: true }
+    case 'status':
+      return handleStatus(ctx)
+    case 'tasks':
+      return handleTasks(parsed.args, ctx)
     default:
       return { handled: false }
   }
@@ -143,6 +146,41 @@ function handleModel(args: string, ctx: SlashContext): SlashResult {
   ctx.setPresetId(preset.id)
   ctx.toast(`Model: ${preset.label}`)
   return { handled: true, message: preset.id }
+}
+
+async function handleTasks(args: string, ctx: SlashContext): Promise<SlashResult> {
+  try {
+    const res = await fetch('/hermes-api/kanban/tasks')
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const tasks = (await res.json()) as { title: string; status: string }[]
+    if (tasks.length === 0) {
+      ctx.toast('No tasks')
+      return { handled: true }
+    }
+    const open = tasks.filter((t) => t.status !== 'done' && t.status !== 'archived')
+    const done = tasks.filter((t) => t.status === 'done')
+    const lines = [`${open.length} open, ${done.length} done`]
+    for (const t of open.slice(0, 5)) {
+      lines.push(`• ${t.title}`)
+    }
+    if (open.length > 5) lines.push(`  …and ${open.length - 5} more`)
+    ctx.toast(lines.join('\n'))
+  } catch {
+    ctx.toast('Could not reach Hermes')
+  }
+  return { handled: true }
+}
+
+function handleStatus(ctx: SlashContext): SlashResult {
+  const presetId = ctx.getPresetId()
+  const preset = MODEL_PRESETS.find((p) => p.id === presetId)
+  const reasoning = ctx.threadId ? ctx.getReasoningOverride(ctx.threadId) : null
+  const parts = [
+    `Model: ${preset?.label ?? presetId}`,
+    `Reasoning: ${reasoning ?? 'default'}`,
+  ]
+  ctx.toast(parts.join('\n'))
+  return { handled: true }
 }
 
 /** Best-effort POST to hermes-webui /api/reasoning to keep the global default in sync. */
