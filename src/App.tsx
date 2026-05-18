@@ -1032,7 +1032,7 @@ export function App() {
   return (
     <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
       {/* Tauri: invisible drag region for transparent titlebar */}
-      <div className="tauri-drag-region fixed top-0 left-0 right-0 h-8 z-[9999]" />
+      <div className="tauri-drag-region fixed top-0 left-0 right-0 h-8 z-[9999]" data-tauri-drag-region />
 
       {/* Connection status banners */}
       {connectionStatus === 'disconnected' && (

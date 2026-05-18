@@ -6,6 +6,8 @@ import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import { useModelStore } from '../state/preset.ts'
 import { useChatSettingsStore } from '../state/chatSettings.ts'
+import { useAutoClassifyStore } from '../state/autoClassify.ts'
+import { classifyMessage } from '../gateway/classify.ts'
 import { MODEL_OPTIONS } from '../gateway/presets.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
@@ -100,6 +102,27 @@ export function useChat() {
       // Reactivate thread if it was auto-archived
       const t = useThreadsStore.getState().threads.find(t => t.id === threadId)
       if (t?.archived) useThreadsStore.getState().unarchiveThread(threadId)
+
+      // Auto-classify first message if auto mode is enabled
+      const autoStore = useAutoClassifyStore.getState()
+      if (autoStore.autoEnabled && !autoStore.getClassification(threadId)) {
+        const userMsgCount = store.getState().getThreadState(threadId).messages
+          .filter(m => m.role === 'user').length
+        if (userMsgCount <= 1) {
+          const cfg = getConfig()
+          if (cfg.openrouterApiKey) {
+            autoStore.setPending(threadId, true)
+            try {
+              const result = await Promise.race([
+                classifyMessage(cfg.openrouterApiKey, content.trim()),
+                new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+              ])
+              if (result) autoStore.setClassification(threadId, result)
+            } catch { /* fallback to manual */ }
+            autoStore.setPending(threadId, false)
+          }
+        }
+      }
     }
 
     const assistantId = store.getState().addMessage(threadId, {
@@ -112,8 +135,12 @@ export function useChat() {
     setConnectionStatus('connected')
 
     const config = getConfig()
-    // Apply selected model
-    const selectedModelId = useModelStore.getState().selectedModelId
+    // Apply selected model (auto-classification overrides manual selection)
+    const { autoEnabled, getClassification: getAutoClassification } = useAutoClassifyStore.getState()
+    const autoClassification = autoEnabled ? getAutoClassification(threadId) : null
+    const selectedModelId = autoClassification
+      ? autoClassification.modelId
+      : useModelStore.getState().selectedModelId
     const modelOption = MODEL_OPTIONS.find((m) => m.id === selectedModelId)
     if (modelOption) {
       config.model = modelOption.model
@@ -206,8 +233,9 @@ export function useChat() {
         controller.signal,
         {
           conversationId: threadId,
-          reasoningEffort:
-            useChatSettingsStore.getState().getEffectiveReasoning(threadId) ?? undefined,
+          reasoningEffort: autoClassification
+            ? autoClassification.reasoning
+            : useChatSettingsStore.getState().getEffectiveReasoning(threadId) ?? undefined,
         },
       )
     } catch (error) {

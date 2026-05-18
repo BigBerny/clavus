@@ -88,7 +88,43 @@ export function SourceCorrectionPopup({ editorView }: SourceCorrectionPopupProps
     }
 
     const interval = setInterval(checkState, 100)
-    return () => clearInterval(interval)
+
+    // Reposition popup on scroll so it stays anchored to the correction
+    const findScrollParent = (el: Element | null): Element | null => {
+      while (el && el !== document.documentElement) {
+        const { overflowY } = getComputedStyle(el)
+        if (overflowY === "auto" || overflowY === "scroll") return el
+        el = el.parentElement
+      }
+      return null
+    }
+    const scrollParent = findScrollParent(editorView.dom)
+    const handleScroll = () => {
+      try {
+        const twState = editorView.state.field(cmTypewiseState)
+        const corr = twState.activeCorrection
+        if (corr) {
+          const el = editorView.dom.querySelector(`[data-tw-correction-id="${corr.id}"]`)
+          if (el) {
+            const rect = el.getBoundingClientRect()
+            setPosition({ top: rect.bottom + 4, left: rect.left })
+          } else {
+            const coords = editorView.coordsAtPos(corr.from)
+            if (coords) {
+              setPosition({ top: coords.bottom + 4, left: coords.left })
+            }
+          }
+        }
+      } catch { /* field may not exist */ }
+    }
+    scrollParent?.addEventListener("scroll", handleScroll, { passive: true })
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      clearInterval(interval)
+      scrollParent?.removeEventListener("scroll", handleScroll)
+      window.removeEventListener("scroll", handleScroll)
+    }
   }, [editorView])
 
   useEffect(() => {

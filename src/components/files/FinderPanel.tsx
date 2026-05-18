@@ -118,7 +118,7 @@ function FileTreeItem({
       onClick={() => onSelectFile(entry.path, entry.name)}
       className={`inline-btn flex items-center gap-2 w-full px-2 py-1 text-left rounded-md transition-colors ${
         isSelected
-          ? 'bg-primary/10 text-primary'
+          ? 'glass-light text-primary'
           : 'text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
       }`}
       style={{ paddingLeft: `${24 + depth * 16}px` }}
@@ -143,7 +143,7 @@ function SearchResultRow({ file, query, selected, onSelectFile }: {
       onClick={() => onSelectFile(file.path, file.name)}
       className={`inline-btn w-full px-2 py-1.5 rounded-md transition-colors text-left flex items-start gap-2 ${
         selected
-          ? 'bg-primary/10 text-primary'
+          ? 'glass-light text-primary'
           : 'text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
       }`}
     >
@@ -175,9 +175,9 @@ function FileTreePane({
   const searchResults = query ? rankFiles(flattenFiles(entries), query) : []
 
   return (
-    <div className="flex flex-col h-full min-h-0 bg-surface-light dark:bg-surface-dark">
+    <div className="flex flex-col h-full min-h-0 glass-heavy">
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-surface-light-3/20 dark:border-surface-dark-3/20 shrink-0">
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--glass-border)] shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted shrink-0"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
         <span className="text-[13px] font-medium text-foreground flex-1">Files</span>
         <button
@@ -200,7 +200,7 @@ function FileTreePane({
       </div>
 
       {/* Search box */}
-      <div className="px-2 py-2 border-b border-surface-light-3/10 dark:border-surface-dark-3/10 shrink-0">
+      <div className="px-2 py-2 border-b border-[var(--glass-border)] shrink-0">
         <div className="relative">
           <svg
             xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24"
@@ -214,7 +214,7 @@ function FileTreePane({
             value={filter}
             onChange={e => setFilter(e.target.value)}
             placeholder="Search files…"
-            className="w-full pl-7 pr-7 py-1.5 text-[12.5px] rounded-md bg-surface-light-2/60 dark:bg-surface-dark-2/60 border border-surface-light-3/20 dark:border-surface-dark-3/20 text-text-light dark:text-text-dark placeholder:text-text-light-muted/45 dark:placeholder:text-text-dark-muted/45 outline-none focus:border-accent/40"
+            className="w-full pl-7 pr-7 py-1.5 text-[12.5px] rounded-md bg-foreground/[0.04] dark:bg-foreground/[0.06] border border-[var(--glass-border)] text-text-light dark:text-text-dark placeholder:text-text-light-muted/45 dark:placeholder:text-text-dark-muted/45 outline-none focus:border-[var(--glass-border-strong)]"
           />
           {filter && (
             <button
@@ -276,9 +276,9 @@ function FileTreePane({
 
 function EmptyPreview() {
   return (
-    <div className="flex-1 min-h-0 flex items-center justify-center text-center px-6 bg-background">
+    <div className="flex-1 min-h-0 flex items-center justify-center text-center px-6 bg-transparent">
       <div className="max-w-xs space-y-2">
-        <div className="w-12 h-12 mx-auto rounded-2xl bg-surface-light-2 dark:bg-surface-dark-2 flex items-center justify-center text-text-light-muted dark:text-text-dark-muted">
+        <div className="w-12 h-12 mx-auto rounded-2xl glass flex items-center justify-center text-text-light-muted dark:text-text-dark-muted">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
         </div>
         <h2 className="text-[14px] font-medium text-text-light dark:text-text-dark">Select a file</h2>
@@ -310,10 +310,10 @@ function PreviewPane({
   return (
     <div className="flex-1 min-h-0 flex flex-col">
       {showBackButton && (
-        <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-background shrink-0">
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--glass-border)] bg-transparent shrink-0">
           <button
             onClick={onBack}
-            className="inline-btn h-7 px-2 rounded-md flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
+            className="inline-btn h-7 px-2 rounded-md flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
             aria-label="Back to files"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
@@ -369,7 +369,7 @@ export function FinderPanel({ tab, isVisible, onClose }: { tab: FinderTab; isVis
   if (isDesktop) {
     return (
       <div className="flex-1 min-h-0 flex flex-row">
-        <div className="w-[260px] xl:w-[300px] shrink-0 border-r border-surface-light-3/20 dark:border-surface-dark-3/20 flex flex-col min-h-0">
+        <div className="w-[260px] xl:w-[300px] shrink-0 border-r border-[var(--glass-border)] flex flex-col min-h-0">
           {treePane}
         </div>
         <div className="flex-1 min-w-0 min-h-0 flex flex-col">

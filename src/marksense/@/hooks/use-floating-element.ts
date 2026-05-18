@@ -73,7 +73,9 @@ export function useFloatingElement(
     ...floatingOptions,
   })
 
-  const { isMounted, styles } = useTransitionStyles(context)
+  const { isMounted, styles } = useTransitionStyles(context, {
+    duration: 0,
+  })
 
   const dismiss = useDismiss(context, dismissOptions)
 

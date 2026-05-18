@@ -51,6 +51,12 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
   const [hasFailedAudio, setHasFailedAudio] = useState(false)
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const insertModeRef = useRef(false)
+
+  // Keep stable refs to callbacks so recorder.onstop always calls the latest version
+  const onTranscriptionRef = useRef(onTranscription)
+  onTranscriptionRef.current = onTranscription
+  const onInsertTranscriptionRef = useRef(onInsertTranscription)
+  onInsertTranscriptionRef.current = onInsertTranscription
   // Last failed transcription's audio blob — kept in memory so the user can retry
   // without re-recording. Cleared on successful retry, explicit discard, or page reload.
   const lastFailedBlobRef = useRef<Blob | null>(null)
@@ -155,10 +161,10 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
         const text = rawText ? cleanTranscription(rawText) : ''
         console.log('[STT] Cleaned text:', text || '(empty)')
         if (text) {
-          if (insertModeRef.current && onInsertTranscription) {
-            onInsertTranscription(text)
+          if (insertModeRef.current && onInsertTranscriptionRef.current) {
+            onInsertTranscriptionRef.current(text)
           } else {
-            onTranscription(text)
+            onTranscriptionRef.current(text)
           }
           insertModeRef.current = false
           // Successful transcription — discard the previously kept blob if any.
@@ -174,7 +180,7 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription }: Use
         setState('idle')
       }
     },
-    [onTranscription, onInsertTranscription, setErrorWithAutoDismiss],
+    [setErrorWithAutoDismiss],
   )
 
   /** Re-run transcription against the previously failed blob. */

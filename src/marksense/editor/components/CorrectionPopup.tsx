@@ -121,8 +121,37 @@ export function CorrectionPopup({ editor }: CorrectionPopupProps) {
     }
 
     editor.on("transaction", handleUpdate)
+
+    // Reposition popup on scroll so it stays anchored to the correction
+    const findScrollParent = (el: Element | null): Element | null => {
+      while (el && el !== document.documentElement) {
+        const { overflowY } = getComputedStyle(el)
+        if (overflowY === "auto" || overflowY === "scroll") return el
+        el = el.parentElement
+      }
+      return null
+    }
+    const scrollParent = findScrollParent(editor.view.dom)
+    const handleScroll = () => {
+      const ps = typewisePluginKey.getState(editor.state) as TypewisePluginState | undefined
+      const corr = ps?.activeCorrection || null
+      if (corr) {
+        const el = editor.view.dom.querySelector(
+          `[data-tw-correction-id="${corr.id}"]`
+        )
+        if (el) {
+          const rect = el.getBoundingClientRect()
+          setPosition({ top: rect.bottom + 4, left: rect.left })
+        }
+      }
+    }
+    scrollParent?.addEventListener("scroll", handleScroll, { passive: true })
+    window.addEventListener("scroll", handleScroll, { passive: true })
+
     return () => {
       editor.off("transaction", handleUpdate)
+      scrollParent?.removeEventListener("scroll", handleScroll)
+      window.removeEventListener("scroll", handleScroll)
     }
   }, [editor])
 

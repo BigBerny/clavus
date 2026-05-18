@@ -179,6 +179,7 @@ html[data-native] #root {
    the padding region above the content. */
 html[data-tauri] #root {
   padding-top: 32px;
+  padding-bottom: 12px;
   background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
   background-attachment: fixed;
 }
@@ -312,18 +313,12 @@ button.inline-btn {
   opacity: 0.9;
 }
 
-/* Chat background — subtle gradient so glass surfaces have content to refract */
+/* Chat background — same gradient as home screen for consistency */
 .chat-bg {
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, color-mix(in oklch, var(--color-cat-violet) 6%, transparent), transparent 70%),
-    radial-gradient(ellipse 60% 50% at 85% 90%, color-mix(in oklch, var(--color-cat-doc) 5%, transparent), transparent 70%),
-    var(--color-surface-light);
+  background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
 }
-.dark .chat-bg {
-  background:
-    radial-gradient(ellipse 80% 60% at 20% 10%, color-mix(in oklch, var(--color-cat-violet) 4%, transparent), transparent 70%),
-    radial-gradient(ellipse 60% 50% at 85% 90%, color-mix(in oklch, var(--color-cat-doc) 3%, transparent), transparent 70%),
-    var(--color-surface-dark);
+html:not(.dark) .chat-bg {
+  background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
 }
 
 /* Message fade + slide animation */

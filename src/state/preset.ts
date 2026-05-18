@@ -1,8 +1,16 @@
 import { create } from 'zustand'
 import { MODEL_OPTIONS } from '../gateway/presets'
+import { useAutoClassifyStore } from './autoClassify'
 
 const STORAGE_KEY = 'clavus-selected-model'
 const OLD_STORAGE_KEY = 'clavus-selected-preset'
+const AUTO_MIGRATION_KEY = 'clavus-auto-migrated'
+
+function migrateToAuto(): void {
+  if (localStorage.getItem(AUTO_MIGRATION_KEY)) return
+  localStorage.setItem(AUTO_MIGRATION_KEY, '1')
+  localStorage.setItem(STORAGE_KEY, 'auto')
+}
 
 function migrateFromPreset(): string | null {
   const old = localStorage.getItem(OLD_STORAGE_KEY)
@@ -14,18 +22,27 @@ function migrateFromPreset(): string | null {
   return null
 }
 
+// Run one-time migration to set Auto as default
+migrateToAuto()
+
 interface ModelState {
   selectedModelId: string
   setSelectedModelId: (id: string) => void
 }
 
+const initialModelId = localStorage.getItem(STORAGE_KEY) || migrateFromPreset() || 'auto'
+
+// Sync autoEnabled on initial load
+if (initialModelId === 'auto') {
+  useAutoClassifyStore.getState().setAutoEnabled(true)
+}
+
 export const useModelStore = create<ModelState>((set) => ({
-  selectedModelId:
-    localStorage.getItem(STORAGE_KEY)
-    || migrateFromPreset()
-    || MODEL_OPTIONS[0].id,
+  selectedModelId: initialModelId,
 
   setSelectedModelId: (id: string) => {
+    const isAuto = id === 'auto'
+    useAutoClassifyStore.getState().setAutoEnabled(isAuto)
     localStorage.setItem(STORAGE_KEY, id)
     set({ selectedModelId: id })
   },
