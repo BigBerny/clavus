@@ -136,6 +136,23 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   }, [])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const barRef = useRef<HTMLDivElement>(null)
+
+  // Publish InputBar height as a CSS variable so scroll containers can add
+  // matching bottom padding (the bar now floats over content).
+  useEffect(() => {
+    const el = barRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const h = entry.borderBoxSize?.[0]?.blockSize ?? entry.contentRect.height
+      document.documentElement.style.setProperty('--input-bar-h', `${h}px`)
+    })
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      document.documentElement.style.removeProperty('--input-bar-h')
+    }
+  }, [])
 
   const voice = useVoiceRecorder({
     onTranscription: (text) => {
@@ -514,7 +531,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   return (
     <div
-      className={`safe-area-bottom relative ${dragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
+      ref={barRef}
+      className={`safe-area-bottom relative pointer-events-none ${dragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -524,7 +542,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           <span className="text-sm text-accent font-medium">Drop files here</span>
         </div>
       )}
-      <div className="max-w-[900px] mx-auto p-3">
+      <div className="max-w-[900px] mx-auto p-3 pointer-events-auto">
 
         {/* Slash command palette */}
         {/* Toast (slash command feedback) */}
@@ -1207,7 +1225,7 @@ function ReasoningPill({ threadId }: { threadId: string | null }) {
     setOpen(false)
   }
 
-  const displayLabel = effective ? (effective === 'xhigh' ? 'x-high' : effective) : 'auto'
+  const displayLabel = effective ? (effective === 'xhigh' ? 'X-High' : effective.charAt(0).toUpperCase() + effective.slice(1)) : 'Auto'
 
   return (
     <div ref={ref} className="relative">
@@ -1241,7 +1259,7 @@ function ReasoningPill({ threadId }: { threadId: string | null }) {
                 >
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-chat)' }} />
                   <span className="flex-1 min-w-0">
-                    <span className="block font-medium text-foreground">{level === 'xhigh' ? 'x-high' : level}</span>
+                    <span className="block font-medium text-foreground">{level === 'xhigh' ? 'X-High' : level.charAt(0).toUpperCase() + level.slice(1)}</span>
                     <span className="block text-[11.5px] text-muted-foreground mt-0.5">{REASONING_DESCRIPTIONS[level]}</span>
                   </span>
                   {isActive && <CheckMini />}

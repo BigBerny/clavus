@@ -108,10 +108,8 @@ export function App() {
   const [visiblePanel, _setVisiblePanel] = useState<string>('home')
   const setVisiblePanel = useCallback((next: string) => {
     _setVisiblePanel(prev => {
-      if (next === 'home' && prev !== 'home') {
-        // console.warn('[CLAVUS-DEBUG] visiblePanel → home (was:', prev, ')', new Error().stack)
-      }
       if (next !== prev) {
+        console.log('[CLAVUS-PANEL]', prev, '→', next, new Error().stack?.split('\n').slice(1, 4).join(' | '))
         // Reflect the visible panel in the URL hash so it can be deep-linked.
         const tabs = useTabsStore.getState().tabs
         const tab = tabs.find(t => t.id === next)
@@ -211,17 +209,38 @@ export function App() {
   const [canvasContent, setCanvasContent] = useState('')
   const [canvasTitle, setCanvasTitle] = useState('')
 
-  // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home)
-  const sortedTabs = useMemo(() =>
-    [...tabs].sort((a, b) => (a.updatedAt - b.updatedAt) || (a.openedAt - b.openedAt)),
-    [tabs]
-  )
+  // Threads pulled from store for filtering archived chat tabs (below).
+  const allThreadsForTabFilter = useThreadsStore((s) => s.threads)
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const logKeyboardScroll = useCallback((_event: string, _details: Record<string, unknown> = {}) => {
-    // Disabled to reduce log noise — re-enable for scroll debugging
-  }, [])
+  // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home).
+  // CRITICAL: filter out chat tabs whose thread is archived — otherwise the
+  // mobile horizontal scroll-snap renders one ChatViewPanel per tab, and with
+  // hundreds of accumulated tabs (e.g. from the migrateFromThreads cleanup),
+  // WKWebView in Capacitor runs out of memory and the renderer process is
+  // killed (looks like a reload). Non-chat tabs (marksense/file/finder) have
+  // no archive concept so they always render.
+  const sortedTabs = useMemo(() => {
+    const archivedIds = new Set(
+      allThreadsForTabFilter.filter((t) => t.archived).map((t) => t.id)
+    )
+    return [...tabs]
+      .filter((t) => !(t.type === 'chat' && archivedIds.has((t as ChatTab).threadId)))
+      .sort((a, b) => (a.updatedAt - b.updatedAt) || (a.openedAt - b.openedAt))
+  }, [tabs, allThreadsForTabFilter])
+
+  const logKeyboardScroll = useCallback((event: string, details: Record<string, unknown> = {}) => {
+    const container = scrollContainerRef.current
+    console.log('[CLAVUS-KB-SCROLL]', event, {
+      visiblePanel,
+      tabCount: sortedTabs.length,
+      isProgrammaticScroll: isProgrammaticScroll.current,
+      isUserHorizontalGesture: isUserHorizontalGesture.current,
+      gestureStartPanelIndex: gestureStartPanelIndex.current,
+      scrollLeft: container?.scrollLeft ?? null,
+      clientWidth: container?.clientWidth ?? null,
+      ...details,
+    })
+  }, [sortedTabs.length, visiblePanel])
 
   const preserveVisiblePanelDuringKeyboard = useCallback((reason: string) => {
     keyboardScrollGuardUntil.current = Date.now() + 400
@@ -574,7 +593,6 @@ export function App() {
         clearTimeout(userGestureEndTimer.current)
         userGestureEndTimer.current = setTimeout(() => {
           isUserHorizontalGesture.current = false
-          gestureStartPanelIndex.current = null
           userGestureEndTimer.current = null
           logKeyboardScroll('gesture-end-cleared')
         }, 300)
@@ -584,8 +602,9 @@ export function App() {
         logKeyboardScroll('scroll-ignore-programmatic')
         return
       }
+
       const isNativeShell = document.documentElement.hasAttribute('data-native')
-      if (isNativeShell && !isUserHorizontalGesture.current && !gestureStartPoint.current && !gestureDebounceActive) {
+      if (isNativeShell && !isUserHorizontalGesture.current && !gestureStartPoint.current && !gestureDebounceActive && gestureStartPanelIndex.current == null) {
         logKeyboardScroll('scroll-ignore-native-no-gesture')
         pinVisiblePanelIfNeeded('native-no-gesture-scroll')
         return
@@ -612,7 +631,7 @@ export function App() {
       scrollTimeout = setTimeout(() => {
         gestureDebounceActive = false
         const isNativeShell = document.documentElement.hasAttribute('data-native')
-        const gestureActive = wasGesture || isUserHorizontalGesture.current || !!gestureStartPoint.current
+        const gestureActive = wasGesture || isUserHorizontalGesture.current || !!gestureStartPoint.current || gestureStartPanelIndex.current != null
         if (isNativeShell && !gestureActive) {
           logKeyboardScroll('scroll-debounce-ignore-native-no-gesture')
           pinVisiblePanelIfNeeded('native-no-gesture-scroll-debounce')
@@ -634,27 +653,8 @@ export function App() {
           return
         }
         const scrollLeft = container.scrollLeft
-        let panelIndex = Math.round(scrollLeft / containerWidth)
+        const panelIndex = Math.round(scrollLeft / containerWidth)
         const rawPanelIndex = scrollLeft / containerWidth
-
-        // Clamp to ±1 panel from where the gesture started so fast swipes
-        // never skip over conversations.
-        const startIdx = gestureStartPanelIndex.current
-        if (startIdx != null) {
-          panelIndex = Math.max(startIdx - 1, Math.min(startIdx + 1, panelIndex))
-        }
-
-        // If native momentum scroll overshot the clamped panel, snap back
-        const clampedLeft = panelIndex * containerWidth
-        if (Math.abs(container.scrollLeft - clampedLeft) > 2) {
-          isProgrammaticScroll.current = true
-          container.style.scrollSnapType = 'none'
-          container.scrollLeft = clampedLeft
-          requestAnimationFrame(() => {
-            container.style.scrollSnapType = 'x mandatory'
-            isProgrammaticScroll.current = false
-          })
-        }
 
         const nextPanel = panelIndex >= sortedTabs.length ? 'home' : sortedTabs[panelIndex]?.id
 
@@ -988,17 +988,18 @@ export function App() {
   const markHorizontalGestureEnd = useCallback(() => {
     gestureStartPoint.current = null
     // Keep gestureStartPanelIndex alive until the gesture-end timer fires so
-    // inertial scroll events are still clamped.
+    // inertial scroll events are still clamped by the real-time boundary.
     if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
     if (!isUserHorizontalGesture.current) {
       logKeyboardScroll('gesture-cancelled-before-horizontal')
       return
     }
     logKeyboardScroll('gesture-end-schedule-clear')
-    // Keep accepting inertial/snap scroll events after the finger leaves.
+    // Clear the horizontal gesture flag after momentum settles, but keep
+    // gestureStartPanelIndex alive so the real-time clamp keeps enforcing
+    // the ±1 boundary. It will be overwritten on the next pointerDown.
     userGestureEndTimer.current = setTimeout(() => {
       isUserHorizontalGesture.current = false
-      gestureStartPanelIndex.current = null
       userGestureEndTimer.current = null
       logKeyboardScroll('gesture-end-cleared')
     }, 900)
@@ -1042,10 +1043,11 @@ export function App() {
       )}
 
       {/* Main content */}
-      <div className="flex-1 min-h-0 flex flex-row">
+      <div className={`flex-1 min-h-0 flex flex-row ${isDesktop ? 'home-screen' : ''}`}>
 
         {/* Desktop sidebar — only visible on md+ */}
         {isDesktop && (
+          <div className="py-2 pl-2 shrink-0">
           <DesktopSidebar
             tabs={[...sortedTabs].reverse()}
             activeTabId={visiblePanel}
@@ -1061,14 +1063,15 @@ export function App() {
               if (tabId) setVisiblePanel(tabId)
             }}
           />
+          </div>
         )}
 
         {/* Content area */}
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+        <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 grid-rows-1">
 
         {/* Desktop: single panel view */}
         {isDesktop ? (
-          <div className="flex-1 min-h-0 flex flex-row">
+          <div className="row-start-1 col-start-1 min-h-0 flex flex-row">
             {/* Main panel */}
             <div className="flex-1 min-h-0 min-w-0 flex flex-col">
               {visiblePanel === 'home' || !sortedTabs.find(t => t.id === visiblePanel) ? (
@@ -1126,7 +1129,7 @@ export function App() {
           /* Mobile: horizontal scroll-snap */
           <div
             ref={scrollContainerRef}
-            className="flex-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto relative z-[1]"
+            className="row-start-1 col-start-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto relative z-[1]"
             onPointerDown={markHorizontalGestureStart}
             onPointerMove={markHorizontalGestureMove}
             onPointerUp={markHorizontalGestureEnd}
@@ -1202,9 +1205,9 @@ export function App() {
         </div>
         )}
 
-        {/* InputBar as flex child at bottom — only show for chat tabs and home */}
+        {/* InputBar floating over content with glass effect */}
         {isVisibleChat && (
-          <div className="flex-shrink-0" style={{ touchAction: 'none' }}>
+          <div className="row-start-1 col-start-1 self-end z-10" style={{ touchAction: 'none' }}>
             <InputBar
               onSend={handleSend}
               onAbort={handleAbort}
@@ -1251,11 +1254,15 @@ export function App() {
 /**
  * Wrapper for ChatView that subscribes to its thread's messages from the store.
  */
+// Stable empty-messages reference so the selector below does not return a
+// fresh array on every read (which throws React into a getSnapshot infinite
+// loop when the thread state hasn't been hydrated yet).
+const EMPTY_MESSAGES: ReturnType<typeof useChatStore.getState>['threadStates'][string]['messages'] = []
 function ChatViewPanel({ threadId }: { threadId: string }) {
   const threads = useThreadsStore((s) => s.threads)
   const thread = threads.find(t => t.id === threadId)
 
-  const messages = useChatStore((s) => s.threadStates[threadId]?.messages ?? [])
+  const messages = useChatStore((s) => s.threadStates[threadId]?.messages ?? EMPTY_MESSAGES)
 
   useEffect(() => {
     useChatStore.getState().ensureThread(threadId)

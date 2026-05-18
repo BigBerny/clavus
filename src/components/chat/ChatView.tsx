@@ -273,7 +273,7 @@ export function ChatView({ messages, title, threadId }: Props) {
         aria-label="Chat messages"
         aria-live="polite"
       >
-        <div className="max-w-[900px] mx-auto px-4 pb-2" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3rem)' }}>
+        <div className="max-w-[900px] mx-auto px-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3rem)', paddingBottom: 'calc(var(--input-bar-h, 72px) + 0.5rem)' }}>
         {isEmptyChat ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-text-light-muted/30 dark:text-text-dark-muted/30">New conversation</p>

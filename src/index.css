@@ -41,10 +41,10 @@
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
 
   /* === Liquid Glass material tokens ======================================= */
-  --glass-bg: oklch(1 0 0 / 0.12);
-  --glass-bg-heavy: oklch(1 0 0 / 0.22);
-  --glass-border: oklch(1 0 0 / 0.18);
-  --glass-border-strong: oklch(1 0 0 / 0.35);
+  --glass-bg: oklch(0.92 0.006 60 / 0.55);
+  --glass-bg-heavy: oklch(0.90 0.008 60 / 0.65);
+  --glass-border: oklch(0 0 0 / 0.08);
+  --glass-border-strong: oklch(0 0 0 / 0.14);
   --glass-shadow: oklch(0.3 0.02 260 / 0.12);
   --glass-inner-glow: oklch(1 0 0 / 0.25);
   --glass-blur: 16px;
@@ -107,13 +107,15 @@
   --color-accent: oklch(0.72 0.15 280);
   --color-accent-hover: oklch(0.78 0.15 280);
 
-  /* Liquid Glass — dark mode */
-  --glass-bg: oklch(1 0 0 / 0.06);
-  --glass-bg-heavy: oklch(1 0 0 / 0.12);
-  --glass-border: oklch(1 0 0 / 0.10);
-  --glass-border-strong: oklch(1 0 0 / 0.20);
+  /* Liquid Glass — dark mode. Use a warm tint (hue 50, matching the charcoal
+     surface palette) instead of pure white so the glass reads as warm-Nordic
+     rather than cold grey on top of the dark surface. */
+  --glass-bg: oklch(0.95 0.008 50 / 0.04);
+  --glass-bg-heavy: oklch(0.95 0.008 50 / 0.07);
+  --glass-border: oklch(0.95 0.008 50 / 0.08);
+  --glass-border-strong: oklch(0.95 0.008 50 / 0.16);
   --glass-shadow: oklch(0 0 0 / 0.35);
-  --glass-inner-glow: oklch(1 0 0 / 0.08);
+  --glass-inner-glow: oklch(0.95 0.008 50 / 0.06);
 }
 
 :root {
@@ -622,4 +624,47 @@ html.theme-ready *::after {
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
+}
+
+/* ── Home screen ──────────────────────────────────────────────────────────── */
+
+.home-screen {
+  background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+  background-attachment: fixed;
+}
+html:not(.dark) .home-screen {
+  background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
+}
+
+/* Grouped card container (iOS Settings style) */
+.home-group {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--glass-radius);
+  overflow: hidden;
+}
+
+/* Rows inside a grouped card */
+.home-group-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s;
+}
+.home-group-row:active {
+  background: var(--glass-bg);
+}
+
+/* Hairline separator between rows */
+.home-group-row-border {
+  border-top: 1px solid oklch(1 0 0 / 0.06);
+}
+html:not(.dark) .home-group-row-border {
+  border-top-color: oklch(0 0 0 / 0.06);
 }

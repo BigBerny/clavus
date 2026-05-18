@@ -53,26 +53,13 @@ function fullDateTime(timestamp: number): string {
   })
 }
 
-type GroupKey = 'today' | 'yesterday' | 'lastWeek' | 'older'
-
-const GROUP_LABELS: Record<GroupKey, string> = {
-  today: 'Today',
-  yesterday: 'Yesterday',
-  lastWeek: 'Last week',
-  older: 'Older',
-}
-
-function startOfDay(d: Date): number {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-}
+type GroupKey = 'today' | 'lastWeek' | 'older'
 
 function groupFor(timestamp: number, now: number): GroupKey {
-  const today = startOfDay(new Date(now))
-  const yesterday = today - 24 * 60 * 60 * 1000
-  const sevenDaysAgo = today - 6 * 24 * 60 * 60 * 1000
-  if (timestamp >= today) return 'today'
-  if (timestamp >= yesterday) return 'yesterday'
-  if (timestamp >= sevenDaysAgo) return 'lastWeek'
+  const dayAgo = now - 24 * 60 * 60 * 1000
+  const weekAgo = now - 7 * 24 * 60 * 60 * 1000
+  if (timestamp >= dayAgo) return 'today'
+  if (timestamp >= weekAgo) return 'lastWeek'
   return 'older'
 }
 
@@ -186,25 +173,34 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     }
   }, [isResizing, setSidebarWidth])
 
-  const { openGroups, archived, groupOrder } = useMemo(() => {
+  const { openGroups, archivedTabs, archivedThreadsWithoutTabs } = useMemo(() => {
     const now = Date.now()
     const sorted = [...tabs].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt))
-    const open: Record<GroupKey, Tab[]> = { today: [], yesterday: [], lastWeek: [], older: [] }
+    const open: Record<GroupKey, Tab[]> = { today: [], lastWeek: [], older: [] }
     const arch: Tab[] = []
+    const tabThreadIds = new Set<string>()
     for (const tab of sorted) {
       const thread = tab.type === 'chat' ? threads.find((t) => t.id === (tab as ChatTab).threadId) : undefined
+      if (tab.type === 'chat') tabThreadIds.add((tab as ChatTab).threadId)
       if (thread?.archived) {
         arch.push(tab)
       } else {
-        open[groupFor(tab.updatedAt, now)].push(tab)
+        const group = groupFor(tab.updatedAt, now)
+        if (group === 'older') {
+          arch.push(tab)
+        } else {
+          open[group].push(tab)
+        }
       }
     }
-    return {
-      openGroups: open,
-      archived: arch,
-      groupOrder: ['today', 'yesterday', 'lastWeek', 'older'] as GroupKey[],
-    }
+    // Include archived threads that don't have an open tab
+    const orphanArchived = threads
+      .filter((t) => t.archived && !tabThreadIds.has(t.id))
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+    return { openGroups: open, archivedTabs: arch, archivedThreadsWithoutTabs: orphanArchived }
   }, [tabs, threads])
+
+  const totalArchived = archivedTabs.length + archivedThreadsWithoutTabs.length
 
   const renderTabRow = (tab: Tab, opts?: { muted?: boolean }) => {
     const isActive = tab.id === activeTabId
@@ -215,21 +211,21 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     return (
       <div key={tab.id}>
         <div
-          className="relative mx-1.5"
+          className="relative"
           onMouseEnter={() => setHoveredTab(tab.id)}
           onMouseLeave={() => setHoveredTab(null)}
         >
           <button
             onClick={() => onSelectTab(tab.id)}
             title={fullDateTime(tab.updatedAt)}
-            className={`inline-btn w-full flex items-start gap-2 px-2 py-1.5 rounded-lg text-left transition-colors group ${
+            className={`inline-btn w-full flex items-center gap-2.5 px-4 py-1.5 text-left transition-colors group ${
               isActive
                 ? 'bg-primary/12'
                 : 'hover:bg-accent-soft'
             } ${opts?.muted && !isActive ? 'opacity-70 hover:opacity-100' : ''}`}
           >
             <span
-              className="w-1.5 h-1.5 rounded-full shrink-0 mt-1.5"
+              className="w-1.5 h-1.5 rounded-full shrink-0"
               style={{ background: `var(--color-${accent})` }}
             />
             <div className="flex-1 min-w-0">
@@ -243,7 +239,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
             </div>
           </button>
           {isHovered && tab.type === 'chat' && (
-            <div className="absolute top-1/2 -translate-y-1/2 right-1 flex items-center gap-0.5">
+            <div className="absolute top-1/2 -translate-y-1/2 right-3 flex items-center gap-0.5">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -263,7 +259,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
         {/* Linked-docs rendered as indented chips with left rule */}
         {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
-          <div className="ml-[18px] pl-[5px] border-l border-border my-0.5 space-y-px">
+          <div className="ml-[26px] pl-[5px] border-l border-border my-0.5 space-y-px">
             {thread.linkedDocs.map((doc) => (
               <button
                 key={doc.path}
@@ -283,7 +279,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
   return (
     <div
-      className="relative h-full flex flex-col glass-heavy rounded-r-[var(--glass-radius-lg)] shrink-0"
+      className="relative h-full flex flex-col glass-heavy rounded-[var(--glass-radius-lg)] shrink-0"
       style={{ width: sidebarWidth }}
     >
       {/* Header */}
@@ -304,105 +300,126 @@ export const DesktopSidebar = memo(function DesktopSidebar({
         </div>
       </button>
 
-      {/* Search */}
-      <div className="px-3 pt-1 pb-2">
-        <div className="relative">
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 pointer-events-none">
-            {SearchIcon}
-          </span>
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') {
-                setSearchQuery('')
-                ;(e.target as HTMLInputElement).blur()
-              }
-            }}
-            placeholder="Search conversations…"
-            aria-label="Search conversations"
-            className="w-full pl-8 pr-2 py-1.5 text-[12.5px] rounded-md bg-accent-soft/60 text-foreground placeholder:text-muted-foreground/60 border border-transparent focus:outline-none focus:border-primary/30 focus:bg-accent-soft transition-colors"
-          />
-        </div>
-      </div>
-
-      {/* Tab list / search results */}
+      {/* Tab list */}
       <div className="flex-1 overflow-y-auto scrollbar-fine py-1">
-        {isSearching ? (
-          <div className="pb-1">
-            {searchLoading && searchResults.length === 0 ? (
-              <div className="px-4 py-6 text-center">
-                <p className="text-[12px] text-muted-foreground/70">Searching…</p>
-              </div>
-            ) : searchResults.length === 0 ? (
-              <div className="px-4 py-6 text-center">
-                <p className="text-[12px] text-muted-foreground/70">No results</p>
-              </div>
-            ) : (
-              <>
-                <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none">
-                  Results
-                </div>
-                {searchResults.map((hit, i) => (
-                  <div key={`${hit.threadId}-${hit.messageId}-${i}`} className="mx-1.5">
-                    <button
-                      onClick={() => handleSelectSearchHit(hit)}
-                      className="inline-btn w-full px-2 py-1.5 rounded-lg text-left hover:bg-accent-soft transition-colors"
-                    >
-                      <div className="text-[12.5px] font-medium text-foreground/90 truncate">
-                        {hit.threadTitle || 'Untitled'}
-                      </div>
-                      <div className="text-[11.5px] text-muted-foreground line-clamp-2" style={{ overflowWrap: 'break-word' }}>
-                        {hit.snippet}
-                      </div>
-                    </button>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        ) : tabs.length === 0 ? (
+        {tabs.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-[13px] text-muted-foreground/70">No conversations yet</p>
           </div>
         ) : (
           <>
-            {groupOrder.map((key) => {
-              const list = openGroups[key]
-              if (list.length === 0) return null
-              return (
-                <div key={key} className="pb-0.5">
-                  <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none">
-                    {GROUP_LABELS[key]}
-                  </div>
-                  {list.map((tab) => renderTabRow(tab))}
+            {/* Today (last 24h) — always expanded */}
+            {openGroups.today.length > 0 && (
+              <div className="pb-0.5">
+                <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none">
+                  Today
                 </div>
-              )
-            })}
-
-            {/* Archive — collapsible */}
-            {archived.length > 0 && (
-              <div className="mt-1 border-t border-border/40 pt-1">
-                <button
-                  onClick={() => setArchiveOpen((v) => !v)}
-                  className="inline-btn w-full px-4 py-1.5 flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <span
-                    className={`transition-transform ${archiveOpen ? 'rotate-90' : ''}`}
-                  >{ChevronRight}</span>
-                  {ArchiveIcon}
-                  <span>Archive</span>
-                  <span className="ml-auto normal-case tracking-normal text-[10px] opacity-60">{archived.length}</span>
-                </button>
-                {archiveOpen && (
-                  <div className="pb-1">
-                    {archived.map((tab) => renderTabRow(tab, { muted: true }))}
-                  </div>
-                )}
+                {openGroups.today.map((tab) => renderTabRow(tab))}
               </div>
             )}
+
+            {/* Last week — always expanded */}
+            {openGroups.lastWeek.length > 0 && (
+              <div className="pb-0.5">
+                <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none">
+                  Last week
+                </div>
+                {openGroups.lastWeek.map((tab) => renderTabRow(tab))}
+              </div>
+            )}
+
+            {/* Archive — collapsible, includes search */}
+            <div className="mt-1 border-t border-border/40 pt-1">
+              <button
+                onClick={() => setArchiveOpen((v) => !v)}
+                className="inline-btn w-full px-4 py-1.5 flex items-center gap-1.5 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <span
+                  className={`transition-transform ${archiveOpen ? 'rotate-90' : ''}`}
+                >{ChevronRight}</span>
+                {ArchiveIcon}
+                <span>Archive</span>
+                {totalArchived > 0 && (
+                  <span className="ml-auto normal-case tracking-normal text-[10px] opacity-60">{totalArchived}</span>
+                )}
+              </button>
+              {archiveOpen && (
+                <div className="pb-1">
+                  {/* Search */}
+                  <div className="px-4 py-1.5">
+                    <div className="relative">
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 text-muted-foreground/40 pointer-events-none">
+                        {SearchIcon}
+                      </span>
+                      <input
+                        ref={searchInputRef}
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setSearchQuery('')
+                            ;(e.target as HTMLInputElement).blur()
+                          }
+                        }}
+                        placeholder="Search conversations…"
+                        aria-label="Search conversations"
+                        className="w-full pl-5 pr-2 py-1.5 text-[12.5px] rounded-md bg-transparent text-foreground placeholder:text-muted-foreground/40 border border-transparent focus:outline-none focus:border-primary/30 focus:bg-accent-soft/30 transition-colors"
+                      />
+                    </div>
+                  </div>
+
+                  {isSearching ? (
+                    <>
+                      {searchLoading && searchResults.length === 0 ? (
+                        <div className="px-4 py-4 text-center">
+                          <p className="text-[12px] text-muted-foreground/70">Searching…</p>
+                        </div>
+                      ) : searchResults.length === 0 ? (
+                        <div className="px-4 py-4 text-center">
+                          <p className="text-[12px] text-muted-foreground/70">No results</p>
+                        </div>
+                      ) : (
+                        searchResults.map((hit, i) => (
+                          <div key={`${hit.threadId}-${hit.messageId}-${i}`}>
+                            <button
+                              onClick={() => handleSelectSearchHit(hit)}
+                              className="inline-btn w-full px-4 py-1.5 text-left hover:bg-accent-soft transition-colors"
+                            >
+                              <div className="text-[12.5px] font-medium text-foreground/90 truncate">
+                                {hit.threadTitle || 'Untitled'}
+                              </div>
+                              <div className="text-[11.5px] text-muted-foreground line-clamp-2" style={{ overflowWrap: 'break-word' }}>
+                                {hit.snippet}
+                              </div>
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {archivedTabs.map((tab) => renderTabRow(tab, { muted: true }))}
+                      {archivedThreadsWithoutTabs.map((thread) => (
+                        <div key={thread.id}>
+                          <button
+                            onClick={() => onOpenThread?.(thread.id)}
+                            className="inline-btn w-full flex items-center gap-2.5 px-4 py-1.5 text-left transition-colors opacity-70 hover:opacity-100 hover:bg-accent-soft"
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground/40" />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] truncate text-foreground/85">
+                                {thread.title || 'Untitled'}
+                              </div>
+                            </div>
+                          </button>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Clavus Home — Mockups</title>
+<style>
+  :root {
+    --bg: oklch(0.165 0.006 50);
+    --fg: oklch(0.95 0.005 80);
+    --muted: oklch(0.68 0.008 60);
+    --border: oklch(0.27 0.006 50);
+    --primary: oklch(0.72 0.15 280);
+    --cat-chat: oklch(0.72 0.13 255);
+    --cat-doc: oklch(0.75 0.12 65);
+    --cat-voice: oklch(0.72 0.10 160);
+    --glass-bg: oklch(1 0 0 / 0.06);
+    --glass-border: oklch(1 0 0 / 0.10);
+    --glass-blur: 16px;
+    --glass-radius: 1.25rem;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .wrapper {
+    max-width: 480px;
+    width: 100%;
+    padding: 2rem 1.5rem;
+  }
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  p {
+    font-size: 14px;
+    color: var(--muted);
+    margin-bottom: 2rem;
+    line-height: 1.5;
+  }
+  .cards { display: flex; flex-direction: column; gap: 10px; }
+  a {
+    display: block;
+    padding: 16px 18px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--glass-radius);
+    text-decoration: none;
+    color: var(--fg);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  a:active { background: oklch(1 0 0 / 0.10); }
+  .link-title {
+    font-size: 15px;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+  .link-desc {
+    font-size: 12.5px;
+    color: var(--muted);
+    line-height: 1.4;
+  }
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+  }
+  .tag-a { background: color-mix(in oklch, var(--primary) 15%, transparent); color: var(--primary); }
+  .tag-b { background: color-mix(in oklch, var(--cat-voice) 15%, transparent); color: var(--cat-voice); }
+  .tag-c { background: color-mix(in oklch, var(--cat-doc) 15%, transparent); color: var(--cat-doc); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <h1>Clavus Home Mockups</h1>
+  <p>Three layout options for the updated home screen. Tap to view each one.</p>
+  <div class="cards">
+    <a href="option-a.html">
+      <span class="tag tag-a">A</span>
+      <div class="link-title">Stacked Compact</div>
+      <div class="link-desc">Vertical list of recent threads at top, search below, Compose in the middle. Finder &amp; Voice in a "Tools" section at the end, separated by a divider. Archive as a distinct row.</div>
+    </a>
+    <a href="option-b.html">
+      <span class="tag tag-b">B</span>
+      <div class="link-title">Horizontal Scroll + Utility Bar</div>
+      <div class="link-desc">Recent threads as horizontally scrollable cards. Search inline. Archive, Finder, and Voice grouped as a compact vertical list at the bottom.</div>
+    </a>
+    <a href="option-c.html">
+      <span class="tag tag-c">C</span>
+      <div class="link-title">Tight &amp; Functional</div>
+      <div class="link-desc">Search and Archive as two equal buttons right under the greeting. Compact recent list with "See all". Finder &amp; Voice as small side-by-side utility tiles at the end.</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>
