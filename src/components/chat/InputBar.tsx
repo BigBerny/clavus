@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import mammoth from 'mammoth'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { haptic, isNative } from '../../lib/native'
 import { useModelStore } from '../../state/preset'
@@ -44,8 +45,8 @@ interface PendingFile {
   name: string
   content: string
   size: number
-  /** Workspace path returned by Hermes upload — when set, the agent reads the file directly */
-  workspacePath?: string
+  /** Local file path — the agent can read this directly */
+  localPath?: string
 }
 
 const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.xml', '.html', '.js', '.ts', '.jsx', '.tsx', '.py', '.css', '.yml', '.yaml', '.toml', '.svg', '.sh', '.env', '.log'])
@@ -57,17 +58,28 @@ function isTextFile(file: File): boolean {
   return TEXT_EXTENSIONS.has(ext)
 }
 
-async function uploadToWorkspace(file: File): Promise<{ path: string; filename: string } | null> {
+async function uploadFile(file: File): Promise<{ path: string } | null> {
   try {
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch('/hermes-api/upload', { method: 'POST', body: form })
+    const res = await fetch('/api/upload', { method: 'POST', body: form })
     if (!res.ok) return null
-    const data = await res.json()
-    return { path: data.path, filename: data.filename }
+    return await res.json()
   } catch {
     return null
   }
+}
+
+async function extractTextContent(file: File): Promise<string> {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  if (ext === 'docx') {
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const { value } = await mammoth.extractRawText({ arrayBuffer })
+      return value
+    } catch { return '' }
+  }
+  return ''
 }
 
 export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
@@ -346,7 +358,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     let messageText = trimmed
     if (pendingFiles.length > 0) {
       const fileParts = pendingFiles.map(f => {
-        const attrs = `name="${f.name}"${f.workspacePath ? ` path="${f.workspacePath}"` : ''}`
+        const attrs = `name="${f.name}"${f.localPath ? ` path="${f.localPath}"` : ''}`
         if (f.content) return `<file ${attrs}>\n${f.content}\n</file>`
         return `<file ${attrs} />`
       })
@@ -470,20 +482,14 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         }
         reader.readAsText(file)
       } else {
-        // Binary/unknown files: upload to workspace for agent access
+        // Other files (DOCX, PDF, etc.): save locally and extract text where possible
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
         const f = file
-        uploadToWorkspace(f).then((result) => {
-          if (!result) return
+        Promise.all([uploadFile(f), extractTextContent(f)]).then(([uploaded, content]) => {
           setPendingFiles((prev) => {
             if (prev.length >= MAX_FILES) return prev
-            return [...prev, {
-              name: f.name,
-              content: '',
-              size: f.size,
-              workspacePath: result.path,
-            }]
+            return [...prev, { name: f.name, content, size: f.size, localPath: uploaded?.path }]
           })
         })
       }
@@ -535,13 +541,12 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
         const f = file
-        uploadToWorkspace(f).then((result) => {
-          if (!result) return
+        Promise.all([uploadFile(f), extractTextContent(f)]).then(([uploaded, content]) => {
           setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, {
             name: f.name,
-            content: '',
+            content,
             size: f.size,
-            workspacePath: result.path,
+            localPath: uploaded?.path,
           }])
         })
       }

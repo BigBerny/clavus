@@ -786,6 +786,74 @@ function hermesResponsesPlugin() {
   }
 }
 
+const UPLOAD_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus-data/uploads')
+
+function fileUploadPlugin() {
+  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+
+  const attach = (server: any) => {
+    server.middlewares.use((req: any, res: any, next: any) => {
+      if (req.method !== 'POST' || req.url !== '/api/upload') return next()
+
+      const chunks: Buffer[] = []
+      req.on('data', (chunk: Buffer) => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = Buffer.concat(chunks)
+          const contentType = req.headers['content-type'] || ''
+
+          // Parse multipart boundary
+          const boundaryMatch = contentType.match(/boundary=(.+)/)
+          if (!boundaryMatch) {
+            res.statusCode = 400
+            res.end(JSON.stringify({ error: 'Missing boundary' }))
+            return
+          }
+          const boundary = boundaryMatch[1]
+          const raw = body.toString('binary')
+          const parts = raw.split('--' + boundary).slice(1, -1)
+
+          for (const part of parts) {
+            const headerEnd = part.indexOf('\r\n\r\n')
+            if (headerEnd < 0) continue
+            const headers = part.slice(0, headerEnd)
+            const fileData = part.slice(headerEnd + 4, part.endsWith('\r\n') ? part.length - 2 : part.length)
+
+            const nameMatch = headers.match(/filename="(.+?)"/)
+            if (!nameMatch) continue
+
+            const originalName = nodePath.basename(nameMatch[1])
+            // Add timestamp to avoid collisions
+            const safeName = `${Date.now()}-${originalName}`
+            const filePath = nodePath.join(UPLOAD_DIR, safeName)
+            fs.writeFileSync(filePath, fileData, 'binary')
+
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({
+              filename: originalName,
+              path: filePath,
+              size: fs.statSync(filePath).size,
+            }))
+            return
+          }
+
+          res.statusCode = 400
+          res.end(JSON.stringify({ error: 'No file found in upload' }))
+        } catch (err: any) {
+          res.statusCode = 500
+          res.end(JSON.stringify({ error: err.message }))
+        }
+      })
+    })
+  }
+
+  return {
+    name: 'file-upload',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
 function pushApiPlugin() {
   async function readBody(req: any): Promise<string> {
     const chunks: Buffer[] = []
@@ -880,6 +948,7 @@ export default defineConfig({
     workspacePlugin(),
     workspacePlugin(DOCUMENTS_ROOT, '/api/documents', 'documents-api'),
     pushApiPlugin(),
+    fileUploadPlugin(),
     hermesResponsesPlugin(),
     react(),
     tailwindcss(),

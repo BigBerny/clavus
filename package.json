@@ -68,6 +68,7 @@
     "is-hotkey": "^0.2.0",
     "lodash.throttle": "^4.1.1",
     "lucide-react": "^0.575.0",
+    "mammoth": "^1.12.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-hotkeys-hook": "^5.3.2",
