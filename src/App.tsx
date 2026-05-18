@@ -1119,6 +1119,7 @@ export function App() {
                       path={(visibleTab as FileTab).path}
                       title={visibleTab.title}
                       isVisible={true}
+                      onClose={() => handleCloseTab(visibleTab.id)}
                     />
                   )}
                   {visibleTab?.type === 'finder' && (
@@ -1192,6 +1193,7 @@ export function App() {
                           path={(tab as FileTab).path}
                           title={tab.title}
                           isVisible={isActive}
+                          onClose={() => handleCloseTab(tab.id)}
                         />
                       )}
                       {tab.type === 'finder' && (

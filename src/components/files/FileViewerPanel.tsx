@@ -7,6 +7,7 @@ interface Props {
   path: string
   title: string
   isVisible: boolean
+  onClose?: () => void
 }
 
 interface FileResponse {
@@ -90,7 +91,7 @@ function CodePreview({ content }: { content: string }) {
   )
 }
 
-export function FileViewerPanel({ path, title, isVisible }: Props) {
+export function FileViewerPanel({ path, title, isVisible, onClose }: Props) {
   const info = useMemo(() => getFileTypeInfo(title), [title])
   const rawUrl = useMemo(() => getWorkspaceFileUrl(path), [path])
   const [file, setFile] = useState<FileResponse | null>(null)
@@ -147,9 +148,18 @@ export function FileViewerPanel({ path, title, isVisible }: Props) {
             {info.label}{file?.size ? ` · ${formatSize(file.size)}` : ''}
           </p>
         </div>
-        <a className="inline-btn text-xs px-3 py-1.5 rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-colors" href={rawUrl} download={title} target="_blank" rel="noreferrer">
+        <a className="inline-btn text-xs px-3 py-1.5 rounded-lg bg-surface-light-2 dark:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted hover:text-accent transition-colors" href={rawUrl} download={title}>
           Download
         </a>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="inline-btn w-8 h-8 flex items-center justify-center rounded-lg text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 transition-colors flex-shrink-0"
+            aria-label="Close"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto p-4" style={{ WebkitOverflowScrolling: 'touch' }}>
@@ -191,7 +201,7 @@ export function FileViewerPanel({ path, title, isVisible }: Props) {
                 <a href={officeDesktopUrl} className="inline-btn px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium">
                   Open with desktop app
                 </a>
-                <a href={rawUrl} download={title} target="_blank" rel="noreferrer" className="inline-btn px-4 py-2 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark text-sm font-medium">
+                <a href={rawUrl} download={title} className="inline-btn px-4 py-2 rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark text-sm font-medium">
                   Download file
                 </a>
               </div>
@@ -204,7 +214,7 @@ export function FileViewerPanel({ path, title, isVisible }: Props) {
             <div className="max-w-sm space-y-3">
               <h2 className="text-base font-semibold text-text-light dark:text-text-dark">Preview not available</h2>
               <p className="text-sm text-text-light-muted dark:text-text-dark-muted">Download this file to open it locally.</p>
-              <a href={rawUrl} download={title} target="_blank" rel="noreferrer" className="inline-btn inline-flex px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium">
+              <a href={rawUrl} download={title} className="inline-btn inline-flex px-4 py-2 rounded-xl bg-accent text-white text-sm font-medium">
                 Download file
               </a>
             </div>
