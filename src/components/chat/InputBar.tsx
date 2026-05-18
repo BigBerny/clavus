@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import mammoth from 'mammoth'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { haptic, isNative } from '../../lib/native'
 import { useModelStore } from '../../state/preset'
@@ -56,11 +55,6 @@ function isTextFile(file: File): boolean {
   if (file.type === 'application/json' || file.type === 'application/xml') return true
   const ext = '.' + file.name.split('.').pop()?.toLowerCase()
   return TEXT_EXTENSIONS.has(ext)
-}
-
-function isDocxFile(file: File): boolean {
-  return file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    file.name.toLowerCase().endsWith('.docx')
 }
 
 async function uploadToWorkspace(file: File): Promise<{ path: string; filename: string } | null> {
@@ -352,11 +346,9 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     let messageText = trimmed
     if (pendingFiles.length > 0) {
       const fileParts = pendingFiles.map(f => {
-        if (f.workspacePath) {
-          // File uploaded to workspace — give agent the path to read the original
-          return `<file name="${f.name}" path="${f.workspacePath}">\n${f.content}\n</file>`
-        }
-        return `<file name="${f.name}">\n${f.content}\n</file>`
+        const attrs = `name="${f.name}"${f.workspacePath ? ` path="${f.workspacePath}"` : ''}`
+        if (f.content) return `<file ${attrs}>\n${f.content}\n</file>`
+        return `<file ${attrs} />`
       })
       messageText = fileParts.join('\n\n') + (trimmed ? '\n\n' + trimmed : '')
     }
@@ -466,24 +458,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           })
         }
         reader.readAsDataURL(file)
-      } else if (isDocxFile(file)) {
-        if (pendingFiles.length >= MAX_FILES) continue
-        if (file.size > MAX_FILE_SIZE) continue
-        // Upload to workspace so the agent can read the original file
-        const docxFile = file
-        uploadToWorkspace(docxFile).then(async (result) => {
-          const arrayBuffer = await docxFile.arrayBuffer()
-          const { value: text } = await mammoth.extractRawText({ arrayBuffer })
-          setPendingFiles((prev) => {
-            if (prev.length >= MAX_FILES) return prev
-            return [...prev, {
-              name: docxFile.name,
-              content: text,
-              size: docxFile.size,
-              workspacePath: result?.path,
-            }]
-          })
-        })
       } else if (isTextFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
@@ -495,6 +469,23 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           })
         }
         reader.readAsText(file)
+      } else {
+        // Binary/unknown files: upload to workspace for agent access
+        if (pendingFiles.length >= MAX_FILES) continue
+        if (file.size > MAX_FILE_SIZE) continue
+        const f = file
+        uploadToWorkspace(f).then((result) => {
+          if (!result) return
+          setPendingFiles((prev) => {
+            if (prev.length >= MAX_FILES) return prev
+            return [...prev, {
+              name: f.name,
+              content: '',
+              size: f.size,
+              workspacePath: result.path,
+            }]
+          })
+        })
       }
     }
 
@@ -532,20 +523,6 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
         }
         reader.readAsDataURL(file)
-      } else if (isDocxFile(file)) {
-        if (pendingFiles.length >= MAX_FILES) continue
-        if (file.size > MAX_FILE_SIZE) continue
-        const docxFile = file
-        uploadToWorkspace(docxFile).then(async (result) => {
-          const arrayBuffer = await docxFile.arrayBuffer()
-          const { value: text } = await mammoth.extractRawText({ arrayBuffer })
-          setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, {
-            name: docxFile.name,
-            content: text,
-            size: docxFile.size,
-            workspacePath: result?.path,
-          }])
-        })
       } else if (isTextFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
@@ -554,6 +531,19 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, { name: file.name, content: reader.result as string, size: file.size }])
         }
         reader.readAsText(file)
+      } else {
+        if (pendingFiles.length >= MAX_FILES) continue
+        if (file.size > MAX_FILE_SIZE) continue
+        const f = file
+        uploadToWorkspace(f).then((result) => {
+          if (!result) return
+          setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, {
+            name: f.name,
+            content: '',
+            size: f.size,
+            workspacePath: result.path,
+          }])
+        })
       }
     }
   }, [pendingImages.length, pendingFiles.length])
@@ -818,7 +808,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,.txt,.md,.json,.csv,.xml,.html,.js,.ts,.jsx,.tsx,.py,.css,.yml,.yaml,.toml,.svg,.sh,.log,.docx"
+          accept="*/*"
           multiple
           onChange={handleFileChange}
           className="hidden"
