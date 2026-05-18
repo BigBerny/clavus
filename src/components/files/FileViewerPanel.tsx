@@ -104,7 +104,7 @@ export function FileViewerPanel({ path, title, isVisible }: Props) {
       if (cancelled) return
       setLoading(true)
       setError('')
-      fetch(`/api/workspace${path}`)
+      fetch(`/api/documents${path}`)
         .then((res) => {
           if (!res.ok) throw new Error('Failed to load file')
           return res.json() as Promise<FileResponse>

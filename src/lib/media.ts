@@ -1,6 +1,7 @@
 import type { MediaAttachment } from '../state/chat'
 
-const WORKSPACE_PATH_RE = /(?:^|\/)\.openclaw\/workspace(?:-[^/]+)?\/(.+)$/
+// Match both old (.openclaw/workspace/) and current (Documents/Workspace/) workspace paths
+const WORKSPACE_PATH_RE = /(?:^|\/)(?:\.openclaw\/workspace(?:-[^/]+)?|Documents\/Workspace)\/(.+)$/
 
 function encodePath(path: string): string {
   return path
@@ -21,9 +22,11 @@ export function mediaTypeFromPath(path: string): MediaAttachment['type'] {
 export function buildWorkspaceMediaUrl(filePath: string): string {
   const trimmed = filePath.trim().replace(/^`|`$/g, '')
   if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed
-  if (trimmed.startsWith('/api/workspace/raw/')) return trimmed
+  if (trimmed.startsWith('/api/documents/raw/')) return trimmed
+  // Legacy prefix — rewrite to documents
+  if (trimmed.startsWith('/api/workspace/raw/')) return trimmed.replace('/api/workspace/raw/', '/api/documents/raw/')
 
   const workspaceMatch = trimmed.match(WORKSPACE_PATH_RE)
   const relative = workspaceMatch?.[1] || trimmed.replace(/^\/+/, '')
-  return `/api/workspace/raw/${encodePath(relative)}`
+  return `/api/documents/raw/${encodePath(relative)}`
 }

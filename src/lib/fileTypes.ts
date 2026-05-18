@@ -65,7 +65,7 @@ export function getFileTypeInfo(fileName: string): FileTypeInfo {
 
 export function getWorkspaceFileUrl(path: string) {
   const normalized = path.startsWith('/') ? path : `/${path}`
-  return `/api/workspace/raw${normalized.split('/').map(encodeURIComponent).join('/')}`
+  return `/api/documents/raw${normalized.split('/').map(encodeURIComponent).join('/')}`
 }
 
 export function getOfficeDesktopUrl(fileUrl: string, extension: string) {
