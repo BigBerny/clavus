@@ -39,6 +39,8 @@ window.addEventListener('unhandledrejection', (e) => {
 // need overrides on specific platforms).
 document.documentElement.setAttribute('data-platform', nativePlatform)
 if (isNative) document.documentElement.setAttribute('data-native', 'true')
+const isTauriShell = /Clavus\/[\d.]+ \(Tauri/.test(navigator.userAgent)
+if (isTauriShell) document.documentElement.setAttribute('data-tauri', 'true')
 
 // In the Capacitor WKWebView (and the Tauri macOS shell, which sets its UA to
 // "Clavus/<ver> (Tauri; …)") we don't want a service worker: precached chunks

@@ -220,6 +220,9 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   }, [onSelectTab])
 
   const handleSelectThread = useCallback((threadId: string) => {
+    // Un-archive so the tab won't be filtered out of sortedTabs
+    const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
+    if (thread?.archived) useThreadsStore.getState().unarchiveThread(threadId)
     const tabId = applyRoute({ kind: 'chat', threadId })
     if (tabId) onSelectTab?.(tabId)
   }, [onSelectTab])
@@ -322,7 +325,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     </button>
                     {/* LinkedDocs sub-entries beneath their parent conversation */}
                     {linkedDocs && linkedDocs.length > 0 && (
-                      <div className="ml-[24px] mr-3 pl-[7px] border-l border-border/40 my-1 space-y-px">
+                      <div className="ml-[24px] mr-3 pl-[7px] -mt-2 mb-1 space-y-px">
                         {linkedDocs.map((doc) => (
                           <button
                             key={doc.path}

@@ -7,8 +7,14 @@ import { useThreadSearch } from '../../lib/threadSearch.ts'
  */
 export function ThreadSearch({ onSelectThread }: { onSelectThread: (threadId: string) => void }) {
   const [query, setQuery] = useState('')
-  const { results, loading } = useThreadSearch(query)
+  const { results: rawResults, loading } = useThreadSearch(query)
   const isSearching = query.trim().length >= 2
+
+  // Deduplicate by threadId — server returns per-message hits, so the same
+  // conversation can appear multiple times with different snippets.
+  const results = rawResults.filter(
+    (r, i, arr) => arr.findIndex((x) => x.threadId === r.threadId) === i,
+  )
 
   return (
     <>

@@ -273,7 +273,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
         {/* Linked-docs rendered as indented chips with left rule */}
         {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
-          <div className="ml-[26px] mr-3 pl-[5px] border-l border-border my-0.5 space-y-px">
+          <div className="ml-[26px] mr-3 pl-[5px] -mt-1 space-y-px">
             {thread.linkedDocs.map((doc) => {
               const docTabId = `marksense:${doc.path}`
               const isDocActive = docTabId === activeTabId
