@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import mammoth from 'mammoth'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { haptic, isNative } from '../../lib/native'
 import { useModelStore } from '../../state/preset'
@@ -38,7 +39,7 @@ interface Props {
 const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 const MAX_FILES = 5
-const MAX_FILE_SIZE = 512 * 1024 // 512KB per text file
+const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB per file
 
 interface PendingFile {
   name: string
@@ -53,6 +54,11 @@ function isTextFile(file: File): boolean {
   if (file.type === 'application/json' || file.type === 'application/xml') return true
   const ext = '.' + file.name.split('.').pop()?.toLowerCase()
   return TEXT_EXTENSIONS.has(ext)
+}
+
+function isDocxFile(file: File): boolean {
+  return file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    file.name.toLowerCase().endsWith('.docx')
 }
 
 export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
@@ -439,6 +445,19 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           })
         }
         reader.readAsDataURL(file)
+      } else if (isDocxFile(file)) {
+        if (pendingFiles.length >= MAX_FILES) continue
+        if (file.size > MAX_FILE_SIZE) continue
+        const reader = new FileReader()
+        reader.onload = async () => {
+          const arrayBuffer = reader.result as ArrayBuffer
+          const { value: text } = await mammoth.extractRawText({ arrayBuffer })
+          setPendingFiles((prev) => {
+            if (prev.length >= MAX_FILES) return prev
+            return [...prev, { name: file.name, content: text, size: file.size }]
+          })
+        }
+        reader.readAsArrayBuffer(file)
       } else if (isTextFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
@@ -487,6 +506,15 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
         }
         reader.readAsDataURL(file)
+      } else if (isDocxFile(file)) {
+        if (pendingFiles.length >= MAX_FILES) continue
+        if (file.size > MAX_FILE_SIZE) continue
+        const reader = new FileReader()
+        reader.onload = async () => {
+          const { value: text } = await mammoth.extractRawText({ arrayBuffer: reader.result as ArrayBuffer })
+          setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, { name: file.name, content: text, size: file.size }])
+        }
+        reader.readAsArrayBuffer(file)
       } else if (isTextFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
@@ -759,7 +787,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,.txt,.md,.json,.csv,.xml,.html,.js,.ts,.jsx,.tsx,.py,.css,.yml,.yaml,.toml,.svg,.sh,.log"
+          accept="image/*,.txt,.md,.json,.csv,.xml,.html,.js,.ts,.jsx,.tsx,.py,.css,.yml,.yaml,.toml,.svg,.sh,.log,.docx"
           multiple
           onChange={handleFileChange}
           className="hidden"
