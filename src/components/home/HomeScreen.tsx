@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useThreadsStore } from '../../state/threads'
 import { useChatStore } from '../../state/chat.ts'
-import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab } from '../../state/tabs'
+import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab, type MarksenseTab } from '../../state/tabs'
 import { ThreadSearch } from './ThreadSearch.tsx'
 import { applyRoute } from '../../state/router.ts'
 import { useUIStore } from '../../state/ui.ts'
@@ -62,6 +62,13 @@ function accentForTab(tab: Tab): string {
 
 // ── icons ──────────────────────────────────────────────────────────────────
 
+const DocFileIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+    <polyline points="14 2 14 8 20 8"/>
+  </svg>
+)
+
 const SparkleIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
@@ -118,11 +125,6 @@ const ArchiveIcon = (
   </svg>
 )
 
-const SearchIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
-  </svg>
-)
 
 const ChevronRight = (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -176,8 +178,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   const setThemeChoice = useUIStore((s) => s.setThemeChoice)
 
   const [now] = useState(() => new Date())
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [allConversationsOpen, setAllConversationsOpen] = useState(false)
 
   const archivedThreads = useMemo(
     () => threads.filter((t) => t.archived).sort((a, b) => b.updatedAt - a.updatedAt),
@@ -185,18 +186,33 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   )
   const archivedCount = archivedThreads.length
 
+  // Collect doc paths that appear as linkedDocs under any thread — these will
+  // render as sub-entries below their parent conversation and should not also
+  // appear as standalone top-level rows.
+  const linkedDocPaths = useMemo(() => {
+    const paths = new Set<string>()
+    for (const thread of threads) {
+      if (thread.linkedDocs) {
+        for (const doc of thread.linkedDocs) paths.add(doc.path)
+      }
+    }
+    return paths
+  }, [threads])
+
   // Recent: today's tabs, sorted by updatedAt, capped at 6
   const recentTabs = useMemo(() => {
     const dayAgo = Date.now() - 24 * 60 * 60 * 1000
     return [...tabs]
       .filter((t) => {
+        // Skip marksense tabs that already render as linkedDoc sub-entries
+        if (t.type === 'marksense' && linkedDocPaths.has((t as MarksenseTab).path)) return false
         if (t.type !== 'chat') return t.updatedAt > dayAgo
         const th = threads.find((x) => x.id === (t as ChatTab).threadId)
         return !th?.archived && t.updatedAt > dayAgo
       })
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 6)
-  }, [tabs, threads])
+  }, [tabs, threads, linkedDocPaths])
 
   const openFinder = useCallback(() => {
     const id = openOrFocusFinderTab()
@@ -283,62 +299,76 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                   : tab.type === 'marksense' ? 'Document'
                   : tab.type === 'file' ? 'File'
                   : ''
+                const linkedDocs = thread?.linkedDocs
                 return (
-                  <button
-                    key={tab.id}
-                    onClick={() => onSelectTab?.(tab.id)}
-                    className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
-                  >
-                    <span
-                      className="w-[5px] h-[5px] rounded-full shrink-0"
-                      style={{ background: `var(--color-${accent})` }}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13.5px] font-medium truncate text-foreground">{tab.title || 'Untitled'}</div>
-                      {preview && (
-                        <div className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-                      {relativeTime(tab.updatedAt)}
-                    </div>
-                  </button>
+                  <div key={tab.id}>
+                    <button
+                      onClick={() => onSelectTab?.(tab.id)}
+                      className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
+                    >
+                      <span
+                        className="w-[5px] h-[5px] rounded-full shrink-0"
+                        style={{ background: `var(--color-${accent})` }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13.5px] font-medium truncate text-foreground">{tab.title || 'Untitled'}</div>
+                        {preview && (
+                          <div className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                        {relativeTime(tab.updatedAt)}
+                      </div>
+                    </button>
+                    {/* LinkedDocs sub-entries beneath their parent conversation */}
+                    {linkedDocs && linkedDocs.length > 0 && (
+                      <div className="ml-[24px] mr-3 pl-[7px] border-l border-border/40 my-1 space-y-px">
+                        {linkedDocs.map((doc) => (
+                          <button
+                            key={doc.path}
+                            onClick={() => {
+                              const tabId = applyRoute({ kind: 'file', path: doc.path, title: doc.title })
+                              if (tabId) onSelectTab?.(tabId)
+                            }}
+                            className="inline-btn w-full pl-2 pr-2 py-1.5 rounded-lg flex items-center gap-1.5 text-left text-[12px] text-foreground/70 hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06] transition-colors"
+                          >
+                            <span className="shrink-0" style={{ color: 'var(--color-cat-doc)' }}>{DocFileIcon}</span>
+                            <span className="truncate">{doc.title || doc.path.split('/').filter(Boolean).pop()}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>
 
-            {/* Archive + Search group */}
+            {/* All Conversations */}
             <div className="home-group mt-2">
               <button
-                onClick={() => setArchiveOpen(!archiveOpen)}
+                onClick={() => setAllConversationsOpen(!allConversationsOpen)}
                 className="inline-btn home-group-row"
               >
                 <span className="text-muted-foreground">{ArchiveIcon}</span>
-                <span className="flex-1 text-[13px] text-muted-foreground text-left">Archive</span>
+                <span className="flex-1 text-[13px] text-muted-foreground text-left">All Conversations</span>
                 {archivedCount > 0 && (
                   <span className="text-[11px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-[10px] font-medium">
                     {archivedCount}
                   </span>
                 )}
-                <span className={`text-muted-foreground transition-transform ${archiveOpen ? 'rotate-90' : ''}`}>{ChevronRight}</span>
-              </button>
-              <button
-                onClick={() => setSearchOpen(!searchOpen)}
-                className="inline-btn home-group-row home-group-row-border"
-              >
-                <span className="text-muted-foreground">{SearchIcon}</span>
-                <span className="flex-1 text-[13px] text-muted-foreground text-left">Search conversations...</span>
+                <span className={`text-muted-foreground transition-transform ${allConversationsOpen ? 'rotate-90' : ''}`}>{ChevronRight}</span>
               </button>
             </div>
 
-            {/* Expanded archive */}
-            {archiveOpen && archivedThreads.length > 0 && (
+            {/* Expanded all conversations with inline search */}
+            {allConversationsOpen && (
               <div className="home-group mt-2">
-                {archivedThreads.slice(0, 20).map((thread, i) => (
+                <ThreadSearch onSelectThread={handleSelectThread} />
+                {archivedThreads.slice(0, 20).map((thread) => (
                   <button
                     key={thread.id}
                     onClick={() => handleSelectThread(thread.id)}
-                    className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
+                    className="inline-btn home-group-row home-group-row-border"
                   >
                     <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-muted-foreground/30" />
                     <div className="flex-1 min-w-0">
@@ -349,13 +379,6 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     </div>
                   </button>
                 ))}
-              </div>
-            )}
-
-            {/* Expanded search */}
-            {searchOpen && (
-              <div className="mt-2">
-                <ThreadSearch onSelectThread={handleSelectThread} />
               </div>
             )}
           </section>

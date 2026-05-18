@@ -1,18 +1,23 @@
 import { useState } from 'react'
 import { useThreadSearch } from '../../lib/threadSearch.ts'
 
+/**
+ * Inline search row for the All Conversations group.
+ * Renders as a `home-group-row` style input, with results appearing below.
+ */
 export function ThreadSearch({ onSelectThread }: { onSelectThread: (threadId: string) => void }) {
   const [query, setQuery] = useState('')
   const { results, loading } = useThreadSearch(query)
   const isSearching = query.trim().length >= 2
 
   return (
-    <div className="space-y-2">
-      <div className="relative">
+    <>
+      {/* Search input as a group row */}
+      <div className="home-group-row flex items-center gap-2.5 relative">
         <svg
-          xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+          xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-text-light-muted/40 dark:text-text-dark-muted/40"
+          className="text-muted-foreground shrink-0"
         >
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
         </svg>
@@ -28,18 +33,19 @@ export function ThreadSearch({ onSelectThread }: { onSelectThread: (threadId: st
           }}
           placeholder="Search conversations..."
           aria-label="Search conversations"
-          className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl bg-surface-light-2 dark:bg-surface-dark-2 text-text-light dark:text-text-dark placeholder:text-text-light-muted/40 dark:placeholder:text-text-dark-muted/40 border border-surface-light-3/30 dark:border-surface-dark-3/30 focus:outline-none focus:ring-1 focus:ring-accent/40"
+          className="flex-1 min-w-0 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
         />
       </div>
 
+      {/* Search results replace the thread list */}
       {isSearching && (
-        <div className="space-y-1 max-h-[300px] overflow-y-auto">
+        <div className="max-h-[300px] overflow-y-auto">
           {loading && results.length === 0 ? (
-            <p className="text-center text-sm text-text-light-muted/50 dark:text-text-dark-muted/50 py-4">
+            <p className="text-center text-[13px] text-muted-foreground/50 py-4">
               Searching…
             </p>
           ) : results.length === 0 ? (
-            <p className="text-center text-sm text-text-light-muted/50 dark:text-text-dark-muted/50 py-4">
+            <p className="text-center text-[13px] text-muted-foreground/50 py-4">
               No results
             </p>
           ) : (
@@ -50,20 +56,23 @@ export function ThreadSearch({ onSelectThread }: { onSelectThread: (threadId: st
                   onSelectThread(r.threadId)
                   setQuery('')
                 }}
-                className="inline-btn w-full text-left px-3 py-2 rounded-lg hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 transition-colors"
+                className={`inline-btn home-group-row home-group-row-border`}
               >
-                <div className="text-[12px] text-accent truncate">{r.threadTitle}</div>
-                <p
-                  className="text-[13px] text-text-light-muted dark:text-text-dark-muted line-clamp-2"
-                  style={{ overflowWrap: 'break-word' }}
-                >
-                  {r.snippet}
-                </p>
+                <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-accent/60" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13.5px] font-medium truncate text-foreground/70">{r.threadTitle}</div>
+                  <p
+                    className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug"
+                    style={{ overflowWrap: 'break-word' }}
+                  >
+                    {r.snippet}
+                  </p>
+                </div>
               </button>
             ))
           )}
         </div>
       )}
-    </div>
+    </>
   )
 }

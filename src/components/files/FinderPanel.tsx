@@ -84,7 +84,7 @@ function FileTreeItem({
       <>
         <button
           onClick={() => onToggleDir(entry.path)}
-          className="flex items-center gap-2 w-full px-2 py-1 text-left rounded-md hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 transition-colors group"
+          className="inline-btn flex items-center gap-2 w-full px-2 py-1 text-left rounded-md text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06] transition-colors group"
           style={{ paddingLeft: `${8 + depth * 16}px` }}
         >
           <svg
@@ -95,7 +95,7 @@ function FileTreeItem({
             <polyline points="9 18 15 12 9 6"/>
           </svg>
           {fileIcon(entry, isExpanded)}
-          <span className="text-[13px] text-text-light dark:text-text-dark truncate">{entry.name}</span>
+          <span className="text-[13px] truncate">{entry.name}</span>
         </button>
         {isExpanded && entry.children?.map(child => (
           <FileTreeItem
@@ -116,10 +116,10 @@ function FileTreeItem({
   return (
     <button
       onClick={() => onSelectFile(entry.path, entry.name)}
-      className={`flex items-center gap-2 w-full px-2 py-1 text-left rounded-md transition-colors ${
+      className={`inline-btn flex items-center gap-2 w-full px-2 py-1 text-left rounded-md transition-colors ${
         isSelected
           ? 'bg-primary/10 text-primary'
-          : 'hover:bg-surface-light-2 dark:hover:bg-surface-dark-2'
+          : 'text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
       }`}
       style={{ paddingLeft: `${24 + depth * 16}px` }}
     >
@@ -141,10 +141,10 @@ function SearchResultRow({ file, query, selected, onSelectFile }: {
   return (
     <button
       onClick={() => onSelectFile(file.path, file.name)}
-      className={`w-full px-2 py-1.5 rounded-md transition-colors text-left flex items-start gap-2 ${
+      className={`inline-btn w-full px-2 py-1.5 rounded-md transition-colors text-left flex items-start gap-2 ${
         selected
           ? 'bg-primary/10 text-primary'
-          : 'hover:bg-surface-light-2 dark:hover:bg-surface-dark-2'
+          : 'text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
       }`}
     >
       {fileIcon(file)}
@@ -163,9 +163,11 @@ function SearchResultRow({ file, query, selected, onSelectFile }: {
 function FileTreePane({
   selectedPath,
   onSelectFile,
+  onClose,
 }: {
   selectedPath: string | null
   onSelectFile: (path: string, title: string) => void
+  onClose?: () => void
 }) {
   const { entries, loading, error, expandedDirs, toggleDir, refresh } = useFileExplorer('/')
   const [filter, setFilter] = useState('')
@@ -177,14 +179,24 @@ function FileTreePane({
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-surface-light-3/20 dark:border-surface-dark-3/20 shrink-0">
         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-text-light-muted dark:text-text-dark-muted shrink-0"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
-        <span className="text-[13px] font-medium text-text-light dark:text-text-dark flex-1">Files</span>
+        <span className="text-[13px] font-medium text-foreground flex-1">Files</span>
         <button
           onClick={refresh}
-          className="inline-btn w-6 h-6 flex items-center justify-center rounded-md hover:bg-surface-light-2 dark:hover:bg-surface-dark-2 text-text-light-muted dark:text-text-dark-muted transition-colors"
+          className="inline-btn w-6 h-6 flex items-center justify-center rounded-md hover:bg-foreground/[0.06] dark:hover:bg-foreground/[0.08] text-muted-foreground transition-colors"
           aria-label="Refresh"
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
         </button>
+        {onClose && (
+          <button
+            onClick={onClose}
+            className="inline-btn w-6 h-6 flex items-center justify-center rounded-md hover:bg-foreground/[0.06] dark:hover:bg-foreground/[0.08] text-muted-foreground hover:text-foreground transition-colors"
+            aria-label="Close file explorer"
+            title="Close"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          </button>
+        )}
       </div>
 
       {/* Search box */}
@@ -330,7 +342,7 @@ function PreviewPane({
   )
 }
 
-export function FinderPanel({ tab, isVisible }: { tab: FinderTab; isVisible: boolean }) {
+export function FinderPanel({ tab, isVisible, onClose }: { tab: FinderTab; isVisible: boolean; onClose?: () => void }) {
   const setFinderSelection = useTabsStore((s) => s.setFinderSelection)
 
   // Responsive: 2-pane on desktop, single-pane navigation on mobile.
@@ -350,9 +362,9 @@ export function FinderPanel({ tab, isVisible }: { tab: FinderTab; isVisible: boo
   }
 
   const treePane = useMemo(() => (
-    <FileTreePane selectedPath={tab.selectedPath} onSelectFile={handleSelect} />
+    <FileTreePane selectedPath={tab.selectedPath} onSelectFile={handleSelect} onClose={onClose} />
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ), [tab.selectedPath])
+  ), [tab.selectedPath, onClose])
 
   if (isDesktop) {
     return (

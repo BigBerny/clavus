@@ -845,6 +845,20 @@ export function App() {
     }
   }, [closeTab, scrollToTab, sortedTabs])
 
+  // Close a non-chat tab (e.g. Finder) and navigate to a neighbor or home.
+  const handleCloseTab = useCallback((tabId: string) => {
+    const neighbor = closeTab(tabId)
+    if (neighbor) {
+      if (isDesktop) {
+        setVisiblePanel(neighbor.id)
+      } else {
+        requestAnimationFrame(() => scrollToTab(neighbor.id))
+      }
+    } else {
+      setVisiblePanel('home')
+    }
+  }, [closeTab, scrollToTab, setVisiblePanel, isDesktop])
+
   // Determine if the visible tab is a chat tab (to show InputBar)
   const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
   const isVisibleChat = visiblePanel === 'home' || visibleTab?.type === 'chat'
@@ -1108,6 +1122,7 @@ export function App() {
                     <FinderPanel
                       tab={visibleTab as FinderTab}
                       isVisible={true}
+                      onClose={() => handleCloseTab(visibleTab.id)}
                     />
                   )}
                 </Suspense>
@@ -1180,6 +1195,7 @@ export function App() {
                         <FinderPanel
                           tab={tab as FinderTab}
                           isVisible={isActive}
+                          onClose={() => handleCloseTab(tab.id)}
                         />
                       )}
                     </Suspense>

@@ -1,4 +1,4 @@
-import { useEffect, useState, Suspense, lazy } from 'react'
+import { useEffect, useState, useRef, Suspense, lazy } from 'react'
 import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
 import { openOrFocusFinderTab } from '../../state/tabs'
 
@@ -52,6 +52,20 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
       })
   }, [path, isVisible])
 
+  // Suppress color-transition flash: start with transitions disabled, enable after first paint.
+  const [suppressTransitions, setSuppressTransitions] = useState(true)
+  const editorContainerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!suppressTransitions) return
+    const raf = requestAnimationFrame(() => setSuppressTransitions(false))
+    return () => cancelAnimationFrame(raf)
+  }, [suppressTransitions])
+
+  // Mobile formatting toolbar target — rendered just below the title bar.
+  // Using state (not just a ref) so consumers re-render once the slot is in
+  // the DOM and can portal into it.
+  const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
+
   const instanceId = `marksense-tab-${path || 'none'}`
 
   const openBrowser = () => {
@@ -64,9 +78,9 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-background">
+    <div className="flex-1 flex flex-col min-h-0 marksense-bg">
       {/* Title bar */}
-      <div className="safe-area-top bg-background" />
+      <div className="safe-area-top" />
       <div className="flex items-center gap-3 px-4 h-12 border-b border-border">
         <div
           className="w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0"
@@ -97,8 +111,12 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
         </button>
       </div>
 
+      {/* Mobile formatting toolbar slot — sits between title and content so the
+       * toolbar is always visible at the top, never hidden behind the keyboard. */}
+      <div ref={setToolbarSlot} className="marksense-toolbar-slot" />
+
       {/* Editor */}
-      <div className="flex-1 min-h-0 marksense-scope overflow-auto">
+      <div ref={editorContainerRef} className={`flex-1 min-h-0 marksense-scope overflow-auto${suppressTransitions ? ' marksense-no-transitions' : ''}`}>
         {effectiveLoading ? (
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <div className="w-6 h-6 border-2 border-text-light-muted/20 dark:border-text-dark-muted/20 border-t-text-light-muted/60 dark:border-t-text-dark-muted/60 rounded-full animate-spin" />
@@ -114,6 +132,8 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
               key={instanceId}
               instanceId={instanceId}
               content={effectiveContent}
+              isVisible={isVisible}
+              mobileToolbarTarget={toolbarSlot}
               onSave={(markdown) => {
                 if (path) {
                   writeFile(path, markdown, DOCUMENTS_API).catch(err =>
@@ -121,7 +141,11 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
                   )
                 }
               }}
-              settings={{ defaultFullWidth: true, aiProvider: 'offlineOnly' }}
+              settings={{
+                defaultFullWidth: true,
+                aiProvider: 'offlinePreferred',
+                typewiseToken: import.meta.env.VITE_TYPEWISE_TOKEN || '',
+              }}
             />
           </Suspense>
         ) : (

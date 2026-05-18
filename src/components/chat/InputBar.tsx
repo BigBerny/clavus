@@ -1096,7 +1096,7 @@ function IconBtn({
 }) {
   const cls = variant === 'danger'
     ? 'bg-red-500/15 text-red-400 hover:bg-red-500/25'
-    : 'text-muted-foreground hover:text-foreground hover:bg-accent-soft'
+    : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]'
   return (
     <button
       title={title}
@@ -1106,7 +1106,7 @@ function IconBtn({
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
       disabled={disabled}
-      className={`inline-btn w-8 h-8 rounded-md flex items-center justify-center transition-colors disabled:opacity-30 touch-none ${cls}`}
+      className={`inline-btn w-8 h-8 rounded-xl flex items-center justify-center transition-colors disabled:opacity-30 touch-none ${cls}`}
     >
       {children}
     </button>
@@ -1120,8 +1120,8 @@ function SendBtn({ onClick, disabled, pulse }: { onClick: () => void; disabled?:
       disabled={disabled}
       aria-label="Send"
       title="Send"
-      className={`inline-btn h-8 w-8 rounded-md flex items-center justify-center transition-all touch-none ${
-        disabled ? 'bg-muted text-muted-foreground' : 'bg-primary text-primary-foreground hover:opacity-90 shadow-sm'
+      className={`inline-btn h-8 w-8 rounded-xl flex items-center justify-center transition-all touch-none ${
+        disabled ? 'bg-foreground/[0.07] text-muted-foreground' : 'bg-primary text-primary-foreground hover:opacity-90 shadow-sm'
       } ${pulse ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}
     >
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1150,12 +1150,11 @@ function ModelPill({ modelId, onChange }: { modelId: string; onChange: (id: stri
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`inline-btn h-7 px-2 rounded-md text-[11.5px] flex items-center gap-1.5 transition-colors ${
-          open ? 'bg-accent-soft text-foreground' : 'text-foreground/75 hover:text-foreground hover:bg-accent-soft'
+        className={`inline-btn h-7 px-2 rounded-xl text-[11.5px] flex items-center gap-1.5 transition-colors ${
+          open ? 'bg-foreground/[0.07] text-foreground' : 'text-foreground/75 hover:text-foreground hover:bg-foreground/[0.06]'
         }`}
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-violet)' }} />
-        <span className="shrink-0"><SparklesMini /></span>
         <span className="truncate max-w-[110px]">{current.shortLabel}</span>
         <ChevronMini rotated={open} />
       </button>
@@ -1232,8 +1231,8 @@ function ReasoningPill({ threadId }: { threadId: string | null }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`inline-btn h-7 px-2 rounded-md text-[11.5px] flex items-center gap-1.5 transition-colors ${
-          open ? 'bg-accent-soft text-foreground' : 'text-foreground/75 hover:text-foreground hover:bg-accent-soft'
+        className={`inline-btn h-7 px-2 rounded-xl text-[11.5px] flex items-center gap-1.5 transition-colors ${
+          open ? 'bg-foreground/[0.07] text-foreground' : 'text-foreground/75 hover:text-foreground hover:bg-foreground/[0.06]'
         }`}
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--color-cat-chat)' }} />

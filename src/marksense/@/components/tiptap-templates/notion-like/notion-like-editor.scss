@@ -1,53 +1,40 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
 
-body {
+/* Embedded mode (inside Clavus): scope all editor styles to .marksense-scope
+ * so they don't leak into the host app (html/body/#root). The standalone
+ * Marksense build sets these on the document directly via its own entry; the
+ * embedded wrapper provides its own height/background via MarksensePanel. */
+.marksense-scope {
   --tt-toolbar-height: 44px;
   --tt-theme-text: var(--tt-gray-light-900);
-
-  .dark & {
-    --tt-theme-text: var(--tt-gray-dark-900);
-  }
-}
-
-body {
   font-family: "Inter", sans-serif;
   color: var(--tt-theme-text);
   font-optical-sizing: auto;
   font-weight: 400;
   font-style: normal;
-  padding: 0;
-  overscroll-behavior-y: none;
-}
 
-html,
-body {
-  overscroll-behavior-x: none;
-}
+  .dark & {
+    --tt-theme-text: var(--tt-gray-dark-900);
+  }
 
-html,
-body,
-#root,
-#app {
-  height: 100%;
-  background-color: var(--tt-bg-color);
-}
+  ::-webkit-scrollbar {
+    width: 0.25rem;
+  }
 
-::-webkit-scrollbar {
-  width: 0.25rem;
-}
+  *,
+  & {
+    scrollbar-width: thin;
+    scrollbar-color: var(--tt-scrollbar-color) transparent;
+  }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--tt-scrollbar-color) transparent;
-}
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--tt-scrollbar-color);
+    border-radius: 9999px;
+  }
 
-::-webkit-scrollbar-thumb {
-  background-color: var(--tt-scrollbar-color);
-  border-radius: 9999px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 .tiptap.ProseMirror {

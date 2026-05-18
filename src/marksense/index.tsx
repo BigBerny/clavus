@@ -26,6 +26,10 @@ export interface MarksenseEditorProps {
   instanceId: string
   /** Initial markdown content */
   content: string
+  /** Whether this editor instance is currently visible (active tab) */
+  isVisible?: boolean
+  /** Optional DOM node to portal the mobile formatting toolbar into. */
+  mobileToolbarTarget?: HTMLElement | null
   /** Called when content is saved (debounced by editor) */
   onSave?: (content: string) => void
   /** Called on every content change */
@@ -47,6 +51,8 @@ export interface MarksenseEditorProps {
 export function MarksenseEditorInstance({
   instanceId,
   content,
+  isVisible,
+  mobileToolbarTarget,
   onSave,
   onChange,
   settings,
@@ -89,6 +95,8 @@ export function MarksenseEditorInstance({
   // Build instance config for context
   const instanceConfig = useMemo<MarksenseInstanceConfig>(() => ({
     content,
+    isVisible,
+    mobileToolbarTarget,
     onSave,
     onChange,
     settings: {
@@ -101,7 +109,7 @@ export function MarksenseEditorInstance({
       debugTypewise: false,
       typewiseSdkBaseUri: '',
     },
-  }), [content, onSave, onChange, settings?.typewiseToken, settings?.aiProvider, settings?.autoSaveDelay, settings?.defaultFullWidth, settings?.documentDirWebviewUri])
+  }), [content, isVisible, mobileToolbarTarget, onSave, onChange, settings?.typewiseToken, settings?.aiProvider, settings?.autoSaveDelay, settings?.defaultFullWidth, settings?.documentDirWebviewUri])
 
   return (
     <MarksenseInstanceContext.Provider value={instanceConfig}>

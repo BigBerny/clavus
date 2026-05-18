@@ -6,7 +6,7 @@
   "languages": {
     "en": {
       "prediction": {
-        "enabled": false
+        "enabled": true
       },
       "autocorrection": {
         "enabled": true
@@ -20,7 +20,7 @@
     },
     "de": {
       "prediction": {
-        "enabled": false
+        "enabled": true
       },
       "autocorrection": {
         "enabled": true

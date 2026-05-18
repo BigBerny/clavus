@@ -173,6 +173,18 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     }
   }, [isResizing, setSidebarWidth])
 
+  // Collect all doc paths that appear as linkedDocs under any visible thread.
+  // These will be suppressed from the top-level tab list to avoid duplicates.
+  const linkedDocPaths = useMemo(() => {
+    const paths = new Set<string>()
+    for (const thread of threads) {
+      if (thread.linkedDocs) {
+        for (const doc of thread.linkedDocs) paths.add(doc.path)
+      }
+    }
+    return paths
+  }, [threads])
+
   const { openGroups, archivedTabs, archivedThreadsWithoutTabs } = useMemo(() => {
     const now = Date.now()
     const sorted = [...tabs].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt))
@@ -180,6 +192,8 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     const arch: Tab[] = []
     const tabThreadIds = new Set<string>()
     for (const tab of sorted) {
+      // Skip marksense tabs that already appear as linkedDoc sub-entries
+      if (tab.type === 'marksense' && linkedDocPaths.has((tab as MarksenseTab).path)) continue
       const thread = tab.type === 'chat' ? threads.find((t) => t.id === (tab as ChatTab).threadId) : undefined
       if (tab.type === 'chat') tabThreadIds.add((tab as ChatTab).threadId)
       if (thread?.archived) {
@@ -198,7 +212,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
       .filter((t) => t.archived && !tabThreadIds.has(t.id))
       .sort((a, b) => b.updatedAt - a.updatedAt)
     return { openGroups: open, archivedTabs: arch, archivedThreadsWithoutTabs: orphanArchived }
-  }, [tabs, threads])
+  }, [tabs, threads, linkedDocPaths])
 
   const totalArchived = archivedTabs.length + archivedThreadsWithoutTabs.length
 
@@ -211,17 +225,17 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     return (
       <div key={tab.id}>
         <div
-          className="relative"
+          className="relative px-2"
           onMouseEnter={() => setHoveredTab(tab.id)}
           onMouseLeave={() => setHoveredTab(null)}
         >
           <button
             onClick={() => onSelectTab(tab.id)}
             title={fullDateTime(tab.updatedAt)}
-            className={`inline-btn w-full flex items-center gap-2.5 px-4 py-1.5 text-left transition-colors group ${
+            className={`inline-btn w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors group ${
               isActive
                 ? 'bg-primary/12'
-                : 'hover:bg-accent-soft'
+                : 'hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
             } ${opts?.muted && !isActive ? 'opacity-70 hover:opacity-100' : ''}`}
           >
             <span
@@ -239,7 +253,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
             </div>
           </button>
           {isHovered && tab.type === 'chat' && (
-            <div className="absolute top-1/2 -translate-y-1/2 right-3 flex items-center gap-0.5">
+            <div className="absolute top-1/2 -translate-y-1/2 right-3.5 flex items-center gap-0.5">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -247,7 +261,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                   if (isArchived) unarchiveThread(threadId)
                   else archiveThread(threadId)
                 }}
-                className="inline-btn w-5 h-5 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
+                className="inline-btn w-5 h-5 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
                 aria-label={isArchived ? 'Unarchive' : 'Archive'}
                 title={isArchived ? 'Unarchive' : 'Archive'}
               >
@@ -259,18 +273,26 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
         {/* Linked-docs rendered as indented chips with left rule */}
         {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
-          <div className="ml-[26px] pl-[5px] border-l border-border my-0.5 space-y-px">
-            {thread.linkedDocs.map((doc) => (
-              <button
-                key={doc.path}
-                onClick={() => onOpenDoc?.(doc.path, doc.title)}
-                className="inline-btn w-full pl-2 pr-2 py-1 rounded-md flex items-center gap-1.5 text-left text-[12px] text-foreground/70 hover:text-foreground hover:bg-accent-soft transition-colors"
-                title={doc.path}
-              >
-                <span className="shrink-0" style={{ color: 'var(--color-cat-doc)' }}>{FileIcon}</span>
-                <span className="truncate">{doc.title || doc.path.split('/').filter(Boolean).pop()}</span>
-              </button>
-            ))}
+          <div className="ml-[26px] mr-3 pl-[5px] border-l border-border my-0.5 space-y-px">
+            {thread.linkedDocs.map((doc) => {
+              const docTabId = `marksense:${doc.path}`
+              const isDocActive = docTabId === activeTabId
+              return (
+                <button
+                  key={doc.path}
+                  onClick={() => onOpenDoc?.(doc.path, doc.title)}
+                  className={`inline-btn w-full pl-2 pr-2 py-1 rounded-lg flex items-center gap-1.5 text-left text-[12px] transition-colors ${
+                    isDocActive
+                      ? 'text-primary font-medium bg-primary/12'
+                      : 'text-foreground/70 hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
+                  }`}
+                  title={doc.path}
+                >
+                  <span className="shrink-0" style={{ color: 'var(--color-cat-doc)' }}>{FileIcon}</span>
+                  <span className="truncate">{doc.title || doc.path.split('/').filter(Boolean).pop()}</span>
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
@@ -381,10 +403,10 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                         </div>
                       ) : (
                         searchResults.map((hit, i) => (
-                          <div key={`${hit.threadId}-${hit.messageId}-${i}`}>
+                          <div key={`${hit.threadId}-${hit.messageId}-${i}`} className="px-2">
                             <button
                               onClick={() => handleSelectSearchHit(hit)}
-                              className="inline-btn w-full px-4 py-1.5 text-left hover:bg-accent-soft transition-colors"
+                              className="inline-btn w-full px-2.5 py-1.5 rounded-lg text-left hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06] transition-colors"
                             >
                               <div className="text-[12.5px] font-medium text-foreground/90 truncate">
                                 {hit.threadTitle || 'Untitled'}
@@ -401,10 +423,10 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                     <>
                       {archivedTabs.map((tab) => renderTabRow(tab, { muted: true }))}
                       {archivedThreadsWithoutTabs.map((thread) => (
-                        <div key={thread.id}>
+                        <div key={thread.id} className="px-2">
                           <button
                             onClick={() => onOpenThread?.(thread.id)}
-                            className="inline-btn w-full flex items-center gap-2.5 px-4 py-1.5 text-left transition-colors opacity-70 hover:opacity-100 hover:bg-accent-soft"
+                            className="inline-btn w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors opacity-70 hover:opacity-100 hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]"
                           >
                             <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground/40" />
                             <div className="flex-1 min-w-0">

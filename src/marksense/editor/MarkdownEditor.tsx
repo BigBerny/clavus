@@ -260,6 +260,7 @@ function MarkdownEditorContent({
   const {
     isDragging,
   } = useUiEditorState(editor)
+  const { isVisible, mobileToolbarTarget } = useMarksenseInstance()
 
   useScrollToHash()
 
@@ -295,7 +296,7 @@ function MarkdownEditorContent({
       <MentionDropdownMenu />
       <SlashDropdownMenu config={slashConfig} />
       <NotionToolbarFloating />
-      {createPortal(<MobileToolbar />, document.body)}
+      {isVisible !== false && createPortal(<MobileToolbar />, mobileToolbarTarget || document.body)}
     </EditorContent>
   )
 }

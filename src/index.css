@@ -626,6 +626,68 @@ html.theme-ready *::after {
   }
 }
 
+/* ── Marksense scope — pre-set Tiptap colors to avoid flash on lazy load ── */
+
+.marksense-scope {
+  --tt-bg-color: transparent;
+  color: var(--color-foreground);
+}
+
+/* Marksense panel background — same gradient as `.home-screen` but WITHOUT
+ * `background-attachment: fixed`. On iOS Safari, a fixed background-attachment
+ * on a panel inside the scroll-snap container interferes with visualViewport
+ * tracking, breaking the keyboard-push behavior for the chat input bar on
+ * sibling panels after Marksense is rendered. */
+.marksense-bg {
+  background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+}
+html:not(.dark) .marksense-bg {
+  background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
+}
+
+/* Suppress all transitions during initial mount to prevent color flash */
+.marksense-no-transitions,
+.marksense-no-transitions *,
+.marksense-no-transitions ::before,
+.marksense-no-transitions ::after {
+  transition-duration: 0s !important;
+}
+
+/* Mobile formatting toolbar — overrides the Tiptap default which positions
+ * the toolbar absolutely at the bottom (covered by keyboard). When portaled
+ * into the .marksense-toolbar-slot, we want it to sit naturally in flow,
+ * right below the title bar and above the editor content. */
+.marksense-toolbar-slot {
+  /* Slot is invisible when no toolbar is rendered (empty state). */
+}
+.marksense-toolbar-slot .tiptap-toolbar[data-variant="fixed"] {
+  position: static !important;
+  top: auto !important;
+  bottom: auto !important;
+  width: 100%;
+  height: auto;
+  min-height: var(--tt-toolbar-height, 2.75rem);
+  border-top: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 0 0.5rem;
+  /* Allow horizontal scroll for many buttons, hide scrollbar on touch */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.marksense-toolbar-slot .tiptap-toolbar[data-variant="fixed"]::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide Tiptap's built-in notion-like editor header in our embedded mode —
+ * it only contains diff/source-mode actions (empty when isGitRepo is false,
+ * which is always the case in Clavus). MarksensePanel provides its own
+ * title bar with the file name and Browse button. */
+.marksense-scope .notion-like-editor-header {
+  display: none;
+}
+
 /* ── Home screen ──────────────────────────────────────────────────────────── */
 
 .home-screen {
