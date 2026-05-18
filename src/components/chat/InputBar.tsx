@@ -45,6 +45,8 @@ interface PendingFile {
   name: string
   content: string
   size: number
+  /** Workspace path returned by Hermes upload — when set, the agent reads the file directly */
+  workspacePath?: string
 }
 
 const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.xml', '.html', '.js', '.ts', '.jsx', '.tsx', '.py', '.css', '.yml', '.yaml', '.toml', '.svg', '.sh', '.env', '.log'])
@@ -59,6 +61,19 @@ function isTextFile(file: File): boolean {
 function isDocxFile(file: File): boolean {
   return file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     file.name.toLowerCase().endsWith('.docx')
+}
+
+async function uploadToWorkspace(file: File): Promise<{ path: string; filename: string } | null> {
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await fetch('/hermes-api/upload', { method: 'POST', body: form })
+    if (!res.ok) return null
+    const data = await res.json()
+    return { path: data.path, filename: data.filename }
+  } catch {
+    return null
+  }
 }
 
 export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
@@ -336,7 +351,13 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     // Build message text with file contents prepended
     let messageText = trimmed
     if (pendingFiles.length > 0) {
-      const fileParts = pendingFiles.map(f => `<file name="${f.name}">\n${f.content}\n</file>`)
+      const fileParts = pendingFiles.map(f => {
+        if (f.workspacePath) {
+          // File uploaded to workspace — give agent the path to read the original
+          return `<file name="${f.name}" path="${f.workspacePath}">\n${f.content}\n</file>`
+        }
+        return `<file name="${f.name}">\n${f.content}\n</file>`
+      })
       messageText = fileParts.join('\n\n') + (trimmed ? '\n\n' + trimmed : '')
     }
 
@@ -448,16 +469,21 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       } else if (isDocxFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
-        const reader = new FileReader()
-        reader.onload = async () => {
-          const arrayBuffer = reader.result as ArrayBuffer
+        // Upload to workspace so the agent can read the original file
+        const docxFile = file
+        uploadToWorkspace(docxFile).then(async (result) => {
+          const arrayBuffer = await docxFile.arrayBuffer()
           const { value: text } = await mammoth.extractRawText({ arrayBuffer })
           setPendingFiles((prev) => {
             if (prev.length >= MAX_FILES) return prev
-            return [...prev, { name: file.name, content: text, size: file.size }]
+            return [...prev, {
+              name: docxFile.name,
+              content: text,
+              size: docxFile.size,
+              workspacePath: result?.path,
+            }]
           })
-        }
-        reader.readAsArrayBuffer(file)
+        })
       } else if (isTextFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
@@ -509,12 +535,17 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       } else if (isDocxFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
-        const reader = new FileReader()
-        reader.onload = async () => {
-          const { value: text } = await mammoth.extractRawText({ arrayBuffer: reader.result as ArrayBuffer })
-          setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, { name: file.name, content: text, size: file.size }])
-        }
-        reader.readAsArrayBuffer(file)
+        const docxFile = file
+        uploadToWorkspace(docxFile).then(async (result) => {
+          const arrayBuffer = await docxFile.arrayBuffer()
+          const { value: text } = await mammoth.extractRawText({ arrayBuffer })
+          setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, {
+            name: docxFile.name,
+            content: text,
+            size: docxFile.size,
+            workspacePath: result?.path,
+          }])
+        })
       } else if (isTextFile(file)) {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
