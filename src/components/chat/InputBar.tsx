@@ -37,6 +37,23 @@ interface Props {
 
 const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
+const MAX_FILES = 5
+const MAX_FILE_SIZE = 512 * 1024 // 512KB per text file
+
+interface PendingFile {
+  name: string
+  content: string
+  size: number
+}
+
+const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.xml', '.html', '.js', '.ts', '.jsx', '.tsx', '.py', '.css', '.yml', '.yaml', '.toml', '.svg', '.sh', '.env', '.log'])
+
+function isTextFile(file: File): boolean {
+  if (file.type.startsWith('text/')) return true
+  if (file.type === 'application/json' || file.type === 'application/xml') return true
+  const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+  return TEXT_EXTENSIONS.has(ext)
+}
 
 export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
   // Initialize with the persisted draft for this column (or empty if none).
@@ -66,6 +83,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   }, [value, draftKey])
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
   const [slashIndex, setSlashIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [menuState, setMenuState] = useState<'closed' | 'open' | 'closing'>('closed')
@@ -295,7 +313,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
   const handleSubmit = useCallback(async () => {
     const trimmed = value.trim()
-    if (!trimmed && pendingImages.length === 0) return
+    if (!trimmed && pendingImages.length === 0 && pendingFiles.length === 0) return
 
     // Try local slash command interpreter first
     if (trimmed.startsWith('/')) {
@@ -309,17 +327,25 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
     // During streaming, just queue the message (don't abort)
 
+    // Build message text with file contents prepended
+    let messageText = trimmed
+    if (pendingFiles.length > 0) {
+      const fileParts = pendingFiles.map(f => `<file name="${f.name}">\n${f.content}\n</file>`)
+      messageText = fileParts.join('\n\n') + (trimmed ? '\n\n' + trimmed : '')
+    }
+
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
     haptic.tap()
-    onSend(trimmed.slice(0, 10000), pendingImages.length > 0 ? pendingImages : undefined)
+    onSend(messageText.slice(0, 100000), pendingImages.length > 0 ? pendingImages : undefined)
     setValue('')
     setPendingImages([])
+    setPendingFiles([])
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
     setTimeout(() => textareaRef.current?.focus(), 50)
-  }, [value, onSend, pendingImages, runSlash])
+  }, [value, onSend, pendingImages, pendingFiles, runSlash])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -400,30 +426,43 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     const files = e.target.files
     if (!files) return
 
-    const remaining = MAX_IMAGES - pendingImages.length
-    const toProcess = Array.from(files).slice(0, remaining)
-
-    for (const file of toProcess) {
-      if (!file.type.startsWith('image/')) continue
-      if (file.size > MAX_IMAGE_SIZE) continue
-
-      const reader = new FileReader()
-      reader.onload = () => {
-        const dataUrl = reader.result as string
-        setPendingImages((prev) => {
-          if (prev.length >= MAX_IMAGES) return prev
-          return [...prev, dataUrl]
-        })
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        if (pendingImages.length >= MAX_IMAGES) continue
+        if (file.size > MAX_IMAGE_SIZE) continue
+        const reader = new FileReader()
+        reader.onload = () => {
+          const dataUrl = reader.result as string
+          setPendingImages((prev) => {
+            if (prev.length >= MAX_IMAGES) return prev
+            return [...prev, dataUrl]
+          })
+        }
+        reader.readAsDataURL(file)
+      } else if (isTextFile(file)) {
+        if (pendingFiles.length >= MAX_FILES) continue
+        if (file.size > MAX_FILE_SIZE) continue
+        const reader = new FileReader()
+        reader.onload = () => {
+          setPendingFiles((prev) => {
+            if (prev.length >= MAX_FILES) return prev
+            return [...prev, { name: file.name, content: reader.result as string, size: file.size }]
+          })
+        }
+        reader.readAsText(file)
       }
-      reader.readAsDataURL(file)
     }
 
     // Reset input so same file can be re-selected
     e.target.value = ''
-  }, [pendingImages.length])
+  }, [pendingImages.length, pendingFiles.length])
 
   const removeImage = useCallback((index: number) => {
     setPendingImages((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const removeFile = useCallback((index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
   }, [])
 
   const isRecording = voice.state === 'recording'
@@ -439,18 +478,26 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     setDragOver(false)
     const files = e.dataTransfer.files
     if (!files.length) return
-    const remaining = MAX_IMAGES - pendingImages.length
-    const toProcess = Array.from(files).slice(0, remaining)
-    for (const file of toProcess) {
-      if (!file.type.startsWith('image/')) continue
-      if (file.size > MAX_IMAGE_SIZE) continue
-      const reader = new FileReader()
-      reader.onload = () => {
-        setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
+    for (const file of Array.from(files)) {
+      if (file.type.startsWith('image/')) {
+        if (pendingImages.length >= MAX_IMAGES) continue
+        if (file.size > MAX_IMAGE_SIZE) continue
+        const reader = new FileReader()
+        reader.onload = () => {
+          setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
+        }
+        reader.readAsDataURL(file)
+      } else if (isTextFile(file)) {
+        if (pendingFiles.length >= MAX_FILES) continue
+        if (file.size > MAX_FILE_SIZE) continue
+        const reader = new FileReader()
+        reader.onload = () => {
+          setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, { name: file.name, content: reader.result as string, size: file.size }])
+        }
+        reader.readAsText(file)
       }
-      reader.readAsDataURL(file)
     }
-  }, [pendingImages.length])
+  }, [pendingImages.length, pendingFiles.length])
 
   const { selectedModelId, setSelectedModelId } = useModelStore()
   const currentModel = MODEL_OPTIONS.find((m) => m.id === selectedModelId) || MODEL_OPTIONS[0]
@@ -472,7 +519,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   }, [menuState, closeMenu])
 
   const hasText = value.trim().length > 0
-  const hasContent = hasText || pendingImages.length > 0
+  const hasContent = hasText || pendingImages.length > 0 || pendingFiles.length > 0
 
   // Talk Mode: full-width overlay when active.
   // Uses the shared VoiceInputPill for visual consistency with GPT Realtime.
@@ -673,16 +720,34 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           </div>
         )}
 
-        {/* Image preview strip */}
-        {pendingImages.length > 0 && (
+        {/* Attachment preview strip */}
+        {(pendingImages.length > 0 || pendingFiles.length > 0) && (
           <div className="image-preview-strip mb-2 animate-[fadeSlideIn_0.2s_ease-out]">
             {pendingImages.map((img, i) => (
-              <div key={i} className="relative flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-surface-light-3 dark:border-surface-dark-3">
-                <img src={img} alt={`Attachment ${i + 1}`} className="w-full h-full object-cover" />
+              <div key={`img-${i}`} className="relative flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden border border-surface-light-3 dark:border-surface-dark-3">
+                <img src={img} alt={`Image ${i + 1}`} className="w-full h-full object-cover" />
                 <button
                   onClick={() => removeImage(i)}
                   className="inline-btn absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-surface-dark/80 dark:bg-surface-dark-3/90 text-white flex items-center justify-center text-xs backdrop-blur-sm"
                   aria-label={`Remove image ${i + 1}`}
+                >
+                  &times;
+                </button>
+              </div>
+            ))}
+            {pendingFiles.map((file, i) => (
+              <div key={`file-${i}`} className="relative flex-shrink-0 h-16 rounded-xl overflow-hidden border border-surface-light-3 dark:border-surface-dark-3 bg-surface-light-2 dark:bg-surface-dark-2 flex items-center gap-2 px-3 max-w-48">
+                <svg className="w-4 h-4 flex-shrink-0 text-text-light-muted dark:text-text-dark-muted" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                </svg>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium truncate text-text-light dark:text-text-dark">{file.name}</div>
+                  <div className="text-[10px] text-text-light-muted dark:text-text-dark-muted">{file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`}</div>
+                </div>
+                <button
+                  onClick={() => removeFile(i)}
+                  className="inline-btn absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full bg-surface-dark/80 dark:bg-surface-dark-3/90 text-white flex items-center justify-center text-xs backdrop-blur-sm"
+                  aria-label={`Remove file ${file.name}`}
                 >
                   &times;
                 </button>
@@ -694,7 +759,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,application/pdf,audio/*,video/*,.txt,.md,.json,.csv,.xml,.html"
+          accept="image/*,.txt,.md,.json,.csv,.xml,.html,.js,.ts,.jsx,.tsx,.py,.css,.yml,.yaml,.toml,.svg,.sh,.log"
           multiple
           onChange={handleFileChange}
           className="hidden"
@@ -787,7 +852,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
               <IconBtn
                 title="Attach file"
                 onClick={handleAttachClick}
-                disabled={pendingImages.length >= MAX_IMAGES}
+                disabled={pendingImages.length >= MAX_IMAGES && pendingFiles.length >= MAX_FILES}
               >
                 <PaperclipMini />
               </IconBtn>
