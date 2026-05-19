@@ -137,10 +137,10 @@ const doNavigateToHeading = (
     const targetScroll =
       container.scrollTop + rect.top - containerRect.top - topOffset
 
-    container.scrollTo({ top: targetScroll, behavior: "auto" })
+    container.scrollTo({ top: targetScroll, behavior: "smooth" })
   } else {
     // Fallback: use scrollIntoView
-    el.scrollIntoView({ behavior: "auto", block: "start" })
+    el.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 }
 
