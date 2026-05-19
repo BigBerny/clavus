@@ -17,7 +17,25 @@ import { Subscript } from "@tiptap/extension-subscript"
 import { TextAlign } from "@tiptap/extension-text-align"
 import { Mathematics } from "@tiptap/extension-mathematics"
 
-import { UniqueID } from "@tiptap/extension-unique-id"
+import { UniqueID as _UniqueID } from "@tiptap/extension-unique-id"
+
+// Extend UniqueID to catch RangeError from setNodeMarkup — the Tiptap markdown
+// parser can produce paragraphs whose content violates the ProseMirror schema,
+// which causes setNodeMarkup to throw during ID assignment.
+const UniqueID = _UniqueID.extend({
+  onCreate() {
+    try {
+      // @ts-ignore — call the parent onCreate
+      this.parent?.()
+    } catch (e) {
+      if (e instanceof RangeError && e.message.includes('Invalid content for node type')) {
+        console.warn('[UniqueID] Skipped ID assignment — document has nodes with invalid content:', e.message)
+      } else {
+        throw e
+      }
+    }
+  },
+})
 import { Emoji, gitHubEmojis } from "@tiptap/extension-emoji"
 import {
   getHierarchicalIndexes,

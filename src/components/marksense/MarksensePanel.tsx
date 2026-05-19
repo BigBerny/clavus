@@ -1,6 +1,20 @@
-import { useEffect, useState, useRef, Suspense, lazy } from 'react'
+import { useEffect, useState, useRef, Suspense, lazy, Component, type ReactNode } from 'react'
 import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
 import { openOrFocusFinderTab } from '../../state/tabs'
+
+class EditorErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  componentDidCatch(error: Error) {
+    console.warn('[MarksensePanel] Editor crashed, showing raw fallback:', error.message)
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children
+  }
+}
 
 const MarksenseEditorInstance = lazy(() =>
   import('../../marksense').then(m => ({ default: m.MarksenseEditorInstance }))
@@ -123,31 +137,37 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
             <span className="text-[12px] text-text-light-muted dark:text-text-dark-muted">Loading document...</span>
           </div>
         ) : effectiveContent !== null ? (
-          <Suspense fallback={
-            <div className="flex items-center justify-center h-full">
-              <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full text-text-light-muted dark:text-text-dark-muted" />
+          <EditorErrorBoundary fallback={
+            <div className="flex-1 overflow-auto p-6">
+              <pre className="whitespace-pre-wrap text-[13px] text-foreground/80 font-mono leading-relaxed">{effectiveContent}</pre>
             </div>
           }>
-            <MarksenseEditorInstance
-              key={instanceId}
-              instanceId={instanceId}
-              content={effectiveContent}
-              isVisible={isVisible}
-              mobileToolbarTarget={toolbarSlot}
-              onSave={(markdown) => {
-                if (path) {
-                  writeFile(path, markdown, DOCUMENTS_API).catch(err =>
-                    console.error('[MarksensePanel] save failed:', err)
-                  )
-                }
-              }}
-              settings={{
-                defaultFullWidth: true,
-                aiProvider: 'offlinePreferred',
-                typewiseToken: import.meta.env.VITE_TYPEWISE_TOKEN || '',
-              }}
-            />
-          </Suspense>
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin w-5 h-5 border-2 border-current border-t-transparent rounded-full text-text-light-muted dark:text-text-dark-muted" />
+              </div>
+            }>
+              <MarksenseEditorInstance
+                key={instanceId}
+                instanceId={instanceId}
+                content={effectiveContent}
+                isVisible={isVisible}
+                mobileToolbarTarget={toolbarSlot}
+                onSave={(markdown) => {
+                  if (path) {
+                    writeFile(path, markdown, DOCUMENTS_API).catch(err =>
+                      console.error('[MarksensePanel] save failed:', err)
+                    )
+                  }
+                }}
+                settings={{
+                  defaultFullWidth: true,
+                  aiProvider: 'offlinePreferred',
+                  typewiseToken: import.meta.env.VITE_TYPEWISE_TOKEN || '',
+                }}
+              />
+            </Suspense>
+          </EditorErrorBoundary>
         ) : (
           <div className="flex items-center justify-center h-full text-[13px] text-text-light-muted dark:text-text-dark-muted">
             {path ? 'Failed to load document' : 'No document selected'}

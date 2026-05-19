@@ -16,9 +16,9 @@ Return ONLY valid JSON with these fields:
 - "label": a 2-4 word category (e.g. "Writing task", "Knowledge question", "Coaching", "Code task", "Creative writing", "Simple factual")
 
 Rules:
-- Writing, creative tasks, conceptual discussions, coaching → model: "opus", reasoning: "medium"
-  - Exception: if the user explicitly asks for deep thinking or high reasoning → model: "opus", reasoning: "xhigh"
-- Tasks, factual knowledge questions, code execution → model: "gpt", with reasoning based on complexity:
+- Use "opus" for: strategic thinking, personal advice, coaching, medicine/health advice, creative writing, writing/formulating text, collaborative work (brainstorming, co-editing, drafting), conceptual discussions, life decisions. Reasoning: "high"
+  - Exception: if the user explicitly asks for deep thinking or high reasoning → reasoning: "xhigh"
+- Use "gpt" for everything else: technical questions, code, research, factual knowledge, how-things-work explanations, tasks, execution. Reasoning based on complexity:
   - Trivial/simple factual (e.g. "What is the capital of France?") → reasoning: "minimal"
   - Normal straightforward questions → reasoning: "low"
   - Moderate complexity → reasoning: "medium"
@@ -64,6 +64,8 @@ export async function classifyMessage(
     let reasoning: ReasoningLevel = validReasonings.includes(parsed.reasoning) ? parsed.reasoning : 'medium'
     // GPT should never use "none" — floor to "minimal"
     if (modelId === 'gpt' && reasoning === 'none') reasoning = 'minimal'
+    // Opus should always use at least "high"
+    if (modelId === 'opus' && ['none', 'minimal', 'low', 'medium'].includes(reasoning)) reasoning = 'high'
     const label = typeof parsed.label === 'string' && parsed.label.length < 40 ? parsed.label : 'General'
 
     return { modelId, reasoning, label }

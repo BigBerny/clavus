@@ -123,14 +123,14 @@ function FileLinkCard({ href, path, filename, threadId }: { href: string; path: 
   const info = getFileTypeInfo(filename)
   const [copied, setCopied] = useState(false)
 
-  // Side-effect: only markdown files register with the thread's linked-docs
-  // sidebar (matches the existing addLinkedDoc design — non-md isn't tracked).
+  // Side-effect: register file as a linked-doc so it appears as a sub-entry
+  // in the sidebar and home screen beneath its parent thread.
   useEffect(() => {
-    if (!threadId || info.kind !== 'markdown') return
+    if (!threadId) return
     import('../../state/threads').then(({ useThreadsStore }) => {
       useThreadsStore.getState().addLinkedDoc(threadId, { path, title: filename })
     })
-  }, [threadId, path, filename, info.kind])
+  }, [threadId, path, filename])
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(href)

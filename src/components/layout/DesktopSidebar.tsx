@@ -2,6 +2,7 @@ import { memo, useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import type { Tab, ChatTab, MarksenseTab } from '../../state/tabs.ts'
 import { useThreadsStore, type Thread } from '../../state/threads.ts'
 import { useThreadSearch, type SearchHit } from '../../lib/threadSearch.ts'
+import { getFileTypeInfo } from '../../lib/fileTypes.ts'
 
 interface Props {
   tabs: Tab[]
@@ -275,7 +276,9 @@ export const DesktopSidebar = memo(function DesktopSidebar({
         {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
           <div className="ml-[26px] mr-3 pl-[5px] -mt-1 space-y-px">
             {thread.linkedDocs.map((doc) => {
-              const docTabId = `marksense:${doc.path}`
+              const filename = doc.title || doc.path.split('/').filter(Boolean).pop() || 'File'
+              const isMd = getFileTypeInfo(filename).kind === 'markdown'
+              const docTabId = isMd ? `marksense:${doc.path}` : `file:${doc.path}`
               const isDocActive = docTabId === activeTabId
               return (
                 <button
