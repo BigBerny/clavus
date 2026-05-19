@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dictation Widget — Mockups</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --glass-bg: oklch(0.95 0.008 50 / 0.04);
+    --glass-bg-heavy: oklch(0.95 0.008 50 / 0.07);
+    --glass-inner-glow: oklch(0.95 0.008 50 / 0.06);
+    --glass-border: oklch(0.95 0.008 50 / 0.08);
+    --glass-border-strong: oklch(0.95 0.008 50 / 0.16);
+    --glass-shadow: oklch(0 0 0 / 0.35);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #18181b;
+    color: #e8e6e3;
+    min-height: 100vh;
+    padding: 40px 24px;
+  }
+
+  /* === SPEC === */
+  .spec {
+    max-width: 680px;
+    margin: 0 auto 56px;
+    padding: 24px 28px;
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: 1.75rem;
+    box-shadow: 0 8px 32px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+  }
+
+  .spec h1 { font-size: 16px; font-weight: 600; color: #e8e6e3; margin-bottom: 16px; }
+  .spec h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #888; margin: 20px 0 8px; }
+  .spec h2:first-of-type { margin-top: 0; }
+  .spec p, .spec li { font-size: 13px; color: #aaa; line-height: 1.7; }
+  .spec ul { padding-left: 18px; }
+  .spec li { margin-bottom: 4px; }
+  .spec code { font-size: 12px; background: oklch(0.95 0.008 50 / 0.06); padding: 1px 5px; border-radius: 4px; color: #ccc; }
+  .spec .flow-step { display: flex; gap: 10px; margin-bottom: 6px; }
+  .spec .flow-num { font-size: 11px; font-weight: 600; color: #ef7f5b; min-width: 18px; flex-shrink: 0; }
+  .spec .flow-text { font-size: 13px; color: #aaa; line-height: 1.6; }
+  .spec .divider { height: 1px; background: var(--glass-border); margin: 16px 0; }
+
+  /* === MOCKUP LAYOUT === */
+  .page-title {
+    font-size: 13px; font-weight: 500; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #777; margin-bottom: 48px; text-align: center;
+  }
+
+  .mockup-grid {
+    display: flex; flex-wrap: wrap; gap: 64px;
+    justify-content: center; max-width: 1400px; margin: 0 auto;
+  }
+
+  .mockup-section { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+
+  .mockup-label {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #666; margin-bottom: 4px;
+  }
+
+  .mockup-sublabel {
+    font-size: 11px; color: #555; max-width: 420px; text-align: center; line-height: 1.5;
+  }
+
+  /* === DESKTOP BG === */
+  .desktop-bg {
+    width: 500px; height: 200px;
+    background: linear-gradient(135deg, #25252b 0%, #1c1c22 100%);
+    border-radius: 14px; position: relative; overflow: hidden;
+    border: 1px solid oklch(0.95 0.008 50 / 0.06);
+  }
+
+  .desktop-bg::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 24px;
+    background: oklch(0.15 0.005 50); border-bottom: 1px solid oklch(0.95 0.008 50 / 0.05);
+  }
+
+  .fake-app {
+    position: absolute; top: 36px; left: 16px; right: 16px; bottom: 16px;
+    background: oklch(0.18 0.005 50); border-radius: 10px;
+    border: 1px solid oklch(0.95 0.008 50 / 0.05);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .fake-app-bar {
+    height: 20px; background: oklch(0.2 0.005 50);
+    border-bottom: 1px solid oklch(0.95 0.008 50 / 0.04);
+    display: flex; align-items: center; padding: 0 8px; gap: 4px;
+  }
+
+  .fake-dot { width: 5px; height: 5px; border-radius: 50%; background: oklch(0.35 0.005 50); }
+
+  .fake-app-content { flex: 1; padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+  .fake-line { height: 3px; background: oklch(0.25 0.005 50); border-radius: 2px; }
+  .fake-line:nth-child(1) { width: 80%; }
+  .fake-line:nth-child(2) { width: 60%; }
+  .fake-line:nth-child(3) { width: 70%; }
+  .fake-line:nth-child(4) { width: 45%; }
+
+  .state-badge {
+    position: absolute; top: 6px; right: 8px;
+    font-size: 8px; font-weight: 500; letter-spacing: 0.05em;
+    text-transform: uppercase; padding: 2px 6px; border-radius: 6px; z-index: 20;
+  }
+  .state-badge.holding { background: oklch(0.65 0.15 270 / 0.15); color: oklch(0.75 0.12 270); }
+  .state-badge.locked { background: oklch(0.7 0.15 30 / 0.12); color: #ef7f5b; }
+
+  /* === WIDGET PILL === */
+  .widget-pill {
+    position: absolute;
+    bottom: 24px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 2px;
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(20px) saturate(200%);
+    -webkit-backdrop-filter: blur(20px) saturate(200%);
+    border: 1px solid var(--glass-border);
+    border-radius: 9999px;
+    padding: 4px 5px;
+    box-shadow: 0 8px 32px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+    z-index: 10; white-space: nowrap;
+  }
+
+  .widget-pill.locked { border-color: oklch(0.7 0.12 30 / 0.14); }
+
+  .pill-sep {
+    width: 1px; height: 18px;
+    background: var(--glass-border); flex-shrink: 0; margin: 0 2px;
+  }
+
+  /* === Lock / Stop === */
+  .lock-btn {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: all 0.15s;
+    box-shadow: inset 0 1px 0 var(--glass-inner-glow);
+  }
+
+  .lock-btn:hover { background: var(--glass-bg-heavy); border-color: var(--glass-border-strong); }
+
+  .lock-btn svg {
+    width: 13px; height: 13px; fill: none; stroke: oklch(0.75 0.01 50);
+    stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  .lock-btn.is-stop {
+    background: oklch(0.7 0.15 30 / 0.1);
+    border-color: oklch(0.7 0.12 30 / 0.2);
+  }
+
+  .lock-btn.is-stop svg { stroke: #ef7f5b; fill: #ef7f5b; width: 10px; height: 10px; }
+
+  /* === Recording === */
+  .rec-area { display: flex; align-items: center; gap: 8px; padding: 0 8px; }
+
+  .rec-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #ef7f5b; flex-shrink: 0;
+    animation: pulse-dot 1.6s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 oklch(0.7 0.15 30 / 0.3); }
+    50% { opacity: 0.65; box-shadow: 0 0 0 5px oklch(0.7 0.15 30 / 0); }
+  }
+
+  .waveform { display: flex; align-items: center; gap: 2px; height: 20px; }
+
+  .waveform-bar {
+    width: 2.5px; background: #ef7f5b; border-radius: 1.5px;
+    animation: wave 0.8s ease-in-out infinite;
+  }
+
+  .waveform-bar:nth-child(1) { height: 5px; animation-delay: 0s; }
+  .waveform-bar:nth-child(2) { height: 11px; animation-delay: 0.1s; }
+  .waveform-bar:nth-child(3) { height: 17px; animation-delay: 0.2s; }
+  .waveform-bar:nth-child(4) { height: 13px; animation-delay: 0.3s; }
+  .waveform-bar:nth-child(5) { height: 7px; animation-delay: 0.4s; }
+  .waveform-bar:nth-child(6) { height: 15px; animation-delay: 0.15s; }
+  .waveform-bar:nth-child(7) { height: 9px; animation-delay: 0.35s; }
+
+  @keyframes wave {
+    0%, 100% { transform: scaleY(0.35); }
+    50% { transform: scaleY(1); }
+  }
+
+  .waveform.silent .waveform-bar {
+    animation: none; height: 3px !important; background: oklch(0.5 0.01 50);
+  }
+
+  .pill-timer {
+    font-size: 11px; font-weight: 500; color: oklch(0.6 0.01 50);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* === Format group === */
+  .format-group { display: flex; align-items: center; gap: 1px; }
+
+  /* App-name text button (e.g. "Arc", "VS Code", "URL") */
+  .fmt-text-btn {
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.12s;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 11px; font-weight: 500;
+    color: oklch(0.55 0.01 50);
+    position: relative;
+  }
+
+  .fmt-text-btn:hover { background: var(--glass-bg-heavy); color: oklch(0.7 0.01 50); }
+
+  .fmt-text-btn.active {
+    background: var(--glass-bg);
+    border-color: var(--glass-border-strong);
+    box-shadow: inset 0 1px 0 var(--glass-inner-glow);
+    color: oklch(0.85 0.01 50);
+  }
+
+  .fmt-text-btn::after {
+    content: attr(data-tooltip); position: absolute; bottom: -22px; left: 50%;
+    transform: translateX(-50%); font-size: 9px; font-weight: 500;
+    color: oklch(0.5 0.01 50); white-space: nowrap;
+    opacity: 0; transition: opacity 0.15s; pointer-events: none;
+  }
+
+  .fmt-text-btn:hover::after { opacity: 1; }
+
+  /* Icon-only format button */
+  .fmt-icon-btn {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.12s;
+    border: 1px solid transparent; background: transparent;
+    position: relative;
+  }
+
+  .fmt-icon-btn:hover { background: var(--glass-bg-heavy); }
+
+  .fmt-icon-btn.active {
+    background: var(--glass-bg);
+    border-color: var(--glass-border-strong);
+    box-shadow: inset 0 1px 0 var(--glass-inner-glow);
+  }
+
+  .fmt-icon-btn svg {
+    width: 15px; height: 15px; fill: none;
+    stroke: oklch(0.55 0.01 50); stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  .fmt-icon-btn.active svg { stroke: oklch(0.85 0.01 50); }
+  .fmt-icon-btn:hover svg { stroke: oklch(0.7 0.01 50); }
+
+  .fmt-icon-btn::after {
+    content: attr(data-tooltip); position: absolute; bottom: -22px; left: 50%;
+    transform: translateX(-50%); font-size: 9px; font-weight: 500;
+    color: oklch(0.5 0.01 50); white-space: nowrap;
+    opacity: 0; transition: opacity 0.15s; pointer-events: none;
+  }
+
+  .fmt-icon-btn:hover::after { opacity: 1; }
+
+  /* === Start Chat === */
+  .chat-btn {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: oklch(0.55 0.18 270 / 0.12);
+    border: 1px solid oklch(0.6 0.15 270 / 0.18);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: all 0.15s;
+    box-shadow: inset 0 1px 0 oklch(0.8 0.08 270 / 0.08);
+    position: relative;
+  }
+
+  .chat-btn:hover {
+    background: oklch(0.55 0.18 270 / 0.2);
+    border-color: oklch(0.6 0.15 270 / 0.28);
+    box-shadow: inset 0 1px 0 oklch(0.8 0.08 270 / 0.1), 0 0 12px oklch(0.55 0.18 270 / 0.12);
+  }
+
+  .chat-btn svg {
+    width: 14px; height: 14px; fill: none;
+    stroke: oklch(0.78 0.1 270); stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* === Language toggle (EN) === */
+  .lang-toggle {
+    height: 30px;
+    padding: 0 9px;
+    border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.12s;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 10px; font-weight: 600;
+    letter-spacing: 0.03em;
+    color: oklch(0.5 0.01 50);
+    position: relative;
+  }
+
+  .lang-toggle:hover {
+    background: var(--glass-bg-heavy);
+    color: oklch(0.65 0.01 50);
+  }
+
+  .lang-toggle.active {
+    background: oklch(0.55 0.15 145 / 0.1);
+    border-color: oklch(0.6 0.12 145 / 0.2);
+    color: oklch(0.75 0.12 145);
+    box-shadow: inset 0 1px 0 oklch(0.8 0.08 145 / 0.08);
+  }
+
+  .lang-toggle::after {
+    content: attr(data-tooltip); position: absolute; bottom: -22px; left: 50%;
+    transform: translateX(-50%); font-size: 9px; font-weight: 500;
+    color: oklch(0.5 0.01 50); white-space: nowrap;
+    opacity: 0; transition: opacity 0.15s; pointer-events: none;
+  }
+
+  .lang-toggle:hover::after { opacity: 1; }
+
+  .chat-btn::after {
+    content: 'Start Chat'; position: absolute; bottom: -22px; right: 0;
+    font-size: 9px; font-weight: 500; color: oklch(0.5 0.01 50);
+    white-space: nowrap; opacity: 0; transition: opacity 0.15s; pointer-events: none;
+  }
+
+  .chat-btn:hover::after { opacity: 1; }
+
+  /* === Transcript === */
+  .transcript-preview {
+    position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%);
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(20px) saturate(200%);
+    -webkit-backdrop-filter: blur(20px) saturate(200%);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px; padding: 8px 12px; max-width: 300px; z-index: 9;
+    box-shadow: 0 8px 24px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+  }
+
+  .transcript-text { font-size: 12px; color: oklch(0.78 0.008 50); line-height: 1.5; }
+  .transcript-text .new-word { color: #ef7f5b; }
+
+  .transcript-cursor {
+    display: inline-block; width: 1.5px; height: 13px;
+    background: #ef7f5b; margin-left: 2px;
+    animation: blink 1s step-end infinite; vertical-align: text-bottom;
+  }
+
+  @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+  /* SVG icon templates (reusable inline) */
+</style>
+</head>
+<body>
+
+<!-- ==================== FEATURE SPEC ==================== -->
+<div class="spec">
+  <h1>Clavus Dictation Widget &mdash; Feature Spec</h1>
+
+  <h2>Overview</h2>
+  <p>A floating pill widget that appears when the user triggers dictation via a global keyboard shortcut. Records speech, transcribes it, and immediately inserts text into the active app on release. No confirmation step.</p>
+
+  <div class="divider"></div>
+
+  <h2>Widget Layout (left to right)</h2>
+  <ul>
+    <li><strong>Lock/Stop</strong> &mdash; Glass circle. Lock icon while holding shortcut (click to go hands-free). Becomes stop icon after locking.</li>
+    <li><strong>Recording indicator</strong> &mdash; Pulsing dot, animated waveform, timer.</li>
+    <li><strong>Format group</strong> &mdash; A single row of selectable options for how the text should be formatted/rewritten before insertion. Order:
+      <ul>
+        <li><strong>App name</strong> (text, no icon) &mdash; Only shown for generic apps (browsers, editors). Shows the app name or field type (e.g. "Arc", "VS Code", "URL"). Not shown when the foreground app matches a known format (Slack, Mail).</li>
+        <li><strong>Insert As</strong> (paste icon) &mdash; Inserts raw transcription, no rewriting. Always second (or first when no app name).</li>
+        <li><strong>Slack</strong> (icon) &mdash; Rewrites as casual Slack message.</li>
+        <li><strong>Messaging</strong> (icon) &mdash; Rewrites as short casual message (iMessage, WhatsApp, Telegram style).</li>
+        <li><strong>Email</strong> (icon) &mdash; Rewrites with greeting/sign-off.</li>
+        <li><strong>Prompt</strong> (icon) &mdash; Rewrites as structured AI prompt.</li>
+      </ul>
+    </li>
+    <li><strong>Translate toggle</strong> ("EN", text) &mdash; Independent toggle that can be combined with any format. When active, translates the text to English before inserting. Works as a modifier, not a format &mdash; e.g. Slack + EN = Slack-formatted message translated to English.</li>
+    <li><strong>Start Chat</strong> (icon, indigo tint) &mdash; Opens Clavus, creates new thread, sends transcript as first message.</li>
+  </ul>
+
+  <h2>Auto-Selection Rules</h2>
+  <ul>
+    <li>If the foreground app is <strong>Slack</strong>: the Slack icon is pre-selected. No app name shown.</li>
+    <li>If the foreground app is <strong>Mail</strong>: the Email icon is pre-selected. No app name shown.</li>
+    <li>If the foreground app is a <strong>browser or editor</strong>: the app name (e.g. "Arc") appears as text and is selected by default. If the cursor is in a specific field type (URL, search), that type replaces the app name (e.g. "URL").</li>
+    <li>User can override by clicking any other format. The previous selection deselects.</li>
+  </ul>
+
+  <h2>Interaction Flow</h2>
+  <div class="flow-step"><span class="flow-num">1.</span><span class="flow-text">User presses and holds global shortcut. Widget appears. Recording starts.</span></div>
+  <div class="flow-step"><span class="flow-num">2.</span><span class="flow-text">Waveform animates with voice, flattens when silent. Live transcript above pill.</span></div>
+  <div class="flow-step"><span class="flow-num">3.</span><span class="flow-text">User can click a format or Start Chat while recording.</span></div>
+  <div class="flow-step"><span class="flow-num">4.</span><span class="flow-text">User can click Lock to go hands-free. Lock becomes Stop.</span></div>
+  <div class="flow-step"><span class="flow-num">5.</span><span class="flow-text">Releasing shortcut or clicking Stop immediately inserts text (reformatted if a format was selected). Widget disappears.</span></div>
+  <div class="flow-step"><span class="flow-num">6.</span><span class="flow-text">Clicking Start Chat ends recording, opens Clavus, sends transcript as first message.</span></div>
+
+  <div class="divider"></div>
+
+  <h2>Visual Design</h2>
+  <p>Follows the Clavus iOS 26 liquid glass system: warm <code>oklch</code> backgrounds (hue 50), <code>blur(20px) saturate(200%)</code>, inner glow, soft borders. Format icons are icon-only circles; the app name is a text-only pill. Start Chat has an indigo glass tint.</p>
+</div>
+
+<!-- ==================== MOCKUPS ==================== -->
+<h1 class="page-title">Mockups</h1>
+
+<div class="mockup-grid">
+
+  <!-- ==================== 1: Arc + URL field ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">1 &middot; Arc &mdash; URL field detected</div>
+    <div class="mockup-sublabel">Cursor is in the URL bar. "URL" appears as the app/field option (selected). All format icons available.</div>
+    <div class="desktop-bg">
+      <span class="state-badge holding">&#8984; held</span>
+      <div class="fake-app">
+        <div class="fake-app-bar"><div class="fake-dot"></div><div class="fake-dot"></div><div class="fake-dot"></div></div>
+        <div class="fake-app-content"><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div></div>
+      </div>
+
+      <div class="widget-pill">
+        <div class="lock-btn"><svg viewBox="0 0 16 16"><rect x="3" y="8" width="10" height="6.5" rx="1.5"/><path d="M5.5 8V5.5a2.5 2.5 0 0 1 5 0V8"/></svg></div>
+        <div class="rec-area">
+          <div class="rec-dot"></div>
+          <div class="waveform"><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div></div>
+          <div class="pill-timer">0:03</div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="format-group">
+          <div class="fmt-text-btn active">URL</div>
+          <div class="fmt-icon-btn" data-tooltip="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/><path d="M10.5 14a1.5 1.5 0 0 0 0-3H9v1.5a1.5 1.5 0 0 0 1.5 1.5z"/><path d="M14 10.5a1.5 1.5 0 0 0-3 0V12h1.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M5.5 12a1.5 1.5 0 0 0 0 3H7v-1.5A1.5 1.5 0 0 0 5.5 12z"/><path d="M2 10.5a1.5 1.5 0 0 0 3 0V9H3.5A1.5 1.5 0 0 0 2 10.5z"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Messaging"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/><circle cx="6" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r="0.7" fill="currentColor" stroke="none"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="lang-toggle" data-tooltip="Translate to English">EN</div>
+        <div class="pill-sep"></div>
+        <div class="chat-btn"><svg viewBox="0 0 16 16"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v6A1.5 1.5 0 0 1 11.5 11H6.5L3 14V3.5z"/><path d="M6.5 5.5v3M8 4v5M9.5 6v2" stroke-width="1.5"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 2: Arc, regular text field ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">2 &middot; Arc &mdash; text field</div>
+    <div class="mockup-sublabel">Regular text input in Arc. "Arc" shown as text, Messaging selected by default.</div>
+    <div class="desktop-bg">
+      <span class="state-badge holding">&#8984; held</span>
+      <div class="fake-app">
+        <div class="fake-app-bar"><div class="fake-dot"></div><div class="fake-dot"></div><div class="fake-dot"></div></div>
+        <div class="fake-app-content"><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div></div>
+      </div>
+
+      <div class="widget-pill">
+        <div class="lock-btn"><svg viewBox="0 0 16 16"><rect x="3" y="8" width="10" height="6.5" rx="1.5"/><path d="M5.5 8V5.5a2.5 2.5 0 0 1 5 0V8"/></svg></div>
+        <div class="rec-area">
+          <div class="rec-dot"></div>
+          <div class="waveform"><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div></div>
+          <div class="pill-timer">0:05</div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="format-group">
+          <div class="fmt-text-btn">Arc</div>
+          <div class="fmt-icon-btn" data-tooltip="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/><path d="M10.5 14a1.5 1.5 0 0 0 0-3H9v1.5a1.5 1.5 0 0 0 1.5 1.5z"/><path d="M14 10.5a1.5 1.5 0 0 0-3 0V12h1.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M5.5 12a1.5 1.5 0 0 0 0 3H7v-1.5A1.5 1.5 0 0 0 5.5 12z"/><path d="M2 10.5a1.5 1.5 0 0 0 3 0V9H3.5A1.5 1.5 0 0 0 2 10.5z"/></svg></div>
+          <div class="fmt-icon-btn active" data-tooltip="Messaging"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/><circle cx="6" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r="0.7" fill="currentColor" stroke="none"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="lang-toggle" data-tooltip="Translate to English">EN</div>
+        <div class="pill-sep"></div>
+        <div class="chat-btn"><svg viewBox="0 0 16 16"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v6A1.5 1.5 0 0 1 11.5 11H6.5L3 14V3.5z"/><path d="M6.5 5.5v3M8 4v5M9.5 6v2" stroke-width="1.5"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 3: Slack foreground ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">3 &middot; Slack foreground</div>
+    <div class="mockup-sublabel">Slack is the active app. Slack icon pre-selected. No app name shown &mdash; Slack IS the format.</div>
+    <div class="desktop-bg">
+      <span class="state-badge holding">&#8984; held</span>
+      <div class="fake-app">
+        <div class="fake-app-bar"><div class="fake-dot"></div><div class="fake-dot"></div><div class="fake-dot"></div></div>
+        <div class="fake-app-content"><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div></div>
+      </div>
+
+      <div class="widget-pill">
+        <div class="lock-btn"><svg viewBox="0 0 16 16"><rect x="3" y="8" width="10" height="6.5" rx="1.5"/><path d="M5.5 8V5.5a2.5 2.5 0 0 1 5 0V8"/></svg></div>
+        <div class="rec-area">
+          <div class="rec-dot"></div>
+          <div class="waveform"><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div></div>
+          <div class="pill-timer">0:02</div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="format-group">
+          <div class="fmt-icon-btn" data-tooltip="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon-btn active" data-tooltip="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/><path d="M10.5 14a1.5 1.5 0 0 0 0-3H9v1.5a1.5 1.5 0 0 0 1.5 1.5z"/><path d="M14 10.5a1.5 1.5 0 0 0-3 0V12h1.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M5.5 12a1.5 1.5 0 0 0 0 3H7v-1.5A1.5 1.5 0 0 0 5.5 12z"/><path d="M2 10.5a1.5 1.5 0 0 0 3 0V9H3.5A1.5 1.5 0 0 0 2 10.5z"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Messaging"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/><circle cx="6" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r="0.7" fill="currentColor" stroke="none"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="lang-toggle" data-tooltip="Translate to English">EN</div>
+        <div class="pill-sep"></div>
+        <div class="chat-btn"><svg viewBox="0 0 16 16"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v6A1.5 1.5 0 0 1 11.5 11H6.5L3 14V3.5z"/><path d="M6.5 5.5v3M8 4v5M9.5 6v2" stroke-width="1.5"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 4: Mail foreground ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">4 &middot; Mail foreground</div>
+    <div class="mockup-sublabel">Mail is active. Email icon pre-selected. No app name &mdash; Mail maps directly to the Email format.</div>
+    <div class="desktop-bg">
+      <span class="state-badge holding">&#8984; held</span>
+      <div class="fake-app">
+        <div class="fake-app-bar"><div class="fake-dot"></div><div class="fake-dot"></div><div class="fake-dot"></div></div>
+        <div class="fake-app-content"><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div></div>
+      </div>
+
+      <div class="widget-pill">
+        <div class="lock-btn"><svg viewBox="0 0 16 16"><rect x="3" y="8" width="10" height="6.5" rx="1.5"/><path d="M5.5 8V5.5a2.5 2.5 0 0 1 5 0V8"/></svg></div>
+        <div class="rec-area">
+          <div class="rec-dot"></div>
+          <div class="waveform"><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div></div>
+          <div class="pill-timer">0:04</div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="format-group">
+          <div class="fmt-icon-btn" data-tooltip="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/><path d="M10.5 14a1.5 1.5 0 0 0 0-3H9v1.5a1.5 1.5 0 0 0 1.5 1.5z"/><path d="M14 10.5a1.5 1.5 0 0 0-3 0V12h1.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M5.5 12a1.5 1.5 0 0 0 0 3H7v-1.5A1.5 1.5 0 0 0 5.5 12z"/><path d="M2 10.5a1.5 1.5 0 0 0 3 0V9H3.5A1.5 1.5 0 0 0 2 10.5z"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Messaging"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/><circle cx="6" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r="0.7" fill="currentColor" stroke="none"/></svg></div>
+          <div class="fmt-icon-btn active" data-tooltip="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="lang-toggle" data-tooltip="Translate to English">EN</div>
+        <div class="pill-sep"></div>
+        <div class="chat-btn"><svg viewBox="0 0 16 16"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v6A1.5 1.5 0 0 1 11.5 11H6.5L3 14V3.5z"/><path d="M6.5 5.5v3M8 4v5M9.5 6v2" stroke-width="1.5"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 5: Arc, locked, override to Email ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">5 &middot; Arc &mdash; locked, email override</div>
+    <div class="mockup-sublabel">Triggered from Arc, user clicked Email + EN. Arc deselected, Email selected, EN toggled on (green). Text will be translated to English + email-formatted.</div>
+    <div class="desktop-bg">
+      <span class="state-badge locked">locked</span>
+      <div class="fake-app">
+        <div class="fake-app-bar"><div class="fake-dot"></div><div class="fake-dot"></div><div class="fake-dot"></div></div>
+        <div class="fake-app-content"><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div></div>
+      </div>
+
+      <div class="transcript-preview">
+        <div class="transcript-text">
+          Hey, can you review the pull request I sent earlier? I think <span class="new-word">the tests are</span><span class="transcript-cursor"></span>
+        </div>
+      </div>
+
+      <div class="widget-pill locked">
+        <div class="lock-btn is-stop"><svg viewBox="0 0 10 10"><rect x="1" y="1" width="8" height="8" rx="1.5"/></svg></div>
+        <div class="rec-area">
+          <div class="rec-dot"></div>
+          <div class="waveform"><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div></div>
+          <div class="pill-timer">0:18</div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="format-group">
+          <div class="fmt-text-btn">Arc</div>
+          <div class="fmt-icon-btn" data-tooltip="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/><path d="M10.5 14a1.5 1.5 0 0 0 0-3H9v1.5a1.5 1.5 0 0 0 1.5 1.5z"/><path d="M14 10.5a1.5 1.5 0 0 0-3 0V12h1.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M5.5 12a1.5 1.5 0 0 0 0 3H7v-1.5A1.5 1.5 0 0 0 5.5 12z"/><path d="M2 10.5a1.5 1.5 0 0 0 3 0V9H3.5A1.5 1.5 0 0 0 2 10.5z"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Messaging"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/><circle cx="6" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r="0.7" fill="currentColor" stroke="none"/></svg></div>
+          <div class="fmt-icon-btn active" data-tooltip="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="lang-toggle active" data-tooltip="Translate to English">EN</div>
+        <div class="pill-sep"></div>
+        <div class="chat-btn"><svg viewBox="0 0 16 16"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v6A1.5 1.5 0 0 1 11.5 11H6.5L3 14V3.5z"/><path d="M6.5 5.5v3M8 4v5M9.5 6v2" stroke-width="1.5"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 6: VS Code, silent ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">6 &middot; VS Code &mdash; silent pause</div>
+    <div class="mockup-sublabel">VS Code is foreground. "VS Code" as text option. Waveform flat (silence). Prompt selected.</div>
+    <div class="desktop-bg">
+      <span class="state-badge holding">&#8984; held</span>
+      <div class="fake-app">
+        <div class="fake-app-bar"><div class="fake-dot"></div><div class="fake-dot"></div><div class="fake-dot"></div></div>
+        <div class="fake-app-content"><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div><div class="fake-line"></div></div>
+      </div>
+
+      <div class="widget-pill">
+        <div class="lock-btn"><svg viewBox="0 0 16 16"><rect x="3" y="8" width="10" height="6.5" rx="1.5"/><path d="M5.5 8V5.5a2.5 2.5 0 0 1 5 0V8"/></svg></div>
+        <div class="rec-area">
+          <div class="rec-dot"></div>
+          <div class="waveform silent"><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div><div class="waveform-bar"></div></div>
+          <div class="pill-timer">0:11</div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="format-group">
+          <div class="fmt-text-btn">VS Code</div>
+          <div class="fmt-icon-btn" data-tooltip="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/><path d="M10.5 14a1.5 1.5 0 0 0 0-3H9v1.5a1.5 1.5 0 0 0 1.5 1.5z"/><path d="M14 10.5a1.5 1.5 0 0 0-3 0V12h1.5a1.5 1.5 0 0 0 1.5-1.5z"/><path d="M5.5 12a1.5 1.5 0 0 0 0 3H7v-1.5A1.5 1.5 0 0 0 5.5 12z"/><path d="M2 10.5a1.5 1.5 0 0 0 3 0V9H3.5A1.5 1.5 0 0 0 2 10.5z"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Messaging"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/><circle cx="6" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="8" cy="6.5" r="0.7" fill="currentColor" stroke="none"/><circle cx="10" cy="6.5" r="0.7" fill="currentColor" stroke="none"/></svg></div>
+          <div class="fmt-icon-btn" data-tooltip="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon-btn active" data-tooltip="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+        </div>
+        <div class="pill-sep"></div>
+        <div class="lang-toggle" data-tooltip="Translate to English">EN</div>
+        <div class="pill-sep"></div>
+        <div class="chat-btn"><svg viewBox="0 0 16 16"><path d="M3 3.5A1.5 1.5 0 0 1 4.5 2h7A1.5 1.5 0 0 1 13 3.5v6A1.5 1.5 0 0 1 11.5 11H6.5L3 14V3.5z"/><path d="M6.5 5.5v3M8 4v5M9.5 6v2" stroke-width="1.5"/></svg></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
