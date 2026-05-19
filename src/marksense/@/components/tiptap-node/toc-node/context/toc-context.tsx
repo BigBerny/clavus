@@ -97,13 +97,33 @@ const doNavigateToHeading = (
 ) => {
   if (typeof window === "undefined") return
 
-  // The extension's dom reference may be a Text node (from domAtPos) rather
-  // than the heading Element.  Find the heading by its id attribute instead,
-  // which is always set by the TableOfContents extension.
-  const domRef: Node | null = item.dom
-  const el =
-    document.getElementById(item.id) ??
-    (domRef instanceof HTMLElement ? domRef : domRef?.parentElement ?? null)
+  // The TableOfContents and UniqueID extensions both manage heading IDs via
+  // setNodeMarkup.  After the init cycle, item.editor is destroyed and
+  // item.id / item.dom reference detached nodes.  Resolve the heading from
+  // the live ProseMirror DOM by matching text content (and level for
+  // disambiguation when two headings share the same text).
+  const pm = document.querySelector(".ProseMirror")
+  if (!pm) return
+
+  const headings = pm.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6")
+  const targetLevel = `H${item.originalLevel ?? item.level}`
+  let el: HTMLElement | null = null
+
+  for (const h of headings) {
+    if (h.textContent === item.textContent && h.tagName === targetLevel) {
+      el = h
+      break
+    }
+  }
+  // Relax level constraint if no match (heading level may have changed)
+  if (!el) {
+    for (const h of headings) {
+      if (h.textContent === item.textContent) {
+        el = h
+        break
+      }
+    }
+  }
 
   if (!el) return
 

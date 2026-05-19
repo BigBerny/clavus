@@ -89,8 +89,19 @@ export function TocSidebar({
       let current: TableOfContentDataItem | null = null
       const onScreen: string[] = []
 
+      // Build a text→element map from live DOM headings for O(n) lookup
+      const pm = container.querySelector(".ProseMirror")
+      const domHeadings = pm
+        ? Array.from(pm.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6"))
+        : []
+      const textToEl = new Map<string, HTMLElement>()
+      for (const h of domHeadings) {
+        const txt = h.textContent ?? ""
+        if (!textToEl.has(txt)) textToEl.set(txt, h)
+      }
+
       for (const heading of headingList) {
-        const el = document.getElementById(heading.id)
+        const el = textToEl.get(heading.textContent) ?? null
         if (!el) continue
         const elTop = el.getBoundingClientRect().top
         if (elTop <= containerTop + 60) {
