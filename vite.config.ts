@@ -805,6 +805,85 @@ function elevenLabsProxy() {
   }
 }
 
+function desktopDictationPlugin() {
+  const historyFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
+
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (req.url !== '/desktop/dictation/transcribe') return next()
+
+      const origin = req.headers.origin
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin)
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
+        res.setHeader('Vary', 'Origin')
+      }
+
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 204
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'content-type')
+        res.end()
+        return
+      }
+
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: 'Method not allowed' }))
+        return
+      }
+
+      try {
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(Buffer.from(chunk))
+        const body = Buffer.concat(chunks)
+
+        const headers: Record<string, string> = { 'xi-api-key': ELEVENLABS_KEY }
+        if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
+
+        const startedAt = Date.now()
+        const resp = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+          method: 'POST',
+          headers,
+          body,
+        })
+
+        const responseText = await resp.text()
+        let parsed: any = null
+        try { parsed = JSON.parse(responseText) } catch {}
+
+        if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+        fs.appendFileSync(historyFile, JSON.stringify({
+          timestamp: new Date().toISOString(),
+          source: 'clavus-desktop',
+          appName: req.headers['x-clavus-app-name'] || '',
+          bundleId: req.headers['x-clavus-bundle-id'] || '',
+          audioBytes: body.length,
+          status: resp.status,
+          durationMs: Date.now() - startedAt,
+          text: parsed?.text || '',
+          transcriptionId: parsed?.transcription_id || '',
+        }) + '\n')
+
+        res.statusCode = resp.status
+        res.setHeader('Content-Type', resp.headers.get('content-type') || 'application/json')
+        res.end(responseText)
+      } catch (err: any) {
+        res.statusCode = 502
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+  }
+
+  return {
+    name: 'desktop-dictation-api',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
 function openaiRealtimeProxy() {
   const attach = (server: any) => {
     server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -1206,6 +1285,7 @@ export default defineConfig({
     responsesProxyPlugin(),
     threadsApiPlugin(),
     elevenLabsProxy(),
+    desktopDictationPlugin(),
     openaiRealtimeProxy(),
     workspacePlugin(),
     workspacePlugin(DOCUMENTS_ROOT, '/api/documents', 'documents-api'),
