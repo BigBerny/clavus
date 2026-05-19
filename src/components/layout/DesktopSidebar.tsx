@@ -274,7 +274,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
         {/* Linked-docs rendered as indented chips with left rule */}
         {thread?.linkedDocs && thread.linkedDocs.length > 0 && (
-          <div className="ml-[26px] mr-3 pl-[5px] -mt-1 space-y-px">
+          <div className="ml-[26px] mr-3 pl-[5px] space-y-px">
             {thread.linkedDocs.map((doc) => {
               const filename = doc.title || doc.path.split('/').filter(Boolean).pop() || 'File'
               const isMd = getFileTypeInfo(filename).kind === 'markdown'

@@ -368,7 +368,7 @@ export function FinderPanel({ tab, isVisible, onClose }: { tab: FinderTab; isVis
 
   if (isDesktop) {
     return (
-      <div className="flex-1 min-h-0 flex flex-row">
+      <div className="flex-1 min-h-0 flex flex-row chat-bg">
         <div className="w-[260px] xl:w-[300px] shrink-0 border-r border-[var(--glass-border)] flex flex-col min-h-0">
           {treePane}
         </div>
@@ -387,7 +387,7 @@ export function FinderPanel({ tab, isVisible, onClose }: { tab: FinderTab; isVis
 
   // Mobile: file tree by default, swap to preview when a file is selected.
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex-1 min-h-0 flex flex-col chat-bg">
       {tab.selectedPath ? (
         <PreviewPane
           selectedPath={tab.selectedPath}

@@ -136,8 +136,8 @@ export function FileViewerPanel({ path, title, isVisible, onClose }: Props) {
   const officeDesktopUrl = info.kind === 'office' ? getOfficeDesktopUrl(rawUrl, info.extension) : ''
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-surface-light dark:bg-surface-dark">
-      <div className="safe-area-top bg-surface-light dark:bg-surface-dark" />
+    <div className="flex-1 flex flex-col min-h-0 chat-bg">
+      <div className="safe-area-top" />
       <div className="flex items-center gap-3 px-4 py-3 border-b border-surface-light-3/30 dark:border-surface-dark-3/30">
         <div className="w-8 h-8 rounded-lg bg-accent/10 dark:bg-accent/15 flex items-center justify-center flex-shrink-0">
           <span className="text-[10px] font-bold text-accent uppercase">{info.extension || 'file'}</span>

@@ -58,11 +58,12 @@ function isTextFile(file: File): boolean {
   return TEXT_EXTENSIONS.has(ext)
 }
 
-async function uploadFile(file: File): Promise<{ path: string } | null> {
+async function uploadFile(file: File, threadId?: string | null): Promise<{ path: string } | null> {
   try {
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch('/api/upload', { method: 'POST', body: form })
+    const url = threadId ? `/api/upload?threadId=${encodeURIComponent(threadId)}` : '/api/upload'
+    const res = await fetch(url, { method: 'POST', body: form })
     if (!res.ok) return null
     return await res.json()
   } catch {
@@ -486,7 +487,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
         const f = file
-        Promise.all([uploadFile(f), extractTextContent(f)]).then(([uploaded, content]) => {
+        Promise.all([uploadFile(f, threadId), extractTextContent(f)]).then(([uploaded, content]) => {
           setPendingFiles((prev) => {
             if (prev.length >= MAX_FILES) return prev
             return [...prev, { name: f.name, content, size: f.size, localPath: uploaded?.path }]
@@ -497,7 +498,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
 
     // Reset input so same file can be re-selected
     e.target.value = ''
-  }, [pendingImages.length, pendingFiles.length])
+  }, [pendingImages.length, pendingFiles.length, threadId])
 
   const removeImage = useCallback((index: number) => {
     setPendingImages((prev) => prev.filter((_, i) => i !== index))
@@ -541,7 +542,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
         const f = file
-        Promise.all([uploadFile(f), extractTextContent(f)]).then(([uploaded, content]) => {
+        Promise.all([uploadFile(f, threadId), extractTextContent(f)]).then(([uploaded, content]) => {
           setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, {
             name: f.name,
             content,
@@ -551,7 +552,7 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
         })
       }
     }
-  }, [pendingImages.length, pendingFiles.length])
+  }, [pendingImages.length, pendingFiles.length, threadId])
 
   const { selectedModelId, setSelectedModelId } = useModelStore()
   const currentModel = MODEL_OPTIONS.find((m) => m.id === selectedModelId) || MODEL_OPTIONS[0]
@@ -637,14 +638,17 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   return (
     <div
       ref={barRef}
-      className={`safe-area-bottom relative pointer-events-none ${dragOver ? 'ring-2 ring-primary ring-inset' : ''}`}
+      className={`safe-area-bottom relative pointer-events-none`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {dragOver && (
-        <div className="absolute inset-0 bg-accent/10 flex items-center justify-center z-10 pointer-events-none">
-          <span className="text-sm text-accent font-medium">Drop files here</span>
+        <div className="absolute inset-2 rounded-xl border-2 border-dashed border-accent/50 bg-accent/8 flex items-center justify-center z-10 pointer-events-none backdrop-blur-xs transition-all">
+          <div className="flex items-center gap-2 text-accent">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <span className="text-sm font-medium">Drop to attach</span>
+          </div>
         </div>
       )}
       <div className="max-w-[900px] mx-auto p-3 pointer-events-auto">

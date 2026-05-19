@@ -589,10 +589,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                     if (part.type === 'buttons') return <ButtonGroup key={i} buttons={part.buttons} />
                     if (part.type === 'select') return <SelectBlock key={i} prompt={part.prompt} options={part.options} />
                     if (part.type === 'confirm') return <ConfirmBlock key={i} message={part.message} confirmLabel={part.confirmLabel} cancelLabel={part.cancelLabel} />
-                    return <RichMessageRenderer key={i} content={part.content} threadId={threadId} />
+                    return <RichMessageRenderer key={i} content={part.content} threadId={threadId} isStreaming={message.streaming} />
                   })
                 ) : (
-                  <RichMessageRenderer content={replyQuote ? replyQuote.rest : (message.content || ' ')} threadId={threadId} />
+                  <RichMessageRenderer content={replyQuote ? replyQuote.rest : (message.content || ' ')} threadId={threadId} isStreaming={message.streaming} />
                 )}
               </Suspense>
             </div>

@@ -292,6 +292,7 @@ button, header, nav, [role="toolbar"] {
 button {
   min-height: 44px;
   min-width: 44px;
+  cursor: pointer;
 }
 /* Exception for inline/small buttons */
 button.inline-btn {
@@ -313,9 +314,14 @@ button.inline-btn {
   opacity: 0.9;
 }
 
-/* Chat background — same gradient as home screen for consistency */
+/* Chat background — same gradient as home screen for consistency.
+ * background-attachment: fixed only on desktop (md+) — on iOS Safari it
+ * interferes with visualViewport tracking inside scroll-snap containers. */
 .chat-bg {
   background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+}
+@media (min-width: 768px) {
+  .chat-bg { background-attachment: fixed; }
 }
 html:not(.dark) .chat-bg {
   background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
@@ -654,13 +660,15 @@ html.theme-ready *::after {
   color: var(--color-foreground);
 }
 
-/* Marksense panel background — same gradient as `.home-screen` but WITHOUT
- * `background-attachment: fixed`. On iOS Safari, a fixed background-attachment
- * on a panel inside the scroll-snap container interferes with visualViewport
- * tracking, breaking the keyboard-push behavior for the chat input bar on
- * sibling panels after Marksense is rendered. */
+/* Marksense panel background — same gradient as `.home-screen`.
+ * `background-attachment: fixed` is only applied on desktop (md+) because on
+ * iOS Safari it interferes with visualViewport tracking inside scroll-snap
+ * containers, breaking the keyboard-push behavior for sibling panels. */
 .marksense-bg {
   background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+}
+@media (min-width: 768px) {
+  .marksense-bg { background-attachment: fixed; }
 }
 html:not(.dark) .marksense-bg {
   background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);

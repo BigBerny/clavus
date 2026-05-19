@@ -75,11 +75,11 @@ function openFileInline(path: string, title: string) {
   }))
 }
 
-function ExternalLink(threadId?: string) {
+function ExternalLink(threadId?: string, isStreaming?: boolean) {
   return function ExternalLinkInner({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
     if (href) {
       const parsed = parseClavusFileUrl(href)
-      if (parsed) return <FileLinkCard href={href} path={parsed.path} filename={parsed.filename} threadId={threadId} />
+      if (parsed) return <FileLinkCard href={href} path={parsed.path} filename={parsed.filename} threadId={threadId} isStreaming={isStreaming} />
     }
     return (
       <a href={href} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline" {...props}>
@@ -119,18 +119,20 @@ function FileKindIcon({ kind }: { kind: FileViewerKind }) {
   }
 }
 
-function FileLinkCard({ href, path, filename, threadId }: { href: string; path: string; filename: string; threadId?: string }) {
+function FileLinkCard({ href, path, filename, threadId, isStreaming }: { href: string; path: string; filename: string; threadId?: string; isStreaming?: boolean }) {
   const info = getFileTypeInfo(filename)
   const [copied, setCopied] = useState(false)
 
   // Side-effect: register file as a linked-doc so it appears as a sub-entry
   // in the sidebar and home screen beneath its parent thread.
+  // Deferred until streaming ends to avoid phantom entries from partial URLs
+  // that GFM auto-links before the full markdown link syntax is complete.
   useEffect(() => {
-    if (!threadId) return
+    if (!threadId || isStreaming) return
     import('../../state/threads').then(({ useThreadsStore }) => {
       useThreadsStore.getState().addLinkedDoc(threadId, { path, title: filename })
     })
-  }, [threadId, path, filename])
+  }, [threadId, path, filename, isStreaming])
 
   const copyLink = useCallback(() => {
     navigator.clipboard.writeText(href)
@@ -301,9 +303,11 @@ interface Props {
   remarkPluginsGfmOnly?: boolean
   /** Thread the message belongs to — used to track linked Marksense docs. */
   threadId?: string
+  /** When true, defers linkedDoc registration to avoid phantom entries from partial streaming URLs. */
+  isStreaming?: boolean
 }
 
-export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId }: Props) {
+export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId, isStreaming }: Props) {
   if (remarkPluginsGfmOnly) {
     return <Markdown remarkPlugins={[remarkGfm]} components={{ table: TableBlock }}>{content}</Markdown>
   }
@@ -311,7 +315,7 @@ export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId }:
     <Markdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeHighlight]}
-      components={{ code: CodeBlock, a: ExternalLink(threadId), table: TableBlock }}
+      components={{ code: CodeBlock, a: ExternalLink(threadId, isStreaming), table: TableBlock }}
     >
       {content}
     </Markdown>

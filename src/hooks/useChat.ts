@@ -103,24 +103,20 @@ export function useChat() {
       const t = useThreadsStore.getState().threads.find(t => t.id === threadId)
       if (t?.archived) useThreadsStore.getState().unarchiveThread(threadId)
 
-      // Auto-classify first message if auto mode is enabled
+      // Auto-classify if auto mode is enabled and thread has no classification yet
       const autoStore = useAutoClassifyStore.getState()
       if (autoStore.autoEnabled && !autoStore.getClassification(threadId)) {
-        const userMsgCount = store.getState().getThreadState(threadId).messages
-          .filter(m => m.role === 'user').length
-        if (userMsgCount <= 1) {
-          const cfg = getConfig()
-          if (cfg.openrouterApiKey) {
-            autoStore.setPending(threadId, true)
-            try {
-              const result = await Promise.race([
-                classifyMessage(cfg.openrouterApiKey, content.trim()),
-                new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-              ])
-              if (result) autoStore.setClassification(threadId, result)
-            } catch { /* fallback to manual */ }
-            autoStore.setPending(threadId, false)
-          }
+        const cfg = getConfig()
+        if (cfg.openrouterApiKey) {
+          autoStore.setPending(threadId, true)
+          try {
+            const result = await Promise.race([
+              classifyMessage(cfg.openrouterApiKey, content.trim()),
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+            ])
+            if (result) autoStore.setClassification(threadId, result)
+          } catch { /* fallback to manual */ }
+          autoStore.setPending(threadId, false)
         }
       }
     }
@@ -142,6 +138,7 @@ export function useChat() {
       ? autoClassification.modelId
       : useModelStore.getState().selectedModelId
     const modelOption = MODEL_OPTIONS.find((m) => m.id === selectedModelId)
+      ?? MODEL_OPTIONS[0] // fallback to first model when "auto" has no classification yet
     if (modelOption) {
       config.model = modelOption.model
     }

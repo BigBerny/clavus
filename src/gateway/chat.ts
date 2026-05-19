@@ -291,8 +291,10 @@ function dispatchResponsesEvent(
   }
 
   if (eventName === 'response.failed') {
-    const error = parsed.error as { message?: string } | undefined
-    callbacks.onError(new Error(error?.message || 'Hermes response failed'))
+    const resp = parsed.response as Record<string, unknown> | undefined
+    const respError = resp?.error as { message?: string } | undefined
+    const topError = parsed.error as { message?: string } | undefined
+    callbacks.onError(new Error(respError?.message || topError?.message || 'Hermes response failed'))
     return true
   }
 

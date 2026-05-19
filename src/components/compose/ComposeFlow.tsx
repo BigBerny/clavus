@@ -150,11 +150,11 @@ export function ComposeFlow({ channel, onClose }: Props) {
       try {
         const gwConfig = getConfig()
         // Apply selected model (same as useChat.ts)
+        // For chat/completions we need a real model name, not the agent routing ID.
+        // When "auto" is selected or the ID doesn't match, fall back to gpt-5.5.
         const selectedModelId = useModelStore.getState().selectedModelId
         const modelOption = MODEL_OPTIONS.find((m) => m.id === selectedModelId)
-        if (modelOption) {
-          gwConfig.model = modelOption.model
-        }
+        gwConfig.model = modelOption?.model ?? MODEL_OPTIONS[0].model
         // Build messages: if there are multiple recordings, include previous
         // ones as context so the LLM can refine based on all input
         const userContent = allTranscriptions.length > 1

@@ -1033,14 +1033,21 @@ function hermesResponsesPlugin() {
   }
 }
 
-const UPLOAD_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus-data/uploads')
+const UPLOAD_BASE = nodePath.join(process.env.HOME || '', 'Documents/Workspace/tmp')
 
 function fileUploadPlugin() {
-  if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true })
+  if (!fs.existsSync(UPLOAD_BASE)) fs.mkdirSync(UPLOAD_BASE, { recursive: true })
 
   const attach = (server: any) => {
     server.middlewares.use((req: any, res: any, next: any) => {
-      if (req.method !== 'POST' || req.url !== '/api/upload') return next()
+      const parsed = new URL(req.url!, `http://${req.headers.host}`)
+      if (req.method !== 'POST' || parsed.pathname !== '/api/upload') return next()
+
+      const threadId = parsed.searchParams.get('threadId')
+      const uploadDir = threadId
+        ? nodePath.join(UPLOAD_BASE, threadId)
+        : UPLOAD_BASE
+      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
 
       const chunks: Buffer[] = []
       req.on('data', (chunk: Buffer) => chunks.push(chunk))
@@ -1070,9 +1077,17 @@ function fileUploadPlugin() {
             if (!nameMatch) continue
 
             const originalName = nodePath.basename(nameMatch[1])
-            // Add timestamp to avoid collisions
-            const safeName = `${Date.now()}-${originalName}`
-            const filePath = nodePath.join(UPLOAD_DIR, safeName)
+            // Deduplicate: report.pdf -> report (1).pdf -> report (2).pdf
+            let targetName = originalName
+            let filePath = nodePath.join(uploadDir, targetName)
+            let counter = 1
+            while (fs.existsSync(filePath)) {
+              const ext = nodePath.extname(originalName)
+              const base = originalName.slice(0, originalName.length - ext.length)
+              targetName = `${base} (${counter})${ext}`
+              filePath = nodePath.join(uploadDir, targetName)
+              counter++
+            }
             fs.writeFileSync(filePath, fileData, 'binary')
 
             res.setHeader('Content-Type', 'application/json')
