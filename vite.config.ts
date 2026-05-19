@@ -7,6 +7,18 @@ import nodePath from 'path'
 import { execSync } from 'node:child_process'
 import webpush from 'web-push'
 import Database from 'better-sqlite3'
+import {
+  appendEvent as bufferAppendEvent,
+  createBuffer,
+  findByThread,
+  getBuffer,
+  initEventBuffer,
+  loadFromDisk,
+  markFinished,
+  setThreadId as bufferSetThreadId,
+  subscribe as bufferSubscribe,
+} from './server/responseEventBuffer.ts'
+import { createSseParser, formatSseFrame } from './src/lib/sseParse.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const DOCUMENTS_ROOT = nodePath.join(process.env.HOME || '', 'Documents/Workspace')
@@ -130,78 +142,245 @@ async function sendPushToAll(payload: { title: string; body: string; threadId: s
  * Keeps the Hermes connection alive even if the client (phone) disconnects,
  * preventing Hermes from aborting the agent run.
  */
+/**
+ * Buffered SSE hub for /v1/responses.
+ *
+ * - POST /v1/responses streams from Hermes, persists every event into an
+ *   in-memory + on-disk buffer keyed by responseId, and fans out to subscribers
+ *   (the originating POST connection plus any GET resume clients).
+ * - GET /v1/responses/:id/stream subscribes to an existing buffer by responseId
+ *   (replaying from ?last_event_id=N).
+ * - GET /v1/responses/by-thread/:threadId/stream resolves the active buffer for
+ *   a thread and subscribes; falls back to a 404 if nothing active.
+ *
+ * Keeps the upstream Hermes connection alive even when no client is attached.
+ */
 function responsesProxyPlugin() {
+  initEventBuffer()
+
+  function writeSseHeaders(res: any) {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+  }
+
+  function safeWrite(res: any, frame: string): boolean {
+    try {
+      res.write(frame)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Subscribe an HTTP response to a buffer and pipe SSE frames out.
+   * `fromSeq` is the next seq the client wants (0 = from the beginning).
+   */
+  function attachSubscriber(res: any, responseId: string, fromSeq: number): boolean {
+    let alive = true
+    const handle = bufferSubscribe(responseId, fromSeq, (msg) => {
+      if (!alive) return
+      if (msg.kind === 'event') {
+        const frame = formatSseFrame({ name: msg.event.name, data: msg.event.data, id: msg.event.seq })
+        if (!safeWrite(res, frame)) {
+          alive = false
+        }
+      } else {
+        // Terminal — write [DONE] sentinel and close
+        safeWrite(res, formatSseFrame({ data: '[DONE]' }))
+        try { res.end() } catch { /* ignore */ }
+        alive = false
+      }
+    })
+    if (!handle) return false
+    res.on('close', () => {
+      alive = false
+      handle.unsubscribe()
+    })
+    // If buffer was already finished at subscribe time, the callback above
+    // already emitted done. Otherwise, we're now live.
+    return true
+  }
+
+  async function handlePost(req: any, res: any, next: any) {
+    // Read the request body
+    const chunks: Buffer[] = []
+    for await (const chunk of req) chunks.push(Buffer.from(chunk))
+    const body = Buffer.concat(chunks).toString('utf-8')
+
+    let parsed: any
+    try { parsed = JSON.parse(body) } catch { return next() }
+
+    // Only intercept streaming requests
+    if (!parsed.stream) return next()
+
+    const conversation = typeof parsed.conversation === 'string' ? parsed.conversation : ''
+    const threadId = conversation.startsWith('clavus:') ? conversation.slice('clavus:'.length) : ''
+
+    // Forward to Hermes
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (req.headers.authorization) headers['Authorization'] = req.headers.authorization
+    if (req.headers['idempotency-key']) headers['Idempotency-Key'] = req.headers['idempotency-key']
+
+    let hermesRes: Response
+    try {
+      hermesRes = await fetch(`${HERMES_API_TARGET}/v1/responses`, {
+        method: 'POST',
+        headers,
+        body,
+      })
+    } catch (e: any) {
+      res.statusCode = 502
+      res.end(JSON.stringify({ error: { message: `Gateway error: ${e.message}` } }))
+      return
+    }
+
+    if (!hermesRes.ok || !hermesRes.body) {
+      res.statusCode = hermesRes.status
+      res.setHeader('Content-Type', 'application/json')
+      res.end(await hermesRes.text())
+      return
+    }
+
+    // SSE headers to the originating client.
+    writeSseHeaders(res)
+
+    let responseId: string | null = null
+    let subscribed = false
+    let finalStatus: 'completed' | 'failed' | 'aborted' = 'completed'
+
+    // Until we see response.created (and have a buffer), forward chunks
+    // directly so the client still sees any early events.
+    const passthrough = (frame: { name: string; data: string }) => {
+      safeWrite(res, formatSseFrame(frame))
+    }
+
+    const parser = createSseParser((ev) => {
+      // Try to parse JSON to extract responseId / completion status.
+      let json: any = null
+      if (ev.data && ev.data !== '[DONE]') {
+        try { json = JSON.parse(ev.data) } catch { /* not JSON */ }
+      }
+
+      // Detect response.created — either via SSE event name or via `type` field.
+      if (!responseId) {
+        const isCreated = ev.name === 'response.created' || json?.type === 'response.created'
+        if (isCreated) {
+          const id = json?.response?.id
+          if (typeof id === 'string' && id) {
+            responseId = id
+            createBuffer(id, threadId || undefined)
+            if (threadId) bufferSetThreadId(id, threadId)
+            // Subscribe THIS POST client to its own buffer so all subsequent
+            // events arrive through the buffer (with id: seq attached).
+            attachSubscriber(res, id, 0)
+            subscribed = true
+          }
+        }
+      }
+
+      // Track terminal status from event names.
+      if (ev.name === 'response.failed' || json?.type === 'response.failed') {
+        finalStatus = 'failed'
+      }
+
+      if (responseId && subscribed) {
+        // Buffered path: append; subscribers (incl. our POST client) receive frame.
+        bufferAppendEvent(responseId, ev.name, ev.data)
+      } else {
+        // Pre-response.created path: send directly to originating client.
+        passthrough({ name: ev.name, data: ev.data })
+      }
+    })
+
+    // Even if client disconnects, keep reading from Hermes so the buffer
+    // stays populated for resume clients.
+    const reader = hermesRes.body.getReader()
+    const decoder = new TextDecoder()
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        parser.push(decoder.decode(value, { stream: true }))
+      }
+      parser.flush()
+    } catch {
+      finalStatus = 'aborted'
+    }
+
+    if (responseId) {
+      markFinished(responseId, finalStatus)
+    } else {
+      // No response.created ever arrived — just close the client.
+      try { res.end() } catch { /* ignore */ }
+    }
+  }
+
+  function handleGetStream(req: any, res: any, responseId: string) {
+    const url = new URL(req.url, 'http://localhost')
+    const lastEventIdRaw = url.searchParams.get('last_event_id')
+    const fromSeq = lastEventIdRaw !== null
+      ? Math.max(0, Number(lastEventIdRaw) + 1)
+      : 0
+
+    // Lazy-load from disk if not in memory.
+    let entry = getBuffer(responseId)
+    if (!entry) entry = loadFromDisk(responseId)
+    if (!entry) {
+      res.statusCode = 404
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: { message: 'No such response buffer' } }))
+      return
+    }
+
+    writeSseHeaders(res)
+    const ok = attachSubscriber(res, responseId, fromSeq)
+    if (!ok) {
+      try { res.end() } catch { /* ignore */ }
+    }
+  }
+
+  function handleGetStreamByThread(req: any, res: any, threadId: string) {
+    const entry = findByThread(threadId)
+    if (!entry) {
+      res.statusCode = 404
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: { message: 'No active response for this thread' } }))
+      return
+    }
+    handleGetStream(req, res, entry.responseId)
+  }
+
   const attach = (server: any) => {
     server.middlewares.use(async (req: any, res: any, next: any) => {
-      if (req.url !== '/v1/responses' || req.method !== 'POST') return next()
+      const url: string = req.url || ''
 
-      // Read the request body
-      const chunks: Buffer[] = []
-      for await (const chunk of req) chunks.push(Buffer.from(chunk))
-      const body = Buffer.concat(chunks).toString('utf-8')
-
-      let parsed: any
-      try { parsed = JSON.parse(body) } catch { return next() }
-
-      // Only intercept streaming requests
-      if (!parsed.stream) return next()
-
-      // Forward to Hermes
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (req.headers.authorization) headers['Authorization'] = req.headers.authorization
-      if (req.headers['idempotency-key']) headers['Idempotency-Key'] = req.headers['idempotency-key']
-
-      let hermesRes: Response
-      try {
-        hermesRes = await fetch(`${HERMES_API_TARGET}/v1/responses`, {
-          method: 'POST',
-          headers,
-          body,
-        })
-      } catch (e: any) {
-        res.statusCode = 502
-        res.end(JSON.stringify({ error: { message: `Gateway error: ${e.message}` } }))
-        return
+      // POST /v1/responses — original streaming entry point.
+      if (url === '/v1/responses' || url.startsWith('/v1/responses?')) {
+        if (req.method !== 'POST') return next()
+        return handlePost(req, res, next)
       }
 
-      if (!hermesRes.ok || !hermesRes.body) {
-        res.statusCode = hermesRes.status
-        res.setHeader('Content-Type', 'application/json')
-        res.end(await hermesRes.text())
-        return
+      // GET /v1/responses/:id/stream
+      const streamMatch = url.match(/^\/v1\/responses\/([^/?]+)\/stream(?:\?|$)/)
+      if (streamMatch && req.method === 'GET') {
+        const responseId = decodeURIComponent(streamMatch[1])
+        if (responseId === 'by-thread') return next() // handled below
+        return handleGetStream(req, res, responseId)
       }
 
-      // Set up SSE response to client
-      res.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      })
-
-      let clientDisconnected = false
-      res.on('close', () => { clientDisconnected = true })
-
-      // Read the Hermes stream and forward to client
-      const reader = hermesRes.body.getReader()
-      const decoder = new TextDecoder()
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          const chunk = decoder.decode(value, { stream: true })
-          // Forward to client if still connected
-          if (!clientDisconnected) {
-            try { res.write(chunk) } catch { clientDisconnected = true }
-          }
-          // Even if client disconnected, keep reading to prevent Hermes abort
-        }
-      } catch {
-        // Hermes connection error — nothing to do
+      // GET /v1/responses/by-thread/:threadId/stream
+      const byThreadMatch = url.match(/^\/v1\/responses\/by-thread\/([^/?]+)\/stream(?:\?|$)/)
+      if (byThreadMatch && req.method === 'GET') {
+        const threadId = decodeURIComponent(byThreadMatch[1])
+        return handleGetStreamByThread(req, res, threadId)
       }
 
-      if (!clientDisconnected) {
-        try { res.end() } catch { /* ignore */ }
-      }
+      return next()
     })
   }
 
@@ -689,8 +868,46 @@ function hermesResponsesPlugin() {
     // Find assistant text: first check conversation_history, then output items
     const lastAssistant = [...history].reverse().find((m: any) => m.role === 'assistant')
     let text = typeof lastAssistant?.content === 'string' ? lastAssistant.content : ''
-    // Extract text and thinking from output items
-    let thinking = ''
+    // Reasoning is stored in the conversation_history's assistant message under
+    // "reasoning" or "thinking" — extract it as a fallback.
+    let thinking = typeof lastAssistant?.reasoning === 'string'
+      ? lastAssistant.reasoning
+      : (typeof lastAssistant?.thinking === 'string' ? lastAssistant.thinking : '')
+
+    // Reconstruct tool calls from output items. The Responses API stores
+    // function_call and function_call_output as separate items keyed by
+    // call_id; we collapse them into a single ToolCall shape that matches
+    // the client-side state model.
+    type ExtractedToolCall = {
+      id: string
+      name: string
+      args: Record<string, unknown>
+      result?: unknown
+      status: 'running' | 'completed' | 'error'
+    }
+    const toolCallsById = new Map<string, ExtractedToolCall>()
+    const toolCallOrder: string[] = []
+
+    function parseJsonMaybe(value: unknown, fallback: Record<string, unknown>): Record<string, unknown> {
+      if (value == null) return fallback
+      if (typeof value === 'object') return value as Record<string, unknown>
+      if (typeof value !== 'string') return fallback
+      try { return JSON.parse(value) as Record<string, unknown> } catch { return fallback }
+    }
+
+    function textFromOutput(output: unknown): string {
+      if (typeof output === 'string') return output
+      if (Array.isArray(output)) {
+        return output.map((part: any) => {
+          if (typeof part === 'string') return part
+          if (part && typeof part === 'object' && typeof part.text === 'string') return part.text
+          return ''
+        }).join('')
+      }
+      if (output == null) return ''
+      try { return JSON.stringify(output, null, 2) } catch { return '' }
+    }
+
     for (const item of resp.output || []) {
       if (item.type === 'message' && item.role === 'assistant' && !text) {
         const contentArr = Array.isArray(item.content) ? item.content : []
@@ -698,12 +915,41 @@ function hermesResponsesPlugin() {
           if (c.type === 'output_text' || c.type === 'text') text += c.text || ''
         }
       }
-      if (item.type === 'reasoning' && item.content) {
+      if (item.type === 'reasoning' && item.content && !thinking) {
         for (const c of Array.isArray(item.content) ? item.content : []) {
           if (c.type === 'text') thinking += c.text
         }
       }
+      if (item.type === 'function_call') {
+        const callId = String(item.call_id || item.id || '')
+        if (!callId) continue
+        const existing = toolCallsById.get(callId)
+        if (!existing) toolCallOrder.push(callId)
+        toolCallsById.set(callId, {
+          id: callId,
+          name: String(item.name || existing?.name || 'tool'),
+          args: parseJsonMaybe(item.arguments, existing?.args || {}),
+          result: existing?.result,
+          status: existing?.status || 'running',
+        })
+      }
+      if (item.type === 'function_call_output') {
+        const callId = String(item.call_id || item.id || '')
+        if (!callId) continue
+        const existing = toolCallsById.get(callId)
+        if (!existing) toolCallOrder.push(callId)
+        toolCallsById.set(callId, {
+          id: callId,
+          name: existing?.name || 'tool',
+          args: existing?.args || {},
+          result: textFromOutput(item.output),
+          status: item.status === 'error' ? 'error' : 'completed',
+        })
+      }
     }
+
+    const toolCalls = toolCallOrder.map(id => toolCallsById.get(id)!).filter(Boolean)
+
     const usage = resp.usage ? {
       inputTokens: resp.usage.input_tokens || 0,
       outputTokens: resp.usage.output_tokens || 0,
@@ -714,6 +960,7 @@ function hermesResponsesPlugin() {
       status: resp.status || 'unknown',
       text,
       thinking: thinking || undefined,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       model: resp.model,
       usage,
       createdAt: resp.created_at,

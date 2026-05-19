@@ -1,4 +1,5 @@
 import type { GatewayConfig } from './config.ts'
+import { readSseResponse } from '../lib/sseParse.ts'
 
 export type ContentPart =
   | { type: 'text'; text: string }
@@ -23,6 +24,9 @@ export interface StreamCallbacks {
   onToolCall?: (toolCall: ToolCallEvent) => void
   onUsage?: (usage: UsageData) => void
   onResponseId?: (responseId: string) => void
+  /** Called with the sequence id of each buffered event (when streamed via the
+   *  Clavus event buffer). Used to track `lastEventSeq` for resume. */
+  onSeq?: (seq: number) => void
   onDone: () => void
   onError: (error: Error) => void
 }
@@ -59,8 +63,6 @@ interface HermesCapabilities {
     session_continuity_header?: string
   }
 }
-
-type SseHandler = (eventName: string, data: string) => void
 
 const capabilitiesCache = new Map<string, Promise<HermesCapabilities | null>>()
 
@@ -158,53 +160,143 @@ function toResponsesContent(content: ChatCompletionMessage['content']): string |
   })
 }
 
-async function readSseStream(res: Response, onEvent: SseHandler): Promise<void> {
-  const reader = res.body?.getReader()
-  if (!reader) throw new Error('No response body')
+// --- Responses API event dispatch ---
 
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let eventName = 'message'
-  let dataLines: string[] = []
+interface ResponsesDispatchState {
+  toolCalls: Map<string, ToolCallEvent>
+  receivedText: boolean
+  done: boolean
+}
 
-  const dispatch = () => {
-    if (dataLines.length === 0) {
-      eventName = 'message'
-      return
+function createResponsesDispatchState(): ResponsesDispatchState {
+  return {
+    toolCalls: new Map(),
+    receivedText: false,
+    done: false,
+  }
+}
+
+/**
+ * Apply a single Responses-API SSE event to the given callbacks.
+ * Shared between the live stream (`sendResponsesStream`) and the resume stream
+ * (`resumeChatStream`) so both paths produce identical client state.
+ * Returns `true` if this event ended the stream.
+ */
+function dispatchResponsesEvent(
+  eventName: string,
+  data: string,
+  callbacks: StreamCallbacks,
+  state: ResponsesDispatchState,
+): boolean {
+  if (data === '[DONE]') {
+    if (!state.done) {
+      state.done = true
+      callbacks.onDone()
     }
-    onEvent(eventName, dataLines.join('\n'))
-    eventName = 'message'
-    dataLines = []
+    return true
   }
 
-  const processLine = (rawLine: string) => {
-    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine
-    if (line === '') {
-      dispatch()
-      return
-    }
-    if (line.startsWith(':')) return
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim() || 'message'
-      return
-    }
-    if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trimStart())
-    }
+  let parsed: Record<string, unknown>
+  try {
+    parsed = JSON.parse(data) as Record<string, unknown>
+  } catch {
+    return false
   }
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-    for (const line of lines) processLine(line)
+  if (parsed.type === 'response.created' || eventName === 'response.created') {
+    const resp = parsed.response as Record<string, unknown> | undefined
+    const id = resp?.id
+    if (typeof id === 'string') callbacks.onResponseId?.(id)
+    return false
   }
 
-  buffer += decoder.decode()
-  if (buffer) processLine(buffer)
-  dispatch()
+  if (eventName === 'response.reasoning_summary_text.delta') {
+    const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
+    if (delta) callbacks.onThinking?.(delta)
+    return false
+  }
+
+  if (eventName === 'response.reasoning_summary_text.added' || eventName === 'response.reasoning_summary_text.done') {
+    return false
+  }
+
+  if (eventName === 'response.output_text.delta') {
+    const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
+    if (delta) {
+      callbacks.onThinkingDone?.()
+      callbacks.onToken(delta)
+      state.receivedText = true
+    }
+    return false
+  }
+
+  if (eventName === 'response.output_item.added' || eventName === 'response.output_item.done') {
+    const item = parsed.item as Record<string, unknown> | undefined
+    if (!item) return false
+
+    if (item.type === 'function_call') {
+      const id = String(item.call_id || item.id || crypto.randomUUID())
+      const args = parseJsonMaybe<Record<string, unknown>>(item.arguments, {})
+      const existing = state.toolCalls.get(id)
+      const tc: ToolCallEvent = {
+        id,
+        name: String(item.name || existing?.name || 'tool'),
+        args,
+        status: existing?.status || 'running',
+        result: existing?.result,
+      }
+      state.toolCalls.set(id, tc)
+      callbacks.onToolCall?.(tc)
+    }
+
+    if (item.type === 'function_call_output') {
+      const id = String(item.call_id || item.id || crypto.randomUUID())
+      const existing = state.toolCalls.get(id)
+      const tc: ToolCallEvent = {
+        id,
+        name: existing?.name || 'tool',
+        args: existing?.args || {},
+        result: textFromOutput(item.output),
+        status: item.status === 'error' ? 'error' : 'completed',
+      }
+      state.toolCalls.set(id, tc)
+      callbacks.onToolCall?.(tc)
+    }
+    return false
+  }
+
+  if (eventName === 'response.completed') {
+    const response = parsed.response as Record<string, unknown> | undefined
+    const finalText = finalTextFromResponse(response)
+    if (finalText && !state.receivedText) {
+      callbacks.onThinkingDone?.()
+      callbacks.onToken(finalText)
+    }
+    if (response && callbacks.onUsage) {
+      const usage = response.usage as Record<string, number> | undefined
+      if (usage) {
+        callbacks.onUsage({
+          inputTokens: usage.input_tokens || 0,
+          outputTokens: usage.output_tokens || 0,
+          totalTokens: usage.total_tokens || 0,
+          model: typeof response.model === 'string' ? response.model : undefined,
+        })
+      }
+    }
+    if (!state.done) {
+      state.done = true
+      callbacks.onDone()
+    }
+    return true
+  }
+
+  if (eventName === 'response.failed') {
+    const error = parsed.error as { message?: string } | undefined
+    callbacks.onError(new Error(error?.message || 'Hermes response failed'))
+    return true
+  }
+
+  return false
 }
 
 // --- Hermes chat API ---
@@ -269,122 +361,69 @@ async function sendResponsesStream(
     throw new Error(`Hermes error: ${res.status} ${res.statusText}`)
   }
 
-  const toolCalls = new Map<string, ToolCallEvent>()
-  let done = false
-  let receivedText = false
+  const state = createResponsesDispatchState()
 
-  const finish = () => {
-    if (done) return
-    done = true
-    callbacks.onDone()
-  }
-
-  const emitTool = (toolCall: ToolCallEvent) => {
-    toolCalls.set(toolCall.id, toolCall)
-    callbacks.onToolCall?.(toolCall)
-  }
-
-  await readSseStream(res, (eventName, data) => {
-    if (data === '[DONE]') {
-      finish()
-      return
-    }
-
-    let parsed: Record<string, unknown>
-    try {
-      parsed = JSON.parse(data) as Record<string, unknown>
-    } catch {
-      return
-    }
-
-    if (parsed.type === 'response.created') {
-      const resp = parsed.response as Record<string, unknown> | undefined
-      const id = resp?.id
-      if (typeof id === 'string') callbacks.onResponseId?.(id)
-      return
-    }
-
-    if (eventName === 'response.reasoning_summary_text.delta') {
-      const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
-      if (delta) callbacks.onThinking?.(delta)
-      return
-    }
-
-    if (eventName === 'response.reasoning_summary_text.added' || eventName === 'response.reasoning_summary_text.done') {
-      return
-    }
-
-    if (eventName === 'response.output_text.delta') {
-      const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
-      if (delta) {
-        callbacks.onThinkingDone?.()
-        callbacks.onToken(delta)
-        receivedText = true
-      }
-      return
-    }
-
-    if (eventName === 'response.output_item.added' || eventName === 'response.output_item.done') {
-      console.log('[Chat] Tool event:', eventName, (parsed.item as any)?.type, (parsed.item as any)?.name || '')
-      const item = parsed.item as Record<string, unknown> | undefined
-      if (!item) return
-
-      if (item.type === 'function_call') {
-        const id = String(item.call_id || item.id || crypto.randomUUID())
-        const args = parseJsonMaybe<Record<string, unknown>>(item.arguments, {})
-        emitTool({
-          id,
-          name: String(item.name || 'tool'),
-          args,
-          status: toolCalls.get(id)?.status || 'running',
-          result: toolCalls.get(id)?.result,
-        })
-      }
-
-      if (item.type === 'function_call_output') {
-        const id = String(item.call_id || item.id || crypto.randomUUID())
-        const existing = toolCalls.get(id)
-        emitTool({
-          id,
-          name: existing?.name || 'tool',
-          args: existing?.args || {},
-          result: textFromOutput(item.output),
-          status: item.status === 'error' ? 'error' : 'completed',
-        })
-      }
-      return
-    }
-
-    if (eventName === 'response.completed') {
-      const response = parsed.response as Record<string, unknown> | undefined
-      const finalText = finalTextFromResponse(response)
-      if (finalText && !receivedText) {
-        callbacks.onThinkingDone?.()
-        callbacks.onToken(finalText)
-      }
-      // Extract usage data
-      if (response && callbacks.onUsage) {
-        const usage = response.usage as Record<string, number> | undefined
-        if (usage) {
-          callbacks.onUsage({
-            inputTokens: usage.input_tokens || 0,
-            outputTokens: usage.output_tokens || 0,
-            totalTokens: usage.total_tokens || 0,
-            model: typeof response.model === 'string' ? response.model : undefined,
-          })
-        }
-      }
-      finish()
-      return
-    }
-
-    if (eventName === 'response.failed') {
-      const error = parsed.error as { message?: string } | undefined
-      callbacks.onError(new Error(error?.message || 'Hermes response failed'))
+  await readSseResponse(res, (ev) => {
+    dispatchResponsesEvent(ev.name, ev.data, callbacks, state)
+    if (ev.id !== undefined) {
+      const seq = Number(ev.id)
+      if (Number.isFinite(seq)) callbacks.onSeq?.(seq)
     }
   })
 
-  finish()
+  if (!state.done) {
+    state.done = true
+    callbacks.onDone()
+  }
+}
+
+/**
+ * Resume an in-progress (or recently completed) response from the Clavus
+ * server-side event buffer. Picks `/v1/responses/:id/stream` when responseId
+ * is known, else `/v1/responses/by-thread/:threadId/stream`.
+ *
+ * The buffer replays every event from `fromSeq` onwards, then tails live until
+ * the response finishes. Drives the same callbacks as `sendChatStream`.
+ */
+export async function resumeChatStream(
+  opts: { responseId?: string; threadId: string; fromSeq?: number },
+  callbacks: StreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const path = opts.responseId
+    ? `/v1/responses/${encodeURIComponent(opts.responseId)}/stream`
+    : `/v1/responses/by-thread/${encodeURIComponent(opts.threadId)}/stream`
+  const fromSeq = typeof opts.fromSeq === 'number' && opts.fromSeq > 0 ? opts.fromSeq : 0
+  const lastEventId = fromSeq > 0 ? fromSeq - 1 : -1
+  const url = lastEventId >= 0 ? `${path}?last_event_id=${lastEventId}` : path
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { 'Accept': 'text/event-stream' },
+    signal,
+  })
+
+  if (res.status === 404) {
+    throw new Error('No response buffer to resume from')
+  }
+  if (!res.ok) {
+    throw new Error(`Resume failed: ${res.status} ${res.statusText}`)
+  }
+
+  const state = createResponsesDispatchState()
+
+  await readSseResponse(res, (ev) => {
+    dispatchResponsesEvent(ev.name, ev.data, callbacks, state)
+    if (ev.id !== undefined) {
+      const seq = Number(ev.id)
+      if (Number.isFinite(seq)) callbacks.onSeq?.(seq)
+    }
+  })
+
+  if (!state.done) {
+    state.done = true
+    callbacks.onDone()
+  }
 }
 
 async function sendChatCompletionsStream(
@@ -422,7 +461,9 @@ async function sendChatCompletionsStream(
     callbacks.onDone()
   }
 
-  await readSseStream(res, (eventName, data) => {
+  await readSseResponse(res, (ev) => {
+    const eventName = ev.name
+    const data = ev.data
     if (data === '[DONE]') {
       finish()
       return
@@ -544,6 +585,7 @@ export interface RecoveredResponse {
   status: string
   text: string
   thinking?: string
+  toolCalls?: ToolCallEvent[]
   model?: string
   usage?: UsageData
 }
@@ -561,6 +603,7 @@ export async function recoverResponse(threadId: string): Promise<RecoveredRespon
       status: data.status,
       text: data.text,
       thinking: data.thinking,
+      toolCalls: Array.isArray(data.toolCalls) ? data.toolCalls : undefined,
       model: data.model,
       usage: data.usage,
     }

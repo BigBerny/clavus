@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
-import { recoverResponse } from '../gateway/chat.ts'
+import { recoverResponse, resumeChatStream } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 
 /**
@@ -36,10 +36,8 @@ function needsRecovery(threadId: string): boolean {
   return false
 }
 
-const POLL_DELAYS = [3000, 6000, 12000]
-
-async function attemptRecovery(threadId: string, pollAttempt = 0): Promise<void> {
-  console.log('[Recovery] Attempting recovery for', threadId, 'poll attempt', pollAttempt)
+async function attemptRecovery(threadId: string): Promise<void> {
+  console.log('[Recovery] Attempting recovery for', threadId)
 
   const store = useChatStore.getState()
   const ts = store.getThreadState(threadId)
@@ -50,17 +48,123 @@ async function attemptRecovery(threadId: string, pollAttempt = 0): Promise<void>
     return
   }
 
+  // 1) Prefer streaming from the Clavus server-side event buffer. This restores
+  //    reasoning + tool calls + text, not just final text.
+  // Identify (or create) the assistant message slot we will populate.
+  const assistantMsg = [...ts.messages].reverse().find(m => m.role === 'assistant' && (!m.content || !!m.streaming))
+  let assistantId: string | null = assistantMsg?.id || null
+  const responseId = assistantMsg?.hermesResponseId
+  const fromSeq = typeof assistantMsg?.lastEventSeq === 'number' ? assistantMsg.lastEventSeq + 1 : 0
+
+  // Clean up any stale connection-failed system messages before re-streaming
+  const messages = [...ts.messages]
+  while (messages.length > 0) {
+    const last = messages[messages.length - 1]
+    if (last.role === 'system' && (last.content.startsWith('Connection failed') || last.content.startsWith('Error:'))) {
+      messages.pop()
+    } else {
+      break
+    }
+  }
+  if (messages.length !== ts.messages.length) {
+    useChatStore.setState((s) => {
+      const cur = s.threadStates[threadId]
+      if (!cur) return s
+      return { threadStates: { ...s.threadStates, [threadId]: { ...cur, messages } } }
+    })
+  }
+
+  // Lazy slot creation: only allocate an assistant bubble once we know a buffer
+  // or a completed response actually exists. This avoids polluting old threads
+  // with empty streaming bubbles on app mount.
+  let createdSlot = false
+  const ensureSlot = (): string => {
+    if (assistantId) return assistantId
+    assistantId = useChatStore.getState().addMessage(threadId, {
+      role: 'assistant',
+      content: '',
+      streaming: true,
+    })
+    createdSlot = true
+    useChatStore.getState().setStreaming(threadId, true)
+    return assistantId
+  }
+  // If a prior assistant slot already exists, mark the thread streaming so the
+  // UI shows the bubble while we attempt resume.
+  if (assistantId) useChatStore.getState().setStreaming(threadId, true)
+
+  // Build resume callbacks that allocate the slot lazily on the FIRST inbound
+  // event. Until then, the buffer endpoint may still 404 (no buffer for this
+  // thread) — in which case we never create a bubble.
+  let resumeReceivedEvent = false
+  const resumeCallbacks = {
+    onThinking: (token: string) => useChatStore.getState().appendThinking(threadId, ensureSlot(), token),
+    onThinkingDone: () => useChatStore.getState().setThinkingDone(threadId, ensureSlot()),
+    onToken: (token: string) => useChatStore.getState().appendToMessage(threadId, ensureSlot(), token),
+    onToolCall: (tc: import('../gateway/chat.ts').ToolCallEvent) => {
+      const id = ensureSlot()
+      const cur = useChatStore.getState().getThreadState(threadId).messages.find(m => m.id === id)
+      const existing = cur?.toolCalls || []
+      const idx = existing.findIndex(t => t.id === tc.id)
+      const next = idx >= 0
+        ? existing.map((t, i) => i === idx ? tc : t)
+        : [...existing, tc]
+      useChatStore.getState().updateToolCalls(threadId, id, next)
+    },
+    onResponseId: (rid: string) => useChatStore.getState().setHermesResponseId(threadId, ensureSlot(), rid),
+    onSeq: (seq: number) => {
+      resumeReceivedEvent = true
+      // Only persist seq if we have a slot (i.e. real content has flowed)
+      if (assistantId) useChatStore.getState().setLastEventSeq(threadId, assistantId, seq)
+    },
+    onUsage: (usage: import('../gateway/chat.ts').UsageData) => {
+      const id = ensureSlot()
+      useChatStore.getState().setMessageUsage(threadId, id, {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.totalTokens,
+      })
+      if (usage.model) useChatStore.getState().setMessageModel(threadId, id, usage.model)
+    },
+    onDone: () => {
+      if (assistantId) useChatStore.getState().finalizeMessage(threadId, assistantId)
+      useChatStore.getState().setStreaming(threadId, false)
+    },
+    onError: (err: Error) => {
+      console.error('[Recovery] resumeChatStream onError:', err.message)
+      if (assistantId) useChatStore.getState().finalizeMessage(threadId, assistantId)
+      useChatStore.getState().setStreaming(threadId, false)
+    },
+  }
+
+  try {
+    await resumeChatStream({ responseId, threadId, fromSeq }, resumeCallbacks)
+    if (resumeReceivedEvent) {
+      console.log('[Recovery] Resume completed for', threadId)
+      return
+    }
+    // Resume returned 200 but emitted no events (unlikely with our buffer) —
+    // fall through to legacy recovery.
+  } catch (e) {
+    console.warn('[Recovery] Buffer resume not available, falling back to Hermes-store recovery:', e)
+    useChatStore.getState().setStreaming(threadId, false)
+  }
+
+  // 2) Legacy fallback: Hermes-store-only recovery (text + reasoning + tool calls extracted from completed response).
   const recovered = await recoverResponse(threadId)
   if (!recovered) {
     console.log('[Recovery] No response found in Hermes for', threadId)
+    // If we eagerly created a slot but neither path produced content, remove it.
+    if (createdSlot && assistantId) {
+      useChatStore.getState().removeMessage(threadId, assistantId)
+    }
     return
   }
 
-  console.log('[Recovery] Hermes response:', recovered.status, 'text length:', recovered.text?.length || 0)
-
-  // Dedup: check if we already have this response
+  // Dedup: if our assistant slot already references this responseId, do nothing.
   if (recovered.responseId) {
-    const existing = ts.messages.find(m => m.hermesResponseId === recovered.responseId)
+    const existing = useChatStore.getState().getThreadState(threadId).messages
+      .find(m => m.hermesResponseId === recovered.responseId && m.content)
     if (existing) {
       console.log('[Recovery] Already have this response, skipping')
       return
@@ -68,57 +172,46 @@ async function attemptRecovery(threadId: string, pollAttempt = 0): Promise<void>
   }
 
   if ((recovered.status === 'completed' || recovered.status === 'incomplete') && recovered.text) {
-    // Remove error system messages and empty assistant messages from the end
-    const messages = [...ts.messages]
-    while (messages.length > 0) {
-      const last = messages[messages.length - 1]
-      if (last.role === 'system' && (last.content.startsWith('Connection failed') || last.content.startsWith('Error:'))) {
-        messages.pop()
-      } else if (last.role === 'assistant' && !last.content) {
-        messages.pop()
-      } else {
-        break
-      }
-    }
-
-    // Update store with cleaned messages
     const freshStore = useChatStore.getState()
-    const currentTs = freshStore.threadStates[threadId]
-    if (currentTs) {
-      useChatStore.setState({
-        threadStates: {
-          ...freshStore.threadStates,
-          [threadId]: { ...currentTs, messages },
-        },
+    // Use the existing slot if any, else add a new one.
+    const targetId = assistantId && freshStore.getThreadState(threadId).messages.some(m => m.id === assistantId)
+      ? assistantId
+      : null
+    if (targetId) {
+      freshStore.updateMessage(threadId, targetId, recovered.text)
+      if (recovered.toolCalls && recovered.toolCalls.length > 0) {
+        freshStore.updateToolCalls(threadId, targetId, recovered.toolCalls)
+      }
+      if (recovered.model) freshStore.setMessageModel(threadId, targetId, recovered.model)
+      if (recovered.usage) freshStore.setMessageUsage(threadId, targetId, recovered.usage)
+      freshStore.setHermesResponseId(threadId, targetId, recovered.responseId)
+      freshStore.finalizeMessage(threadId, targetId)
+    } else {
+      const newId = freshStore.addMessage(threadId, {
+        role: 'assistant',
+        content: recovered.text,
+        thinking: recovered.thinking,
+        thinkingDone: recovered.thinking ? true : undefined,
+        toolCalls: recovered.toolCalls,
+        model: recovered.model,
+        usage: recovered.usage ? {
+          inputTokens: recovered.usage.inputTokens,
+          outputTokens: recovered.usage.outputTokens,
+          totalTokens: recovered.usage.totalTokens,
+        } : undefined,
+        hermesResponseId: recovered.responseId,
       })
+      freshStore.finalizeMessage(threadId, newId)
     }
 
-    // Add the recovered assistant message
-    const msgId = freshStore.addMessage(threadId, {
-      role: 'assistant',
-      content: recovered.text,
-      thinking: recovered.thinking,
-      thinkingDone: recovered.thinking ? true : undefined,
-      model: recovered.model,
-      usage: recovered.usage ? {
-        inputTokens: recovered.usage.inputTokens,
-        outputTokens: recovered.usage.outputTokens,
-        totalTokens: recovered.usage.totalTokens,
-      } : undefined,
-      hermesResponseId: recovered.responseId,
-    })
-    freshStore.finalizeMessage(threadId, msgId)
-
-    console.log('[Recovery] Response recovered for thread', threadId, recovered.responseId)
+    console.log('[Recovery] Response recovered via Hermes store for thread', threadId, recovered.responseId)
     return
   }
 
-  if (recovered.status === 'in_progress' && pollAttempt < POLL_DELAYS.length) {
-    console.log('[Recovery] Still in progress, polling again in', POLL_DELAYS[pollAttempt], 'ms')
-    setTimeout(() => attemptRecovery(threadId, pollAttempt + 1), POLL_DELAYS[pollAttempt])
-    return
+  // Recovered but neither completed nor with text — drop any eager slot.
+  if (createdSlot && assistantId) {
+    useChatStore.getState().removeMessage(threadId, assistantId)
   }
-
   console.log('[Recovery] Cannot recover — status:', recovered.status, 'text:', recovered.text?.length || 0)
 }
 

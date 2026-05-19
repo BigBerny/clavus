@@ -37,6 +37,9 @@ export interface Message {
   usage?: MessageUsage
   media?: MediaAttachment[]
   hermesResponseId?: string
+  /** Highest seq id received from the Clavus server-side event buffer.
+   *  Used to resume the stream after disconnect (`?last_event_id=<seq>`). */
+  lastEventSeq?: number
 }
 
 export interface ThreadStreamState {
@@ -68,6 +71,7 @@ interface ChatState {
   setMessageModel: (threadId: string, id: string, model: string) => void
   setMessageUsage: (threadId: string, id: string, usage: MessageUsage) => void
   setHermesResponseId: (threadId: string, id: string, responseId: string) => void
+  setLastEventSeq: (threadId: string, id: string, seq: number) => void
   addMedia: (threadId: string, id: string, media: MediaAttachment[]) => void
   clearMessages: (threadId: string) => void
   removeMessage: (threadId: string, messageId: string) => void
@@ -322,6 +326,25 @@ export const useChatStore = create<ChatState>((set, get) => ({
             ...ts,
             messages: ts.messages.map((m) =>
               m.id === id ? { ...m, hermesResponseId: responseId } : m,
+            ),
+          },
+        },
+      }
+    }),
+
+  setLastEventSeq: (threadId, id, seq) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: {
+            ...ts,
+            messages: ts.messages.map((m) =>
+              m.id === id
+                ? { ...m, lastEventSeq: typeof m.lastEventSeq === 'number' ? Math.max(m.lastEventSeq, seq) : seq }
+                : m,
             ),
           },
         },

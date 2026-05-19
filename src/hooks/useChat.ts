@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, generateTitleViaOpenRouter, recoverResponse } from '../gateway/chat.ts'
+import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import { useModelStore } from '../state/preset.ts'
@@ -181,55 +181,60 @@ export function useChat() {
       }
     }
 
+    const streamCallbacks = {
+      onThinking: (token: string) => store.getState().appendThinking(threadId, assistantId, token),
+      onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
+      onToken: (token: string) => store.getState().appendToMessage(threadId, assistantId, token),
+      onToolCall: handleToolCall,
+      onResponseId: (responseId: string) => {
+        store.getState().setHermesResponseId(threadId, assistantId, responseId)
+      },
+      onSeq: (seq: number) => {
+        store.getState().setLastEventSeq(threadId, assistantId, seq)
+      },
+      onUsage: (usage: import('../gateway/chat.ts').UsageData) => {
+        store.getState().setMessageUsage(threadId, assistantId, {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+        })
+        // Use model from response if available, fallback to selected model
+        const modelLabel = usage.model || modelOption?.shortLabel
+        if (modelLabel) {
+          store.getState().setMessageModel(threadId, assistantId, modelLabel)
+        }
+      },
+      onDone: () => {
+        store.getState().finalizeMessage(threadId, assistantId)
+        // Fallback: set model from selection if onUsage didn't fire
+        const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
+        if (!msg?.model && modelOption) {
+          store.getState().setMessageModel(threadId, assistantId, modelOption.shortLabel)
+        }
+        store.getState().setStreaming(threadId, false)
+        store.getState().setAbortController(threadId, null)
+      },
+      onError: (error: Error) => {
+        console.error(`[Chat] Stream error (onError):`, error.name, error.message, error)
+        store.getState().finalizeMessage(threadId, assistantId)
+        store.getState().setStreaming(threadId, false)
+        store.getState().setAbortController(threadId, null)
+        if (error.name !== 'AbortError') {
+          const ts = store.getState().getThreadState(threadId)
+          const msg = ts.messages.find((m) => m.id === assistantId)
+          if (msg && !msg.content) {
+            store.getState().removeMessage(threadId, assistantId)
+          }
+          store.getState().addMessage(threadId, { role: 'system', content: `Error: ${error.message}` })
+        }
+      },
+    }
+
     try {
       await sendChatStream(
         config,
         apiMessages,
-        {
-          onThinking: (token) => store.getState().appendThinking(threadId, assistantId, token),
-          onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
-          onToken: (token) => store.getState().appendToMessage(threadId, assistantId, token),
-          onToolCall: handleToolCall,
-          onResponseId: (responseId) => {
-            store.getState().setHermesResponseId(threadId, assistantId, responseId)
-          },
-          onUsage: (usage) => {
-            store.getState().setMessageUsage(threadId, assistantId, {
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              totalTokens: usage.totalTokens,
-            })
-            // Use model from response if available, fallback to selected model
-            const modelLabel = usage.model || modelOption?.shortLabel
-            if (modelLabel) {
-              store.getState().setMessageModel(threadId, assistantId, modelLabel)
-            }
-          },
-          onDone: () => {
-            store.getState().finalizeMessage(threadId, assistantId)
-            // Fallback: set model from selection if onUsage didn't fire
-            const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
-            if (!msg?.model && modelOption) {
-              store.getState().setMessageModel(threadId, assistantId, modelOption.shortLabel)
-            }
-            store.getState().setStreaming(threadId, false)
-            store.getState().setAbortController(threadId, null)
-          },
-          onError: (error) => {
-            console.error(`[Chat] Stream error (onError):`, error.name, error.message, error)
-            store.getState().finalizeMessage(threadId, assistantId)
-            store.getState().setStreaming(threadId, false)
-            store.getState().setAbortController(threadId, null)
-            if (error.name !== 'AbortError') {
-              const ts = store.getState().getThreadState(threadId)
-              const msg = ts.messages.find((m) => m.id === assistantId)
-              if (msg && !msg.content) {
-                store.getState().removeMessage(threadId, assistantId)
-              }
-              store.getState().addMessage(threadId, { role: 'system', content: `Error: ${error.message}` })
-            }
-          },
-        },
+        streamCallbacks,
         controller.signal,
         {
           conversationId: threadId,
@@ -250,65 +255,47 @@ export function useChat() {
         return
       }
 
-      // Check if Hermes is still processing server-side before showing an error
-      const hermesState = await recoverResponse(threadId).catch(() => null)
+      // Try to resume from the Clavus server-side event buffer first.
+      const msgForResume = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
+      const responseId = msgForResume?.hermesResponseId
+      const fromSeq = typeof msgForResume?.lastEventSeq === 'number' ? msgForResume.lastEventSeq + 1 : 0
 
-      if (hermesState?.status === 'in_progress') {
-        // Hermes is still working — keep the streaming bubble visible
-        // Poll every 3s while visible, check immediately on foreground
-        console.log('[Chat] Connection lost but Hermes still processing, polling...')
-        setConnectionStatus('reconnecting')
+      // Re-arm streaming flag so UI shows the response is still progressing
+      store.getState().setStreaming(threadId, true)
+      const resumeController = new AbortController()
+      store.getState().setAbortController(threadId, resumeController)
+      setConnectionStatus('reconnecting')
 
-        let stopped = false
-
-        const finishWith = (result: NonNullable<Awaited<ReturnType<typeof recoverResponse>>>) => {
-          stopped = true
-          document.removeEventListener('visibilitychange', onVisible)
-          window.removeEventListener('clavus:app-resume', onVisible)
-          store.getState().updateMessage(threadId, assistantId, result.text)
-          if (result.model) store.getState().setMessageModel(threadId, assistantId, result.model)
-          if (result.usage) store.getState().setMessageUsage(threadId, assistantId, result.usage)
-          store.getState().setHermesResponseId(threadId, assistantId, result.responseId)
-          store.getState().finalizeMessage(threadId, assistantId)
-          store.getState().setStreaming(threadId, false)
-          setConnectionStatus('connected')
-          console.log('[Chat] Response recovered via polling', result.responseId)
-        }
-
-        const poll = async () => {
-          if (stopped) return
-          const result = await recoverResponse(threadId).catch(() => null)
-          if (stopped) return
-          if (result?.text && (result.status === 'completed' || result.status === 'incomplete' || result.status === 'failed')) {
-            finishWith(result)
-          } else if (!result || result.status !== 'in_progress') {
-            // Genuinely failed with no text
-            stopped = true
-            document.removeEventListener('visibilitychange', onVisible)
-            window.removeEventListener('clavus:app-resume', onVisible)
-            store.getState().finalizeMessage(threadId, assistantId)
-            store.getState().setStreaming(threadId, false)
-            setConnectionStatus('disconnected')
-          } else if (document.visibilityState === 'visible') {
-            setTimeout(poll, 3000)
-          }
-        }
-
-        const onVisible = () => {
-          if (document.visibilityState === 'visible' && !stopped) poll()
-        }
-        document.addEventListener('visibilitychange', onVisible)
-        window.addEventListener('clavus:app-resume', onVisible)
-        poll()
-        return
+      let resumed = false
+      try {
+        console.log('[Chat] Resuming from buffer', { responseId, fromSeq })
+        await resumeChatStream(
+          { responseId, threadId, fromSeq },
+          streamCallbacks,
+          resumeController.signal,
+        )
+        resumed = true
+        setConnectionStatus('connected')
+      } catch (resumeErr) {
+        console.warn('[Chat] Resume failed:', resumeErr)
+        // Resume itself failed — fall back to the legacy Hermes-store path
+        // (good for old responses whose buffer is gone), then retry.
       }
 
-      if (hermesState?.status === 'completed' && hermesState.text) {
-        // Already completed — just use it
-        console.log('[Chat] Response already completed on Hermes, recovering')
+      if (resumed) return
+
+      store.getState().setAbortController(threadId, null)
+
+      // Legacy fallback: maybe the response is already completed in Hermes' own store.
+      const hermesState = await recoverResponse(threadId).catch(() => null)
+      if (hermesState && (hermesState.status === 'completed' || hermesState.status === 'incomplete') && hermesState.text) {
+        console.log('[Chat] Response already completed on Hermes, recovering text-only')
         store.getState().updateMessage(threadId, assistantId, hermesState.text)
         if (hermesState.model) store.getState().setMessageModel(threadId, assistantId, hermesState.model)
         if (hermesState.usage) store.getState().setMessageUsage(threadId, assistantId, hermesState.usage)
+        if (hermesState.toolCalls && hermesState.toolCalls.length > 0) {
+          store.getState().updateToolCalls(threadId, assistantId, hermesState.toolCalls)
+        }
         store.getState().setHermesResponseId(threadId, assistantId, hermesState.responseId)
         store.getState().finalizeMessage(threadId, assistantId)
         store.getState().setStreaming(threadId, false)
