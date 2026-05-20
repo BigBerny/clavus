@@ -19,10 +19,20 @@ import {
   subscribe as bufferSubscribe,
 } from './server/responseEventBuffer.ts'
 import { createSseParser, formatSseFrame } from './src/lib/sseParse.ts'
+import {
+  buildSystemPrompt,
+  needsLlm,
+  type ComposeChannel,
+  type FieldHint,
+} from './src/lib/composePrompts.ts'
 
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const DOCUMENTS_ROOT = nodePath.join(process.env.HOME || '', 'Documents/Workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
+// OpenRouter key is read from env-only (GitHub push protection blocks
+// committing it). Set OPENROUTER_API_KEY in your shell / .env.local before
+// starting Vite or the compose endpoint will fail at request time.
+const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || ''
 
 // Read OPENAI_API_KEY from .env for server-side proxy
 const OPENAI_KEY = (() => {
@@ -884,6 +894,232 @@ function desktopDictationPlugin() {
   }
 }
 
+/**
+ * Shared compose endpoint for desktop dictation + iOS Capacitor keyboard.
+ *
+ *  POST /desktop/dictation/compose
+ *  POST /keyboard/compose            (alias for the iOS keyboard)
+ *
+ *  Body: { text, channel, translateToEnglish, appName?, bundleId? }
+ *  Resp: { text }
+ *
+ *  Routes through OpenRouter Gemini 3.5 Flash with reasoning_effort=minimal.
+ *  The OpenRouter API key stays server-side; clients never see it.
+ */
+function composeApiPlugin() {
+  const historyFile = nodePath.join(THREADS_DATA_DIR, 'desktop-compose.jsonl')
+  const VALID_CHANNELS: ComposeChannel[] = ['insert-as', 'slack', 'messaging', 'email', 'prompt']
+  const VALID_FIELD_HINTS: FieldHint[] = ['generic', 'url', 'search', 'email']
+
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (req.url !== '/desktop/dictation/compose' && req.url !== '/keyboard/compose') return next()
+
+      const origin = req.headers.origin
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin)
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
+        res.setHeader('Vary', 'Origin')
+      }
+
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 204
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'content-type')
+        res.end()
+        return
+      }
+
+      if (req.method !== 'POST') {
+        res.statusCode = 405
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: 'Method not allowed' }))
+        return
+      }
+
+      const writeError = (status: number, msg: string) => {
+        res.statusCode = status
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: msg }))
+      }
+
+      try {
+        if (!OPENROUTER_KEY) {
+          return writeError(500, 'OPENROUTER_API_KEY is not set in the Vite server environment')
+        }
+
+        const chunks: Buffer[] = []
+        for await (const chunk of req) chunks.push(Buffer.from(chunk))
+        const raw = Buffer.concat(chunks).toString('utf-8')
+        const body = raw.length > 0 ? JSON.parse(raw) : {}
+
+        const text: string = typeof body.text === 'string' ? body.text.trim() : ''
+        const channel = body.channel as ComposeChannel
+        const translateToEnglish: boolean = Boolean(body.translateToEnglish)
+        const rawFieldHint = typeof body.fieldHint === 'string' ? body.fieldHint : 'generic'
+        const fieldHint: FieldHint = VALID_FIELD_HINTS.includes(rawFieldHint as FieldHint)
+          ? (rawFieldHint as FieldHint)
+          : 'generic'
+        const appName: string = typeof body.appName === 'string' ? body.appName : ''
+        const bundleId: string = typeof body.bundleId === 'string' ? body.bundleId : ''
+        const source: string = typeof body.source === 'string' ? body.source : 'unknown'
+
+        if (!text) return writeError(400, 'Missing or empty `text`')
+        if (!VALID_CHANNELS.includes(channel)) return writeError(400, `Invalid channel: ${channel}`)
+
+        if (!needsLlm(channel, translateToEnglish, fieldHint)) {
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ text, skipped: true }))
+          if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+          fs.appendFileSync(historyFile, JSON.stringify({
+            timestamp: new Date().toISOString(),
+            source,
+            appName,
+            bundleId,
+            channel,
+            translateToEnglish,
+            fieldHint,
+            skipped: true,
+            inputChars: text.length,
+            outputChars: text.length,
+            durationMs: 0,
+            status: 200,
+          }) + '\n')
+          return
+        }
+
+        const systemPrompt = buildSystemPrompt(channel, translateToEnglish, fieldHint)
+        const startedAt = Date.now()
+        const openrouterBody: Record<string, unknown> = {
+          model: 'google/gemini-3.5-flash',
+          stream: false,
+          reasoning: { effort: 'minimal' },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text },
+          ],
+        }
+
+        const openrouterRes = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENROUTER_KEY}`,
+            'HTTP-Referer': 'https://openclaw.random-hamster.win',
+            'X-Title': 'Clavus Dictation',
+          },
+          body: JSON.stringify(openrouterBody),
+          signal: AbortSignal.timeout(30000),
+        })
+
+        const responseText = await openrouterRes.text()
+        let parsed: any = null
+        try { parsed = JSON.parse(responseText) } catch {}
+
+        const out: string = parsed?.choices?.[0]?.message?.content?.trim() || ''
+
+        if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+        fs.appendFileSync(historyFile, JSON.stringify({
+          timestamp: new Date().toISOString(),
+          source,
+          appName,
+          bundleId,
+          channel,
+          translateToEnglish,
+          fieldHint,
+          inputChars: text.length,
+          outputChars: out.length,
+          durationMs: Date.now() - startedAt,
+          status: openrouterRes.status,
+          model: openrouterBody.model,
+        }) + '\n')
+
+        if (!openrouterRes.ok || !out) {
+          return writeError(openrouterRes.status || 502, `Compose failed: ${responseText.slice(0, 200)}`)
+        }
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ text: out }))
+      } catch (err: any) {
+        writeError(502, err?.message || 'Compose error')
+      }
+    })
+  }
+
+  return {
+    name: 'compose-api',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
+/**
+ * Apple App Site Association (Universal Links).
+ *
+ * When the Clavus.app is signed with the `com.apple.developer.associated-domains`
+ * entitlement and `applinks:openclaw.random-hamster.win`, macOS will route
+ * HTTPS clicks to workspace-file URLs directly into the app instead of the
+ * browser — covering links clicked from Slack, Mail, Notes, terminal, etc.
+ *
+ * Setup:
+ *   1. Set CLAVUS_APPLE_TEAM_ID in your shell environment (10-character team
+ *      identifier from developer.apple.com).
+ *   2. Rebuild + re-sign the app so it picks up the new entitlement.
+ *   3. Confirm the file is reachable at
+ *      https://openclaw.random-hamster.win/.well-known/apple-app-site-association
+ *
+ * Until the team ID is configured the endpoint returns 404 (safe — Universal
+ * Links remain inactive but every other deep-link path still works).
+ */
+function appleAppSiteAssociationPlugin() {
+  const BUNDLE_ID = 'win.random-hamster.clavus'
+  const teamId = process.env.CLAVUS_APPLE_TEAM_ID || ''
+
+  const attach = (server: any) => {
+    server.middlewares.use((req: any, res: any, next: any) => {
+      if (req.url !== '/.well-known/apple-app-site-association' && req.url !== '/apple-app-site-association') {
+        return next()
+      }
+      if (!teamId) {
+        res.statusCode = 404
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: 'CLAVUS_APPLE_TEAM_ID not configured' }))
+        return
+      }
+      const aasa = {
+        applinks: {
+          apps: [],
+          details: [
+            {
+              appIDs: [`${teamId}.${BUNDLE_ID}`],
+              // Universal Links must be HTTPS path patterns. The hash route
+              // is part of the URL fragment so we match the prefix that
+              // generates these links in the openclaw-client.
+              components: [
+                { '/': '/*' },
+              ],
+            },
+          ],
+        },
+      }
+      res.statusCode = 200
+      // Per Apple docs, AASA must be served as application/json (no .json
+      // extension, no signing required on macOS 12+).
+      res.setHeader('Content-Type', 'application/json')
+      res.setHeader('Cache-Control', 'no-cache')
+      res.end(JSON.stringify(aasa))
+    })
+  }
+
+  return {
+    name: 'apple-app-site-association',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
 function openaiRealtimeProxy() {
   const attach = (server: any) => {
     server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -1286,6 +1522,8 @@ export default defineConfig({
     threadsApiPlugin(),
     elevenLabsProxy(),
     desktopDictationPlugin(),
+    composeApiPlugin(),
+    appleAppSiteAssociationPlugin(),
     openaiRealtimeProxy(),
     workspacePlugin(),
     workspacePlugin(DOCUMENTS_ROOT, '/api/documents', 'documents-api'),

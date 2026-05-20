@@ -48,18 +48,40 @@ function CodeBlock({ className, children, ...props }: React.ComponentPropsWithou
 // ─── Workspace File Link Card ────────────────────────────────────────────────
 
 /**
- * Detect a Clavus workspace-file deep link of the form `<origin>#/file/<encoded>`
- * (or the legacy `#/doc/...` alias). Host-agnostic on purpose so links work
- * across openclaw.random-hamster.win, the Tailscale host, and localhost in dev.
+ * Detect a Clavus workspace-file link. Accepts:
+ *   - `<origin>#/file/<encoded>` (preferred)
+ *   - `<origin>#/doc/<encoded>`  (legacy alias)
+ *   - `clavus://file/<encoded>`  (deep link, from external apps / Tauri shell)
+ *   - `clavus://doc/<encoded>`   (legacy alias)
+ *
+ * Host-agnostic for the HTTPS form so links work across
+ * openclaw.random-hamster.win, the Tailscale host, and localhost in dev.
  */
 function parseClavusFileUrl(href: string): { path: string; filename: string } | null {
+  let encoded: string | null = null
+
+  // Custom-scheme form first — these can fail `new URL()` parsing in some
+  // browsers, so check via string prefix.
+  for (const prefix of ['clavus://file/', 'clavus://doc/']) {
+    if (href.startsWith(prefix)) {
+      encoded = href.slice(prefix.length).split(/[?#]/)[0]
+      break
+    }
+  }
+
+  if (encoded === null) {
+    try {
+      const url = new URL(href)
+      const hash = url.hash
+      if (hash.startsWith('#/file/')) encoded = hash.slice('#/file/'.length)
+      else if (hash.startsWith('#/doc/')) encoded = hash.slice('#/doc/'.length)
+    } catch {
+      return null
+    }
+  }
+
+  if (!encoded) return null
   try {
-    const url = new URL(href)
-    const hash = url.hash
-    let encoded: string | null = null
-    if (hash.startsWith('#/file/')) encoded = hash.slice('#/file/'.length)
-    else if (hash.startsWith('#/doc/')) encoded = hash.slice('#/doc/'.length) // legacy alias
-    if (!encoded) return null
     const decoded = decodeURIComponent(encoded)
     const path = decoded.startsWith('/') ? decoded : '/' + decoded
     const filename = path.split('/').filter(Boolean).pop() || 'File'
