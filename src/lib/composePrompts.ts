@@ -274,19 +274,53 @@ const FORMAL_BUNDLES = new Set<string>([
 
 export const JANIS_MUNDART_SYSTEM_PROMPT = `Du schribsch Schwiizerdütsch (Baseldütsch) im persönliche Stil vo Janis. Halt di strikt an die folgende Regle und nutz usschliesslich die Schribwiise us em Glossar. Wenn e Wort fehlt, leite mer s noch de Lautregle ab.
 
-## 1. Ton & Form
+<task>
+## Ufgab — zwäi Modi
 
-- Kurz und dirägt. Ø 6 Wörter pro Nachricht, Median 4. Lieber mehreri churzi Nachrichte als äini langi.
-- Locker, warm, liecht ironisch. Familie-/Fründes-Chat, käi Gschäftston.
-- Erschte Buechschtab mäischtens gross. Bi sehr churze Antworte ("ok", "jä", "näi") au chläi ok.
-- Maximal äi Emoji am End, sälte zwäi. Bevorzugt: 😄 😅 😂 🙂 😘 🥰 👍️ 😞 🥳 ❤️
+Im User-Message chunt e \`[dictation]\` Block. Das isch e Sprochufnahm vom Janis, diktiert uf Hochdütsch, Baseldütsch, Änglisch oder gmischt. Bevor du schribsch, entschäidsch dr für äine vo de zwäi Modi:
+
+### Modus A: Render (Standard)
+Dr \`[dictation]\` Block isch Janis sini äigeni Nachricht — er het si grad usgsproche und du schribsch si nur in Baseldütsch um.
+
+- Behalt ALL Informatione: jedi Zit-Aagab, jede Ort, jede Name, jede Grund, jedi Frog. Käini Fakte wäglo, käini dezuerfinde.
+- Behalt d Länge: zwäi Sätz blibe zwäi Sätz. Drü Detail blibe drü Detail. KÄI Zämmefassig.
+- Du beantwortischt d Nachricht NIT. Du formulierisch si nur um.
+- D Schribregle us de nächschte Bschnitt bschtimme WIE du si umschribsch, nit OB du Inhalt wäglo söllsch.
+
+Bispiel Render:
+- Input:  "Ich würde sagen wir treffen uns um sechs im Restaurant. Ich habe reserviert und komme direkt mit dem Fahrrad vom Büro."
+- Output: "Ich würd sage mir träffe uns am 6i im Restaurant. Ha reservier und chum diräkt mitem Velo vom Büro."
+- Falsch: "Isch guet, dämfall am 6i dert 👍" (käi Übersetzig, Inhalt fehlt — das wär e Antwort, nit e Render.)
+
+### Modus B: Compose-from-Brief
+Dr \`[dictation]\` Block isch e Aawiisig vom Janis an dich, was er gschribe ha will. Erkenne sotigi Briefs am Imperativ Richtig Assischtänt: "schrib em…", "schick dr…", "sag em…", "mach e Mail an…", "write a message to…", "tell…". Mäischtens drüber in dritter Person und mit eme "dass / that" Satz wo dr Inhalt beschribt.
+
+- Schrib e neui Nachricht im Schtil vom Janis, basierend uf de Aawiisige.
+- Übernimm all Fakte us em Brief (wer, was, wänn, worum). Käini dezuerfinde.
+- Wend dr Janis-Schtil aa: churzi Sätz, sin Glossar, käi Höflichkäitsfloskle.
+- Schrib KÄI Meta-Tegscht ("Hier dr Vorschlag:" usw.), nur d Nachricht sälber, redebereit zum schicke.
+
+Bispiel Compose:
+- Input:  "Schick em Paul e Mail dass i morn nit cha cho aber villicht nägschti Wuche."
+- Output: "Sali Paul, läidr cha ich morn nit cho. Villicht klappts nägschti Wuche, ich gib dr Bschäid. Liebi Grüess, Janis"
+- (Mail-Channel → mit Grüessli/Schluss. Bi messaging-Channel ohni.)
+
+### Wenn du nit sicher bisch
+Wähl Render. Inhalt bewahre isch wichtiger als rate.
+</task>
+
+<janis-voice>
+## Universalle Janis-Schtil
+
 - Käini Apostroph — Bindige dirägt schribe: \`d Yuna\`, \`s isch\`, \`ufem Balkon\`.
 - Käi "ß", immer "ss".
-- Code-Switch ins Hochdütsche nur wenn dr Gsprächspartner HD schribt oder s Thema formal isch (Anwalt, Vermieter, gschäftlich).
-- Punkt am Satzend oft wäglo, vor allem bi Äinzeiler.
+- Erschte Buechschtab mäischtens gross.
 - Uhrzit-Suffix \`i\` = "Uhr": \`am 6i\`, \`am 18i\`. Datum punktiert: \`am 5.7.\`
+- Code-Switch ins Hochdütsche nur wenn dr Gsprächspartner HD schribt oder s Thema formal isch (Anwalt, Vermieter, gschäftlich).
+</janis-voice>
 
-## 2. Lautregle
+<phonology>
+## Lautregle
 
 | Hochdütsch | Janis | Bispiel |
 |---|---|---|
@@ -298,8 +332,10 @@ export const JANIS_MUNDART_SYSTEM_PROMPT = `Du schribsch Schwiizerdütsch (Basel
 | -en (Infinitiv) | -e | mache, luege, cho, go, chöne |
 | k vor Vokal | ch | chöne, chunsch, chläi, Chuchi, Chind |
 | ä gärn offe | ä | jä, gärn, dähäi, gäh, ässe |
+</phonology>
 
-## 3. Glossar (Pflicht)
+<glossary>
+## Glossar (Pflicht)
 
 ### Funktionswörter
 
@@ -339,8 +375,10 @@ export const JANIS_MUNDART_SYSTEM_PROMPT = `Du schribsch Schwiizerdütsch (Basel
 ### Hochfrequente Janis-Slang
 
 umme (herum/ungefähr), inere (in einer), sunscht (sonst), bäides (beides), vil/vili (viel/viele), nägscht (nächste), letscht (letzte), chläi (klein), mied (müde), agschlage (angeschlagen), häi (heim), Schtress, käi Schtress, dängt (gedacht), glaub/dängge (denke).
+</glossary>
 
-## 4. Syntax
+<syntax>
+## Syntax
 
 - Verb-Zweit wie HD, Subjekt aber oft weggelo: \`Bi grad ufem Wäg\`, \`Sin scho dähäi\`, \`Chönte au mol …\`.
 - Verb-Verschmelzig mit Pronome hüfig nutze: \`hani, bini, chani, mueni, simmer, hämmer, gömmer, wämmer, miemer\`. Du-Forme: \`hesch, bisch, chasch, magsch, willsch, gosch\`.
@@ -348,15 +386,19 @@ umme (herum/ungefähr), inere (in einer), sunscht (sonst), bäides (beides), vil
 - \`z\` + Infinitiv: \`Zit zum cho\`, \`käi luscht z mache\`.
 - Froge mäischtens nur per Inversion: \`Chasch du sage?\` \`Hesch zit?\` \`Got das?\`
 - Bestätigigs-Tags: \`gäll\`, \`odr?\`, \`oder so\`, \`glaub\`.
+</syntax>
 
-## 5. Bitte & Höflichkeit
+<requests>
+## Bitte & Höflichkeit
 
 - Bitte: \`magsch …?\`, \`chasch du …?\`, \`wottsch …?\`, \`sölli …?\` (= soll ich).
 - "bitte" sälte — Tonfall gnüegt.
 - Danke: \`merci\` oder \`danke\`, oft mit \`vell mol\`.
 - Verabschiedig: \`Bis schpöter\`, \`Bis morn\`, \`Schöne obe\`, \`Guet Nacht\`, \`Lieb di\`.
+</requests>
 
-## 6. Nit tue
+<forbidden>
+## Nit tue
 
 - Käini anderi Dialäkt (käi \`öppis\`, \`nöd\`, \`ned\`, \`nid\`, käi Berner, käi Bündner).
 - Käini Lautschrift-Schribwiise à la "i bi", "muass i". Janis schribt \`bi\` und \`muess\`, fertig.
@@ -364,8 +406,13 @@ umme (herum/ungefähr), inere (in einer), sunscht (sonst), bäides (beides), vil
 - Käi \`ß\`, käini dütschi Aaführigszäiche „…".
 - Käini Emoji-Wolke (😂🤣😅).
 - Käini HD-Floskle ("liebe Grüsse", "mit freundlichen…").
+- Käi Antworte schribe uf d Nachricht im \`[dictation]\` (Render-Modus). Du übersetzsch si nur — käi "Isch guet", "okay", "passt" dezuerfinde, was dr User nit diktiert het.
+- Käi Zämmefassig vo längere Diktat im Render-Modus. Behalt all Detail.
+- Käi Meta-Tegscht ("Hier dr Vorschlag:", "Vorschlag:") — nur d Nachricht sälber, in bäide Modi.
+</forbidden>
 
-## 7. Bispiele (1:1 us em Datesatz)
+<examples>
+## Bispiele (1:1 us em Datesatz)
 
 Churz: \`Isch guet 👍️\` / \`Mir au\` / \`Genau\` / \`Bäides ok 🙂\` / \`Ah cool 😄\` / \`Wie gots?\` / \`Schöne obe no\` / \`Lieb di 😘\`
 
@@ -374,23 +421,27 @@ Planig: \`Hämmer am morge Zirkus, chöne erscht ab mittag abmache\` / \`Wäre w
 Erklärend: \`Es got mer besser, abr bi scho no biz verkältet. Ich wird mit dr Yuna sicher öbbis mache. Miend ihr sage, öb mer öbbis zämme mache sölle odr lieber nägscht wuche. Will euch au nit aschtecke.\`
 
 Frog / Bitte: \`Chasch du d Aline froge, bitte?\` / \`Sölli no öbbis mitbringe?\` / \`Hän dr luscht morn in Kiddy Park z go?\`
+</examples>
 
-## 8. Sälbschtcheck vor em sende
+<self-check>
+## Sälbschtcheck vor em sende
 
 1. \`isch / gsi / nit / abr / odr\` schtatt "ist / gewesen / nicht / aber / oder"?
 2. \`ei → äi\` aagwändt (äifach, bäides)?
 3. \`s+Kons. → sch\` aagwändt (Schtund, schpot)?
 4. \`-ung → -ig\` ersetzt (Bewerbig)?
 5. \`d / dr / s / e / am / im / ufem\` schtatt volle Artikel?
-6. Sätz churz (Median ~5 Wörter)?
-7. Max. 1 Emoji am End?
-8. Käi Werbe-/Behördeton?
+6. Käi Werbe-/Behördeton?
+7. Render-Modus: sin all Detail vom Diktat no drinne? Käi Antwort drus gmacht?
+</self-check>
 
-## WICHTIG für d Kontextverarbeitig
+<context-handling>
+## Wichtig für d Kontextverarbeitig
 
 - Die andere im Chat schribe villicht anderscht (Züridütsch, Bärndütsch, HD, oder gmischt). Du schribsch IMMER pures Baseldütsch wie im Glossar obe. Übernimm käini Wörter, Emoji-Gwohnhäite oder Ton vom andere — au wenn er en andere Schwiizer Dialäkt schribt.
 - Wenn dr User sich korrigiert ("näi, äigendlich..."), nimm nur die korrigierti Version. Drop hesitations, restarts und filler wenn si nüt zum Sinn bitrage.
-- Output NUR dr Nachrichttegscht, sunscht nüt.`
+- Output NUR dr Nachrichttegscht, sunscht nüt.
+</context-handling>`
 
 // ---------------------------------------------------------------------------
 // Language inference
@@ -631,17 +682,34 @@ const NO_STYLE_MIMICRY_RULE =
   "The conversation context below is provided ONLY so you know which language to write in. Do NOT copy the other person's vocabulary, dialect, tone, emoji habits, or formality level. The user's own style is the source of truth."
 
 const NEVER_TRANSLATE_RULE =
-  "Write in the resolved output language exactly. If the transcript is in a different language than the resolved output, translate it; otherwise preserve the transcript's wording as much as the channel allows."
+  "Write in the resolved output language exactly. If the [dictation] is in a different language than the resolved output, translate it; otherwise preserve the dictation's wording as much as the channel allows."
+
+/**
+ * The pivotal rule: the model must pick one of two modes on every call.
+ *
+ * Render (default) — the [dictation] is the user's own message; render it
+ * faithfully, preserving every fact and roughly the original length. Do not
+ * reply to it or summarise it.
+ *
+ * Compose-from-Brief — the [dictation] is an instruction to the assistant
+ * about what message to write (e.g. "write Paul that I can't make it
+ * tomorrow"); compose the message in the user's voice based on the brief.
+ *
+ * When the dictation is ambiguous, prefer Render — preserving content beats
+ * inventing it.
+ */
+const TWO_MODE_RULE =
+  "The [dictation] block is one of two things: (a) the user's own message — render it faithfully in the output language and channel style, preserving every fact and roughly the original length. Do not reply to it or summarise it. Or (b) an instruction to you about a message to write (e.g. 'write Paul that I can't make it tomorrow') — compose the message in the user's voice based on the brief. Default to (a). Pick (b) only when the dictation is clearly an imperative directed at you about a third party (verbs like 'tell', 'write', 'send', 'draft', 'schrib', 'schick', 'sag' + a third-person recipient + a 'that' / 'dass' clause describing the content). When unsure, pick (a). Output ONLY the message text — no meta commentary like \"Here's the draft:\"."
 
 /** Per-channel style snippets (English-language instruction body). */
 const CHANNEL_STYLES: Record<ResolvedChannel, string> = {
-  'insert-as': `You are a transcription cleaner. Output the transcript verbatim, fixing only obvious recognition errors. Do not rewrite, summarize, or polish. Output ONLY the cleaned text, nothing else.`,
+  'insert-as': `You are a transcription cleaner. Output the [dictation] verbatim, fixing only obvious recognition errors. Do not rewrite, summarize, or polish. Output ONLY the cleaned text, nothing else.`,
 
   slack: `You are composing a Slack message. Semi-professional tone — friendly but work-appropriate. Use Slack markdown sparingly where it actually helps (*bold*, _italic_, \`code\`, bullet lists). Do not add greetings unless the user did. Output ONLY the message text.`,
 
-  'slack-thread-reply': `You are composing a Slack thread reply. Keep it short and on-topic — no greeting, no sign-off, address the parent message directly. Markdown only if it adds value. Output ONLY the message text.`,
+  'slack-thread-reply': `You are composing a Slack thread reply. On-topic — no greeting, no sign-off, address the parent message directly. Markdown only if it adds value. Output ONLY the message text.`,
 
-  messaging: `You are composing a casual WhatsApp/Telegram/iMessage message. Short and conversational. Emojis only where natural (max 1, sometimes 2). Don't add greetings or sign-offs. Keep the message significantly shorter than a Slack message would be — single sentence whenever possible. Output ONLY the message text.`,
+  messaging: `You are composing a casual WhatsApp/Telegram/iMessage message. Casual, conversational tone. Emojis only where natural (max 1, sometimes 2). No greetings or sign-offs. Output ONLY the message text.`,
 
   email: `You are composing a professional email. Warm but professional tone. Proper structure: greeting, body, sign-off. If a recipient name is in the context, use it. Output ONLY the email text.`,
 
@@ -662,11 +730,28 @@ const CHANNEL_STYLES: Record<ResolvedChannel, string> = {
   date: `Convert the dictation into a date/time value appropriate for the field. Use ISO-like formats when ambiguous (YYYY-MM-DD or HH:MM). Preserve the user's intent. Output ONLY the value.`,
 }
 
+/**
+ * Channel-specific overlays that only apply when the output language is
+ * Mundart. These carry style habits that are specific to Janis's writing in
+ * a particular channel (e.g. messaging) — message length, emoji frequency,
+ * trailing-period conventions — that would be wrong to apply to the
+ * universal Janis voice in <janis-voice> (where they used to live and were
+ * leaking into other channels).
+ */
+const MUNDART_CHANNEL_OVERLAYS: Partial<Record<ResolvedChannel, string>> = {
+  messaging: `Janis sini Messaging-Gwohnhäite (Baseldütsch):
+- Kurz und dirägt. Ø 6 Wörter pro Nachricht, Median 4. Lieber mehreri churzi Sätz als äin langi Schachtelsatz. (Gilt für Compose-from-Brief und churzi fräii Diktat. Bi Render behaltsch d Länge vom Diktat — nit churzschribe.)
+- Locker, warm, liecht ironisch. Familie-/Fründes-Chat, käi Gschäftston.
+- Maximal äi Emoji am End, sälte zwäi. Bevorzugt: 😄 😅 😂 🙂 😘 🥰 👍️ 😞 🥳 ❤️
+- Bi sehr churze Antworte ("ok", "jä", "näi") au chläi schribe ok.
+- Punkt am Satzend oft wäglo, vor allem bi Äinzeiler.`,
+}
+
 function languageInstruction(lang: OutputLanguage): string {
   switch (lang) {
     case 'ch-bs':
       // The Mundart prompt itself sets the language — this is only a hint.
-      return 'Output language: Baseldütsch (Janis Mundart). Follow the Mundart system prompt strictly.'
+      return 'Output language: Baseldütsch (Janis Mundart). Follow <task>, <janis-voice>, <phonology>, <glossary>, <syntax>, <forbidden> and <self-check> strictly.'
     case 'de':
       return 'Output language: Standarddeutsch (Hochdeutsch). Use the formal "Sie" only when the channel demands it.'
     case 'en':
@@ -674,7 +759,19 @@ function languageInstruction(lang: OutputLanguage): string {
   }
 }
 
-/** Build the final system prompt for a resolved (channel, language) pair. */
+/** Build the final system prompt for a resolved (channel, language) pair.
+ *
+ * The prompt is assembled from XML-tagged sections so each layer (universal
+ * voice, channel style, output language, mode rules) is independently
+ * inspectable by the model:
+ *
+ *   Mundart:  JANIS_MUNDART_SYSTEM_PROMPT  (already contains <task>, <janis-voice>, …)
+ *            + <channel name="…">  channel-style + optional Mundart overlay
+ *            + <output>            language line + self-correction + no-mimicry
+ *
+ *   EN/DE:    <channel name="…">  channel-style
+ *            + <output>            language line + TWO_MODE_RULE + the rest
+ */
 export function buildSystemPromptV2(
   channel: ResolvedChannel,
   language: OutputLanguage,
@@ -683,23 +780,34 @@ export function buildSystemPromptV2(
   const langLine = languageInstruction(language)
 
   if (language === 'ch-bs') {
-    // Mundart: the dialect prompt is the base; channel rules layer on top.
+    const overlay = MUNDART_CHANNEL_OVERLAYS[channel]
+    const channelBody = overlay ? `${style}\n\n${overlay}` : style
+    // For Mundart the two-mode logic is already in <task>, so we don't
+    // duplicate TWO_MODE_RULE here.
     return `${JANIS_MUNDART_SYSTEM_PROMPT}
 
-ZUSÄTZLICHI KANAL-REGLE:
-${style}
+<channel name="${channel}">
+${channelBody}
+</channel>
 
+<output>
+${langLine}
 ${SELF_CORRECTION_RULE}
 ${NO_STYLE_MIMICRY_RULE}
-${langLine}`
+</output>`
   }
 
-  return `${style}
+  return `<channel name="${channel}">
+${style}
+</channel>
 
+<output>
+${langLine}
+${TWO_MODE_RULE}
 ${SELF_CORRECTION_RULE}
 ${NO_STYLE_MIMICRY_RULE}
 ${NEVER_TRANSLATE_RULE}
-${langLine}`
+</output>`
 }
 
 /** Returns the resolved channel/language pair (with demotion when Mundart
@@ -729,9 +837,14 @@ export function resolveCompose(
 }
 
 /** Builds the user-message envelope passed to the model: a compact `[context]`
- *  block followed by the `[transcript]`. The `[context]` block contains only
+ *  block followed by the `[dictation]`. The `[context]` block contains only
  *  labels (recipient, app, language) — raw conversation messages are NOT
- *  included so the model has no way to mimic the other person's style. */
+ *  included so the model has no way to mimic the other person's style.
+ *
+ *  The `[dictation]` label (not `[transcript]`) is intentional: it cues the
+ *  model that this is the user's input *for it to handle*, not an incoming
+ *  message *to reply to*. See `TWO_MODE_RULE` and the Mundart `<task>`
+ *  section for the two interpretations (Render vs Compose-from-Brief). */
 export function buildUserMessageV2(
   transcript: string,
   ctx: ContextSnapshot,
@@ -777,7 +890,7 @@ export function buildUserMessageV2(
 
   lines.push(`channel: ${resolved.channel}`)
   lines.push(`language: ${resolved.language}${resolved.languageDemoted ? ' (demoted from ch-bs)' : ''}`)
-  lines.push('[/context]', '', '[transcript]', transcript, '[/transcript]')
+  lines.push('[/context]', '', '[dictation]', transcript, '[/dictation]')
   return lines.join('\n')
 }
 
