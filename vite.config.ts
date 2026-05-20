@@ -29,10 +29,14 @@ import {
 const WORKSPACE_ROOT = nodePath.join(process.env.HOME || '', '.openclaw/workspace')
 const DOCUMENTS_ROOT = nodePath.join(process.env.HOME || '', 'Documents/Workspace')
 const ELEVENLABS_KEY = process.env.ELEVENLABS_API_KEY || 'sk_6498ebdd82aa52c3513113be0ed9eba351400ba1ac4e8a60'
-// OpenRouter key is read from env-only (GitHub push protection blocks
-// committing it). Set OPENROUTER_API_KEY in your shell / .env.local before
-// starting Vite or the compose endpoint will fail at request time.
-const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || ''
+// Read OpenRouter key from .env (VITE_OPENROUTER_API_KEY) or shell env
+const OPENROUTER_KEY = (() => {
+  try {
+    const envContent = fs.readFileSync(nodePath.join(import.meta.dirname, '.env'), 'utf-8')
+    const match = envContent.match(/VITE_OPENROUTER_API_KEY=(.+)/)
+    return match?.[1]?.trim() || process.env.OPENROUTER_API_KEY || ''
+  } catch { return process.env.OPENROUTER_API_KEY || '' }
+})()
 
 // Read OPENAI_API_KEY from .env for server-side proxy
 const OPENAI_KEY = (() => {
