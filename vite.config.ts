@@ -776,12 +776,20 @@ function workspacePlugin(rootDir = WORKSPACE_ROOT, apiPrefix = '/api/workspace',
 }
 
 function elevenLabsProxy() {
+  const transcriptsFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
+
   const attach = (server: any) => {
     server.middlewares.use(async (req: any, res: any, next: any) => {
       if (!req.url?.startsWith('/elevenlabs/')) return next()
 
       const targetPath = req.url.replace(/^\/elevenlabs/, '')
       const targetUrl = `https://api.elevenlabs.io${targetPath}`
+
+      // Speech-to-text responses are small JSON blobs — we buffer them so we
+      // can log the transcript to the unified `desktop-dictations.jsonl`
+      // (used by the Transcripts view). Everything else (TTS streaming, etc.)
+      // is forwarded byte-for-byte.
+      const isSpeechToText = /\/v1\/speech-to-text(\?|$)/.test(targetPath)
 
       try {
         const chunks: Buffer[] = []
@@ -791,6 +799,7 @@ function elevenLabsProxy() {
         const headers: Record<string, string> = { 'xi-api-key': ELEVENLABS_KEY }
         if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
 
+        const startedAt = Date.now()
         const resp = await fetch(targetUrl, {
           method: req.method || 'POST',
           headers,
@@ -801,6 +810,38 @@ function elevenLabsProxy() {
         const ct = resp.headers.get('content-type')
         if (ct) res.setHeader('Content-Type', ct)
 
+        if (isSpeechToText) {
+          // Buffer the response so we can both log it and forward it.
+          const responseText = await resp.text()
+          let parsed: any = null
+          try { parsed = JSON.parse(responseText) } catch {}
+
+          if (parsed?.text && resp.ok) {
+            try {
+              if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+              fs.appendFileSync(transcriptsFile, JSON.stringify({
+                timestamp: new Date().toISOString(),
+                source: typeof req.headers['x-clavus-source'] === 'string'
+                  ? req.headers['x-clavus-source']
+                  : inferSourceFromUserAgent(req.headers['user-agent']),
+                appName: req.headers['x-clavus-app-name'] || '',
+                bundleId: req.headers['x-clavus-bundle-id'] || '',
+                audioBytes: body?.length ?? 0,
+                status: resp.status,
+                durationMs: Date.now() - startedAt,
+                text: parsed.text,
+                transcriptionId: parsed.transcription_id || '',
+              }) + '\n')
+            } catch {
+              // Logging is best-effort; never fail the response if disk write hiccups.
+            }
+          }
+
+          res.end(responseText)
+          return
+        }
+
+        // Default streaming pass-through (TTS, etc.).
         if (resp.body) {
           const reader = resp.body.getReader()
           const pump = async () => {
@@ -826,6 +867,15 @@ function elevenLabsProxy() {
     configureServer: attach,
     configurePreviewServer: attach,
   }
+}
+
+/** Best-guess source label when the client hasn't sent X-Clavus-Source. */
+function inferSourceFromUserAgent(ua: unknown): string {
+  if (typeof ua !== 'string') return 'unknown'
+  if (ua.includes('Clavus/') && ua.includes('Tauri')) return 'clavus-desktop'
+  if (/\bClavusKeyboard\/|CFNetwork.*Darwin/i.test(ua)) return 'clavus-ios-keyboard'
+  if (/Mozilla|AppleWebKit/i.test(ua)) return 'clavus-web'
+  return 'unknown'
 }
 
 function desktopDictationPlugin() {
@@ -902,6 +952,155 @@ function desktopDictationPlugin() {
 
   return {
     name: 'desktop-dictation-api',
+    configureServer: attach,
+    configurePreviewServer: attach,
+  }
+}
+
+/**
+ * Read-side companion to `desktopDictationPlugin` and the speech-to-text
+ * logging branch of `elevenLabsProxy`. Surfaces every transcript captured
+ * across all clients (Tauri desktop, iOS keyboard, web) as one feed so the
+ * Transcripts UI can list and copy them.
+ *
+ *   GET    /desktop/transcripts            -> { transcripts: [...] }  (newest first)
+ *   GET    /desktop/transcripts?limit=100  -> capped
+ *   DELETE /desktop/transcripts            -> wipe the whole log
+ *   DELETE /desktop/transcripts?ts=...     -> drop a single entry (matched by timestamp)
+ *
+ * Source file: `~/.openclaw/clavus-data/desktop-dictations.jsonl`
+ */
+function transcriptsApiPlugin() {
+  const historyFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
+  const MAX_DEFAULT = 500
+  const MAX_HARD = 2000
+
+  const attach = (server: any) => {
+    server.middlewares.use(async (req: any, res: any, next: any) => {
+      if (!req.url || (
+        req.url !== '/desktop/transcripts' &&
+        !req.url.startsWith('/desktop/transcripts?')
+      )) return next()
+
+      const origin = req.headers.origin
+      if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin)
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
+        res.setHeader('Vary', 'Origin')
+      }
+
+      if (req.method === 'OPTIONS') {
+        res.statusCode = 204
+        res.setHeader('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'content-type')
+        res.end()
+        return
+      }
+
+      const url = new URL(req.url, 'http://localhost')
+
+      // --- DELETE ----------------------------------------------------------
+      if (req.method === 'DELETE') {
+        try {
+          const ts = url.searchParams.get('ts')
+          if (!fs.existsSync(historyFile)) {
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true, deleted: 0 }))
+            return
+          }
+          if (!ts) {
+            // Wipe everything.
+            fs.writeFileSync(historyFile, '')
+            res.statusCode = 200
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ ok: true, wiped: true }))
+            return
+          }
+          const raw = fs.readFileSync(historyFile, 'utf-8')
+          const lines = raw.split('\n').filter((l) => l.length > 0)
+          let dropped = 0
+          const kept: string[] = []
+          for (const line of lines) {
+            try {
+              const parsed = JSON.parse(line)
+              if (parsed?.timestamp === ts) { dropped += 1; continue }
+            } catch {}
+            kept.push(line)
+          }
+          fs.writeFileSync(historyFile, kept.length > 0 ? kept.join('\n') + '\n' : '')
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ ok: true, deleted: dropped }))
+          return
+        } catch (err: any) {
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ error: err?.message || 'Delete failed' }))
+          return
+        }
+      }
+
+      // --- GET -------------------------------------------------------------
+      if (req.method !== 'GET') {
+        res.statusCode = 405
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: 'Method not allowed' }))
+        return
+      }
+
+      try {
+        const limit = Math.min(
+          MAX_HARD,
+          Math.max(1, parseInt(url.searchParams.get('limit') || `${MAX_DEFAULT}`, 10) || MAX_DEFAULT),
+        )
+
+        if (!fs.existsSync(historyFile)) {
+          res.statusCode = 200
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ transcripts: [] }))
+          return
+        }
+
+        const raw = fs.readFileSync(historyFile, 'utf-8')
+        const lines = raw.split('\n').filter((l) => l.length > 0)
+        const out: Array<Record<string, unknown>> = []
+        // Iterate from the tail so we collect newest-first cheaply.
+        for (let i = lines.length - 1; i >= 0 && out.length < limit; i -= 1) {
+          try {
+            const parsed = JSON.parse(lines[i])
+            const text: string = typeof parsed?.text === 'string' ? parsed.text : ''
+            if (!text.trim()) continue
+            if (parsed?.status && Number(parsed.status) >= 400) continue
+            out.push({
+              timestamp: parsed.timestamp,
+              source: parsed.source || 'unknown',
+              appName: parsed.appName || '',
+              bundleId: parsed.bundleId || '',
+              text,
+              durationMs: parsed.durationMs ?? null,
+              audioBytes: parsed.audioBytes ?? null,
+              transcriptionId: parsed.transcriptionId || '',
+            })
+          } catch {
+            // Skip malformed lines.
+          }
+        }
+
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json')
+        res.setHeader('Cache-Control', 'no-store')
+        res.end(JSON.stringify({ transcripts: out }))
+      } catch (err: any) {
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: err?.message || 'Read failed' }))
+      }
+    })
+  }
+
+  return {
+    name: 'transcripts-api',
     configureServer: attach,
     configurePreviewServer: attach,
   }
@@ -1684,6 +1883,7 @@ export default defineConfig({
     threadsApiPlugin(),
     elevenLabsProxy(),
     desktopDictationPlugin(),
+    transcriptsApiPlugin(),
     composeApiPlugin(),
     appleAppSiteAssociationPlugin(),
     openaiRealtimeProxy(),

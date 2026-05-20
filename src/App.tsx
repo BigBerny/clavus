@@ -26,6 +26,7 @@ const FileViewerPanel = lazy(() => import('./components/files/FileViewerPanel.ts
 const FinderPanel = lazy(() => import('./components/files/FinderPanel.tsx').then(m => ({ default: m.FinderPanel })))
 const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
 const RealtimeChat = lazy(() => import('./components/realtime/RealtimeChat.tsx').then(m => ({ default: m.RealtimeChat })))
+const TranscriptsPanel = lazy(() => import('./components/transcripts/TranscriptsPanel.tsx').then(m => ({ default: m.TranscriptsPanel })))
 
 function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
   const [token, setToken] = useState('')
@@ -102,6 +103,7 @@ export function App() {
   const cancelRecordingRef = useRef<(() => void) | null>(null)
   const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
   const [realtimeOpen, setRealtimeOpen] = useState(false)
+  const [transcriptsOpen, setTranscriptsOpen] = useState(false)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Track which panel is visible (tab id or 'home')
@@ -436,6 +438,9 @@ export function App() {
   useEffect(() => {
     const apply = (route: Route | null) => {
       if (!route) return
+      // Overlays open over the home screen; clear them on every other route
+      // so back/forward feels right.
+      setTranscriptsOpen(route.kind === 'transcripts')
       const tabId = applyRoute(route)
       if (tabId === null) {
         setVisiblePanel('home')
@@ -1098,6 +1103,10 @@ export function App() {
                   pushState={pushState}
                   onEnablePush={requestPermission}
                   onOpenRealtime={() => setRealtimeOpen(true)}
+                  onOpenTranscripts={() => {
+                    setTranscriptsOpen(true)
+                    pushHash({ kind: 'transcripts' })
+                  }}
                 />
               ) : (
                 <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
@@ -1221,6 +1230,10 @@ export function App() {
               pushState={pushState}
               onEnablePush={requestPermission}
               onOpenRealtime={() => setRealtimeOpen(true)}
+              onOpenTranscripts={() => {
+                setTranscriptsOpen(true)
+                pushHash({ kind: 'transcripts' })
+              }}
             />
           </div>
         </div>
@@ -1266,6 +1279,19 @@ export function App() {
       {realtimeOpen && (
         <Suspense fallback={null}>
           <RealtimeChat onClose={() => setRealtimeOpen(false)} />
+        </Suspense>
+      )}
+      {transcriptsOpen && (
+        <Suspense fallback={null}>
+          <TranscriptsPanel
+            onClose={() => {
+              setTranscriptsOpen(false)
+              // Drop the #/transcripts deep link so back/forward stays sane.
+              if (window.location.hash === '#/transcripts') {
+                pushHash({ kind: 'home' }, true)
+              }
+            }}
+          />
         </Suspense>
       )}
     </div>

@@ -91,6 +91,15 @@ const MicIcon = (
   </svg>
 )
 
+const TranscriptsIcon = (
+  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+    <polyline points="14 2 14 8 20 8"/>
+    <line x1="8" y1="13" x2="16" y2="13"/>
+    <line x1="8" y1="17" x2="13" y2="17"/>
+  </svg>
+)
+
 const ChatIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -165,12 +174,13 @@ function ChannelTile({ label, icon, accent, onClick }: {
 
 // ── main ───────────────────────────────────────────────────────────────────
 
-export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, onOpenRealtime }: {
+export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, onOpenRealtime, onOpenTranscripts }: {
   onCompose?: (channel: 'messaging' | 'slack' | 'email') => void
   onSelectTab?: (tabId: string) => void
   pushState?: string
   onEnablePush?: () => void
   onOpenRealtime?: () => void
+  onOpenTranscripts?: () => void
 }) {
   const tabs = useTabsStore((s) => s.tabs)
   const threads = useThreadsStore((s) => s.threads)
@@ -392,9 +402,10 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
           <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
             Tools
           </h2>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <ChannelTile label="Finder" icon={FinderIcon} accent="cat-doc" onClick={openFinder} />
             <ChannelTile label="Voice mode" icon={MicIcon} accent="cat-voice" onClick={() => onOpenRealtime?.()} />
+            <ChannelTile label="Transcripts" icon={TranscriptsIcon} accent="cat-violet" onClick={() => onOpenTranscripts?.()} />
           </div>
         </section>
       </div>

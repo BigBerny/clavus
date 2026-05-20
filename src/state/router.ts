@@ -13,6 +13,7 @@
  *                            decided by file extension via `getFileTypeInfo`.
  *   #/doc/<encodedPath>    — legacy alias for `#/file/...`, kept so existing
  *                            messages and bookmarks keep working.
+ *   #/transcripts          — open the Transcripts overlay over the home screen.
  *
  * No URL routing library — a tiny hand-rolled module is plenty for these routes
  * and keeps the bundle lean.
@@ -25,6 +26,7 @@ export type Route =
   | { kind: 'home' }
   | { kind: 'chat'; threadId: string }
   | { kind: 'file'; path: string; title?: string }
+  | { kind: 'transcripts' }
 
 export function parseHash(hash: string): Route | null {
   if (!hash || hash === '#' || hash === '#/') return { kind: 'home' }
@@ -32,6 +34,7 @@ export function parseHash(hash: string): Route | null {
   const raw = hash.startsWith('#') ? hash.slice(1) : hash
   const path = raw.startsWith('/') ? raw.slice(1) : raw
   if (!path || path === 'home') return { kind: 'home' }
+  if (path === 'transcripts') return { kind: 'transcripts' }
   if (path.startsWith('chat/')) {
     const threadId = decodeURIComponent(path.slice('chat/'.length))
     if (!threadId) return null
@@ -52,6 +55,8 @@ export function formatRoute(route: Route): string {
   switch (route.kind) {
     case 'home':
       return '#/home'
+    case 'transcripts':
+      return '#/transcripts'
     case 'chat':
       return `#/chat/${encodeURIComponent(route.threadId)}`
     case 'file': {
@@ -108,6 +113,9 @@ export function getCurrentRoute(): Route | null {
  */
 export function applyRoute(route: Route): string | null {
   if (route.kind === 'home') return null
+  // Transcripts is an overlay over home — caller (App.tsx) decides to mount
+  // the panel. We just keep the visible panel at home.
+  if (route.kind === 'transcripts') return null
 
   const store = useTabsStore.getState()
 
