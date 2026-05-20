@@ -974,6 +974,28 @@ function desktopDictationPlugin() {
  *   - `~/.openclaw/clavus-data/desktop-dictations.jsonl`  (transcript text)
  *   - `~/.openclaw/clavus-data/desktop-compose.jsonl`     (prompt + LLM output)
  */
+/** Server-side mirror of the dictation overlay's filler-word cleanup. Keep in
+ *  sync with `cleanTranscription` in `public/dictation-overlay.html` —
+ *  diverging breaks the transcript↔compose join in `transcriptsApiPlugin`. */
+function cleanTranscriptionServer(text: string): string {
+  return text
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\b(ähm|äh|uhm|uh|hmm|um|umm)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
+}
+
+/** Normalise text for the transcript↔compose join. Collapses whitespace and
+ *  trims trailing punctuation/quotes so trivial cleanups don't break the
+ *  match. NOT for display — only used as a map key. */
+function normaliseForJoin(text: string): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/[.,!?;:"'`]+$/g, '')
+    .trim()
+    .toLowerCase()
+}
+
 function transcriptsApiPlugin() {
   const historyFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
   const composeHistoryFile = nodePath.join(THREADS_DATA_DIR, 'desktop-compose.jsonl')
@@ -1073,10 +1095,20 @@ function transcriptsApiPlugin() {
         }
 
         // Index compose entries by `transcriptText` so we can attach them to
-        // their originating transcript. Each bucket is a list of candidate
+        // their originating transcript. We index by BOTH the raw text and the
+        // cleaned form because the desktop overlay strips filler words
+        // (`ähm`, `(music)`, …) BEFORE POSTing to compose, while
+        // `desktop-dictations.jsonl` stores the raw ElevenLabs output. Without
+        // this, almost no transcripts would match. Each bucket holds candidate
         // entries; the join picks the temporally-closest one within
         // COMPOSE_JOIN_WINDOW_MS after the transcript timestamp.
         const composeByText = new Map<string, Array<Record<string, unknown>>>()
+        const addToIndex = (key: string, entry: Record<string, unknown>) => {
+          if (!key) return
+          const bucket = composeByText.get(key) ?? []
+          bucket.push(entry)
+          composeByText.set(key, bucket)
+        }
         if (fs.existsSync(composeHistoryFile)) {
           const composeRaw = fs.readFileSync(composeHistoryFile, 'utf-8')
           const composeLines = composeRaw.split('\n').filter((l) => l.length > 0)
@@ -1088,9 +1120,7 @@ function transcriptsApiPlugin() {
               if (!transcriptText) continue
               if (parsed?.skipped === true) continue
               if (parsed?.status && Number(parsed.status) >= 400) continue
-              const bucket = composeByText.get(transcriptText) ?? []
-              bucket.push(parsed)
-              composeByText.set(transcriptText, bucket)
+              addToIndex(normaliseForJoin(transcriptText), parsed)
             } catch {
               // Skip malformed lines.
             }
@@ -1102,22 +1132,31 @@ function transcriptsApiPlugin() {
           transcriptText: string,
           transcriptTs: number,
         ): Record<string, unknown> | null => {
-          const bucket = composeByText.get(transcriptText)
-          if (!bucket) return null
+          // Try both the raw transcript and the post-cleanup form against the
+          // index — the client may have cleaned the text before POSTing to
+          // compose.
+          const keys = new Set<string>([
+            normaliseForJoin(transcriptText),
+            normaliseForJoin(cleanTranscriptionServer(transcriptText)),
+          ])
           let best: Record<string, unknown> | null = null
           let bestDelta = Number.POSITIVE_INFINITY
-          for (const entry of bucket) {
-            if (claimed.has(entry)) continue
-            const entryTs = Date.parse(String(entry.timestamp))
-            if (Number.isNaN(entryTs)) continue
-            const delta = entryTs - transcriptTs
-            // Compose should come AFTER the transcript and within the window.
-            // Tolerate a few seconds of clock skew on the negative side.
-            if (delta < -5_000 || delta > COMPOSE_JOIN_WINDOW_MS) continue
-            const absDelta = Math.abs(delta)
-            if (absDelta < bestDelta) {
-              best = entry
-              bestDelta = absDelta
+          for (const key of keys) {
+            const bucket = composeByText.get(key)
+            if (!bucket) continue
+            for (const entry of bucket) {
+              if (claimed.has(entry)) continue
+              const entryTs = Date.parse(String(entry.timestamp))
+              if (Number.isNaN(entryTs)) continue
+              const delta = entryTs - transcriptTs
+              // Compose should come AFTER the transcript and within the window.
+              // Tolerate a few seconds of clock skew on the negative side.
+              if (delta < -5_000 || delta > COMPOSE_JOIN_WINDOW_MS) continue
+              const absDelta = Math.abs(delta)
+              if (absDelta < bestDelta) {
+                best = entry
+                bestDelta = absDelta
+              }
             }
           }
           if (best) claimed.add(best)
