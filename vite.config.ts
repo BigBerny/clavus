@@ -958,22 +958,32 @@ function desktopDictationPlugin() {
 }
 
 /**
- * Read-side companion to `desktopDictationPlugin` and the speech-to-text
- * logging branch of `elevenLabsProxy`. Surfaces every transcript captured
- * across all clients (Tauri desktop, iOS keyboard, web) as one feed so the
- * Transcripts UI can list and copy them.
+ * Read-side companion to `desktopDictationPlugin`, the speech-to-text logging
+ * branch of `elevenLabsProxy`, and the compose audit log. Surfaces every
+ * transcript captured across all clients (Tauri desktop, iOS keyboard, web)
+ * as one feed, with the matching compose request (system prompt, user message,
+ * LLM output) attached when available — so the Transcripts UI can both copy
+ * the raw transcript and debug the prompt that produced any given output.
  *
  *   GET    /desktop/transcripts            -> { transcripts: [...] }  (newest first)
  *   GET    /desktop/transcripts?limit=100  -> capped
- *   DELETE /desktop/transcripts            -> wipe the whole log
- *   DELETE /desktop/transcripts?ts=...     -> drop a single entry (matched by timestamp)
+ *   DELETE /desktop/transcripts            -> wipe the whole transcript log
+ *   DELETE /desktop/transcripts?ts=...     -> drop a single transcript entry
  *
- * Source file: `~/.openclaw/clavus-data/desktop-dictations.jsonl`
+ * Sources:
+ *   - `~/.openclaw/clavus-data/desktop-dictations.jsonl`  (transcript text)
+ *   - `~/.openclaw/clavus-data/desktop-compose.jsonl`     (prompt + LLM output)
  */
 function transcriptsApiPlugin() {
   const historyFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
+  const composeHistoryFile = nodePath.join(THREADS_DATA_DIR, 'desktop-compose.jsonl')
   const MAX_DEFAULT = 500
   const MAX_HARD = 2000
+  // Maximum time gap between a transcript and the compose call it produced.
+  // Dictate → compose runs within a few seconds normally; 5 minutes is
+  // generous and keeps the join unambiguous when the same transcript text
+  // appears more than once.
+  const COMPOSE_JOIN_WINDOW_MS = 5 * 60_000
 
   const attach = (server: any) => {
     server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -1062,6 +1072,58 @@ function transcriptsApiPlugin() {
           return
         }
 
+        // Index compose entries by `transcriptText` so we can attach them to
+        // their originating transcript. Each bucket is a list of candidate
+        // entries; the join picks the temporally-closest one within
+        // COMPOSE_JOIN_WINDOW_MS after the transcript timestamp.
+        const composeByText = new Map<string, Array<Record<string, unknown>>>()
+        if (fs.existsSync(composeHistoryFile)) {
+          const composeRaw = fs.readFileSync(composeHistoryFile, 'utf-8')
+          const composeLines = composeRaw.split('\n').filter((l) => l.length > 0)
+          for (const line of composeLines) {
+            try {
+              const parsed = JSON.parse(line)
+              const transcriptText: string =
+                typeof parsed?.transcriptText === 'string' ? parsed.transcriptText : ''
+              if (!transcriptText) continue
+              if (parsed?.skipped === true) continue
+              if (parsed?.status && Number(parsed.status) >= 400) continue
+              const bucket = composeByText.get(transcriptText) ?? []
+              bucket.push(parsed)
+              composeByText.set(transcriptText, bucket)
+            } catch {
+              // Skip malformed lines.
+            }
+          }
+        }
+
+        const claimed = new Set<unknown>() // mark compose entries already attached to a transcript
+        const pickCompose = (
+          transcriptText: string,
+          transcriptTs: number,
+        ): Record<string, unknown> | null => {
+          const bucket = composeByText.get(transcriptText)
+          if (!bucket) return null
+          let best: Record<string, unknown> | null = null
+          let bestDelta = Number.POSITIVE_INFINITY
+          for (const entry of bucket) {
+            if (claimed.has(entry)) continue
+            const entryTs = Date.parse(String(entry.timestamp))
+            if (Number.isNaN(entryTs)) continue
+            const delta = entryTs - transcriptTs
+            // Compose should come AFTER the transcript and within the window.
+            // Tolerate a few seconds of clock skew on the negative side.
+            if (delta < -5_000 || delta > COMPOSE_JOIN_WINDOW_MS) continue
+            const absDelta = Math.abs(delta)
+            if (absDelta < bestDelta) {
+              best = entry
+              bestDelta = absDelta
+            }
+          }
+          if (best) claimed.add(best)
+          return best
+        }
+
         const raw = fs.readFileSync(historyFile, 'utf-8')
         const lines = raw.split('\n').filter((l) => l.length > 0)
         const out: Array<Record<string, unknown>> = []
@@ -1072,6 +1134,10 @@ function transcriptsApiPlugin() {
             const text: string = typeof parsed?.text === 'string' ? parsed.text : ''
             if (!text.trim()) continue
             if (parsed?.status && Number(parsed.status) >= 400) continue
+            const transcriptTs = Date.parse(String(parsed.timestamp))
+            const composeMatch = Number.isNaN(transcriptTs)
+              ? null
+              : pickCompose(text, transcriptTs)
             out.push({
               timestamp: parsed.timestamp,
               source: parsed.source || 'unknown',
@@ -1081,6 +1147,21 @@ function transcriptsApiPlugin() {
               durationMs: parsed.durationMs ?? null,
               audioBytes: parsed.audioBytes ?? null,
               transcriptionId: parsed.transcriptionId || '',
+              compose: composeMatch
+                ? {
+                    timestamp: composeMatch.timestamp,
+                    schema: composeMatch.schema || 'v1',
+                    channel: composeMatch.channel || null,
+                    language: composeMatch.language || null,
+                    languageDemoted: composeMatch.languageDemoted ?? null,
+                    model: composeMatch.model || null,
+                    durationMs: composeMatch.durationMs ?? null,
+                    systemPrompt: composeMatch.systemPrompt || null,
+                    userMessage: composeMatch.userMessage || null,
+                    outputText: composeMatch.outputText || null,
+                    directiveApplied: composeMatch.directiveApplied ?? null,
+                  }
+                : null,
             })
           } catch {
             // Skip malformed lines.
@@ -1330,6 +1411,14 @@ function composeApiPlugin() {
             durationMs,
             status,
             model,
+            // Full prompt + response for the Transcripts debug view. Indexed
+            // by `transcriptText` so the read endpoint can join a compose
+            // entry back to its originating /desktop/dictation/transcribe
+            // (or /elevenlabs/v1/speech-to-text) call.
+            transcriptText: text,
+            systemPrompt,
+            userMessage,
+            outputText: out,
           })
 
           if (!ok || !out) {
@@ -1394,6 +1483,13 @@ function composeApiPlugin() {
           durationMs,
           status,
           model,
+          // v1 has no structured user envelope — the raw transcript is the
+          // user message. Logged identically so the read endpoint can merge
+          // v1 and v2 entries uniformly.
+          transcriptText: text,
+          systemPrompt,
+          userMessage: text,
+          outputText: out,
         })
 
         if (!ok || !out) {
