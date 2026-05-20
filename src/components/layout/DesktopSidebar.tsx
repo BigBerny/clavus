@@ -54,13 +54,11 @@ function fullDateTime(timestamp: number): string {
   })
 }
 
-type GroupKey = 'today' | 'lastWeek' | 'older'
+type GroupKey = 'today' | 'older'
 
 function groupFor(timestamp: number, now: number): GroupKey {
   const dayAgo = now - 24 * 60 * 60 * 1000
-  const weekAgo = now - 7 * 24 * 60 * 60 * 1000
   if (timestamp >= dayAgo) return 'today'
-  if (timestamp >= weekAgo) return 'lastWeek'
   return 'older'
 }
 
@@ -189,7 +187,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   const { openGroups, archivedTabs, archivedThreadsWithoutTabs } = useMemo(() => {
     const now = Date.now()
     const sorted = [...tabs].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt))
-    const open: Record<GroupKey, Tab[]> = { today: [], lastWeek: [], older: [] }
+    const open: Record<GroupKey, Tab[]> = { today: [], older: [] }
     const arch: Tab[] = []
     const tabThreadIds = new Set<string>()
     for (const tab of sorted) {
@@ -340,16 +338,6 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                   Today
                 </div>
                 {openGroups.today.map((tab) => renderTabRow(tab))}
-              </div>
-            )}
-
-            {/* Last week — always expanded */}
-            {openGroups.lastWeek.length > 0 && (
-              <div className="pb-0.5">
-                <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none">
-                  Last week
-                </div>
-                {openGroups.lastWeek.map((tab) => renderTabRow(tab))}
               </div>
             )}
 
