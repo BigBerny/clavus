@@ -299,8 +299,7 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex flex-col bg-surface-light dark:bg-surface-dark animate-[fadeSlideIn_0.2s_ease-out]">
       {/* Header */}
       <div
-        className="flex items-center gap-3 px-4 py-3 border-b border-border-light dark:border-border-dark bg-surface-light/80 dark:bg-surface-dark/80 backdrop-blur-xl"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
+        className="app-overlay-header flex items-center gap-3 px-4 py-3 border-b border-border-light dark:border-border-dark bg-surface-light/80 dark:bg-surface-dark/80 backdrop-blur-xl"
       >
         <button
           onClick={handleStop}

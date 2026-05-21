@@ -201,6 +201,18 @@ html[data-tauri] .tauri-drag-region input {
   -webkit-app-region: no-drag;
 }
 
+/* Headers of full-screen overlays (Transcripts, Voice mode, Composer).
+   On iOS PWAs we just need the safe-area inset for the notch.
+   On Tauri/macOS the modal covers the entire window including the
+   traffic-light area, so we push the header content below them. */
+.app-overlay-header {
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.75rem);
+}
+html[data-tauri] .app-overlay-header {
+  /* Traffic-light area is ~28px; add breathing room above the X button. */
+  padding-top: calc(env(safe-area-inset-top, 0px) + 2.25rem);
+}
+
 /* On the web (iOS Safari PWA), visualViewport events fire at irregular
    intervals — sometimes every frame, sometimes with 50–80ms gaps. A short
    transition smooths between these discrete values without lagging
