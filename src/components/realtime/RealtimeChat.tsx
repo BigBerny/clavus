@@ -54,8 +54,8 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            model: 'gpt-4o-realtime-preview',
-            voice: 'alloy',
+            model: 'gpt-realtime-2',
+            voice: 'marin',
           }),
         })
 
@@ -66,7 +66,7 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
         }
 
         const session = await tokenResp.json()
-        const ephemeralKey = session.client_secret?.value
+        const ephemeralKey = session.value || session.client_secret?.value
         if (!ephemeralKey) throw new Error('No ephemeral key in response')
 
         if (cancelled) return
@@ -124,7 +124,7 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
         const offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
 
-        const sdpResp = await fetch(`https://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview`, {
+        const sdpResp = await fetch('https://api.openai.com/v1/realtime/calls', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${ephemeralKey}`,
@@ -299,19 +299,28 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
     <div className="fixed inset-0 z-50 flex flex-col bg-surface-light dark:bg-surface-dark animate-[fadeSlideIn_0.2s_ease-out]">
       {/* Header */}
       <div
-        className="flex items-center justify-center px-4 py-3 border-b border-border-light dark:border-border-dark bg-surface-light/80 dark:bg-surface-dark/80 backdrop-blur-xl"
+        className="flex items-center gap-3 px-4 py-3 border-b border-border-light dark:border-border-dark bg-surface-light/80 dark:bg-surface-dark/80 backdrop-blur-xl"
         style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}
       >
-        <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${
-            status === 'connected' ? 'bg-emerald-500 animate-pulse' :
-            status === 'connecting' ? 'bg-amber-500 animate-pulse' :
-            'bg-red-500'
-          }`} />
-          <span className="text-[15px] font-semibold text-text-light dark:text-text-dark">
-            GPT Realtime
-          </span>
-        </div>
+        <button
+          onClick={handleStop}
+          aria-label="Close"
+          className="inline-btn -ml-1 w-9 h-9 rounded-full flex items-center justify-center text-text-light-muted dark:text-text-dark-muted hover:bg-surface-light-2 dark:hover:bg-surface-dark-3 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        <span className="text-[15px] font-semibold text-text-light dark:text-text-dark">
+          Voice mode
+        </span>
+        <div className={`w-2 h-2 rounded-full ${
+          status === 'connected' ? 'bg-emerald-500 animate-pulse' :
+          status === 'connecting' ? 'bg-amber-500 animate-pulse' :
+          'bg-red-500'
+        }`} />
+        <div className="flex-1" />
       </div>
 
       {/* Messages */}

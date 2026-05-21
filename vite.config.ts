@@ -1649,18 +1649,22 @@ function openaiRealtimeProxy() {
         for await (const chunk of req) chunks.push(Buffer.from(chunk))
         const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf-8')) : {}
 
-        const resp = await fetch('https://api.openai.com/v1/realtime/sessions', {
+        const resp = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${OPENAI_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: body.model || 'gpt-4o-realtime-preview',
-            voice: body.voice || 'alloy',
-            modalities: ['audio', 'text'],
-            input_audio_transcription: { model: 'whisper-1', language: 'en' },
-            instructions: body.instructions || 'You are a helpful voice assistant. The user speaks English and German — respond in whichever language they use. Be concise and conversational. When asked about topics, give direct, practical answers. The user is a software engineer named Janis based in Switzerland.',
+            session: {
+              type: 'realtime',
+              model: body.model || 'gpt-realtime-2',
+              audio: {
+                output: { voice: body.voice || 'marin' },
+                input: { transcription: { model: 'whisper-1' } },
+              },
+              instructions: body.instructions || 'You are a helpful voice assistant. The user speaks English and German — respond in whichever language they use. Be concise and conversational. When asked about topics, give direct, practical answers. The user is a software engineer named Janis based in Switzerland.',
+            },
           }),
         })
         res.statusCode = resp.status
