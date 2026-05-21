@@ -32,6 +32,7 @@ import {
   type ContextSnapshot,
   type FieldHint,
   type FieldType,
+  type OutputLanguage,
 } from './src/lib/composePrompts.ts'
 import { recipientFallback } from './src/lib/recipientLanguage.ts'
 
@@ -1352,6 +1353,12 @@ function composeApiPlugin() {
         if (typeof body.mode === 'string' && body.context && typeof body.context === 'object') {
           const mode: 'auto' | 'insert-as' =
             body.mode === 'insert-as' ? 'insert-as' : 'auto'
+          const selectedLanguage: OutputLanguage | undefined =
+            body.selectedLanguage === 'ch-bs' || body.selectedLanguage === 'de' || body.selectedLanguage === 'en'
+              ? body.selectedLanguage
+              : undefined
+          const languageSelectionSource: 'auto' | 'manual' =
+            body.languageSelectionSource === 'manual' ? 'manual' : 'auto'
           const rawCtx = body.context as Record<string, unknown>
           const fieldTypeRaw = typeof rawCtx.fieldType === 'string' ? rawCtx.fieldType : 'generic'
           const fieldType: FieldType = VALID_FIELD_TYPES.includes(fieldTypeRaw as FieldType)
@@ -1395,6 +1402,8 @@ function composeApiPlugin() {
               appName: context.appName ?? '',
               bundleId: context.bundleId ?? '',
               skipped: true,
+              selectedLanguage: selectedLanguage ?? '',
+              languageSelectionSource,
               inputChars: text.length,
               outputChars: text.length,
               durationMs: 0,
@@ -1417,15 +1426,23 @@ function composeApiPlugin() {
           }
 
           const resolved = resolveCompose(effectiveText, effectiveCtx, { recipientFallback })
-          // Honour explicit directives over the inferred channel/language.
           const finalChannel = directive.channel ?? resolved.channel
-          const finalLanguage = directive.language ?? resolved.language
+          // Language precedence: manual selector > spoken directive >
+          // auto-selected UI default > server fallback.
+          const finalLanguage = languageSelectionSource === 'manual' && selectedLanguage
+            ? selectedLanguage
+            : directive.language ?? selectedLanguage ?? resolved.language
+          const languageDemoted =
+            finalLanguage === resolved.language &&
+            resolved.languageDemoted &&
+            directive.language === undefined &&
+            selectedLanguage === undefined
 
           const systemPrompt = buildSystemPromptV2(finalChannel, finalLanguage)
           const userMessage = buildUserMessageV2(effectiveText, effectiveCtx, {
             channel: finalChannel,
             language: finalLanguage,
-            languageDemoted: resolved.languageDemoted && directive.language === undefined,
+            languageDemoted,
           })
 
           const { out, status, ok, responseText, durationMs, model } =
@@ -1442,7 +1459,9 @@ function composeApiPlugin() {
             recipient: context.recipient ?? '',
             channel: finalChannel,
             language: finalLanguage,
-            languageDemoted: resolved.languageDemoted,
+            languageDemoted,
+            selectedLanguage: selectedLanguage ?? '',
+            languageSelectionSource,
             directiveApplied: !!(directive.channel || directive.language),
             conversationMessagesCount: context.conversationMessages?.length ?? 0,
             inputChars: text.length,

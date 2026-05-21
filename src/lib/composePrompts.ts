@@ -30,16 +30,19 @@
  * across all clients in one place.
  *
  * ============================================================================
- * Conversation messages: LANGUAGE SIGNAL ONLY
+ * Conversation messages: visible to the model, but for language + reply
+ * context only — never for style mimicry
  * ============================================================================
  *
- * `conversationMessages` is read on the server **only** to decide whether the
- * output should be EN, DE, or ch-bs (Janis Baseldütsch). It is never used to
- * imitate the other person's vocabulary, tone, emoji habits, or dialect. The
- * raw messages are scanned inside `inferOutputLanguage()` and then discarded
- * before the LLM call — the model sees a `recentLanguage:` label, not the
- * underlying text. This rule appears verbatim inside the Mundart prompt so the
- * model preserves Janis's voice even when the other person writes Züridütsch.
+ * `conversationMessages` is passed verbatim to the LLM inside a labelled
+ * `[recent-messages-from-conversation]` block (see `buildUserMessageV2`).
+ * The model uses them to (a) detect the right output language when the
+ * channel default isn't enough and (b) understand what the user is replying
+ * to. The `NO_STYLE_MIMICRY_RULE` (in the system prompt) explicitly forbids
+ * copying the recipient's vocabulary, tone, emoji habits, or dialect — the
+ * user's own style is the source of truth. This rule also appears in the
+ * Mundart `<context-handling>` section so the model preserves Janis's voice
+ * even when the other person writes Züridütsch or Hochdeutsch.
  */
 
 // ============================================================================
@@ -307,6 +310,11 @@ Bispiel Compose:
 
 ### Wenn du nit sicher bisch
 Wähl Render. Inhalt bewahre isch wichtiger als rate.
+
+### Sproch
+Wenn dä Baseldütsch-Prompt glade isch, schribsch d Nachricht uf Baseldütsch — au wenn dr User uf Hochdütsch oder Änglisch diktiert het (denn übersetzsch ins Baseldütsch).
+
+Wenn dr User e anderi Sproch gwählt oder explizit diktiert het, wird stattdesse e andere Systemprompt glade. Innerhalb vo däm Prompt do: immer Baseldütsch.
 </task>
 
 <janis-voice>
@@ -446,141 +454,53 @@ Frog / Bitte: \`Chasch du d Aline froge, bitte?\` / \`Sölli no öbbis mitbringe
 // ---------------------------------------------------------------------------
 // Language inference
 // ---------------------------------------------------------------------------
-
-/** Lowercased Mundart marker tokens (any 2+ hits = Mundart). */
-const MUNDART_MARKERS = [
-  'isch', 'gsi', 'gsii', 'nit', 'odr', 'abr', 'gseh', 'gsehsch',
-  'nüt', 'nuet', 'hüt', 'dähäi', 'chli', 'chläi', 'chöne', 'chönt',
-  'chasch', 'chunsch', 'wäiss', 'wäisch', 'nägscht', 'letscht',
-  'öbbis', 'öppis', 'jä', 'näi', 'gömmer', 'hämmer', 'miemer', 'simmer',
-  'gsäit', 'wäge', 'äifach', 'bäides', 'grad', 'ufem', 'bim', 'mitem',
-  'gloubsch', 'gloub', 'worschinlich', 'vilicht', 'läidr', 'äigendlich',
-  'dr', 'd', 'sin', 'hesch', 'mues', 'muesch', 'magsch', 'willsch',
-  'schpot', 'schponti', 'schtund', 'bewerbig', 'merci',
-] as const
-
-/** Lowercased Standard-German distinguishing markers. */
-const HD_MARKERS = [
-  'nicht', 'aber', 'oder', 'sind', 'haben', 'möchte', 'sehr',
-  'jetzt', 'heute', 'nichts', 'gewesen', 'gerade', 'einfach',
-  'weil', 'morgen', 'können', 'sollten', 'würde',
-] as const
-
-/** Cheap English signal: lots of common English stop-words. */
-const EN_MARKERS = [
-  ' the ', ' and ', ' you ', ' for ', ' with ', ' that ', ' this ',
-  ' have ', ' will ', ' from ', ' would ', ' could ', ' should ',
-  ' just ', ' really ', ' please ', ' going to ', ' want to ',
-] as const
-
-function lower(s: string | undefined): string {
-  return (s ?? '').toLowerCase()
-}
-
-function countMarkers(haystack: string, markers: readonly string[]): number {
-  // Word-boundary-ish: pad with spaces and match standalone tokens. Mundart
-  // markers don't include leading/trailing spaces themselves.
-  const padded = ` ${haystack.replace(/[.,!?;:()"]/g, ' ')} `
-  let hits = 0
-  for (const m of markers) {
-    // Mundart/HD markers without spaces -> wrap in word boundaries.
-    const needle = m.startsWith(' ') ? m : ` ${m} `
-    let idx = 0
-    while ((idx = padded.indexOf(needle, idx)) !== -1) {
-      hits += 1
-      idx += needle.length
-    }
-  }
-  return hits
-}
-
-interface LanguageScore { ch: number; de: number; en: number }
-
-function scoreLanguage(text: string): LanguageScore {
-  const lc = lower(text)
-  return {
-    ch: countMarkers(lc, MUNDART_MARKERS),
-    de: countMarkers(lc, HD_MARKERS),
-    en: countMarkers(lc, EN_MARKERS),
-  }
-}
-
-/** Best-effort English detector — used early to short-circuit. */
-function looksClearlyEnglish(transcript: string): boolean {
-  const s = scoreLanguage(transcript)
-  // English-heavy with no German/Mundart hits.
-  return s.en >= 2 && s.de === 0 && s.ch === 0
-}
+//
+// Design (May 2026): we no longer try to detect language from the transcript
+// or conversation messages with marker arrays. Modern small models (Gemini
+// Flash, GPT-4o-mini) do this reliably on their own when given a sentence
+// and any available conversation context. The function below only picks the
+// *default* output language for the channel; the model can (and is told to)
+// switch from that default when the dictation or conversation context is
+// clearly in a different language. See `languageInstruction()` for the
+// per-language switch rules in the prompt.
+//
+// Defaults are based on Janis's observed usage:
+//   - Messaging (WhatsApp, iMessage, Telegram):  ~95% Baseldütsch  → ch-bs
+//   - Mail (Apple Mail, Outlook, Superhuman):    German or English → de
+//                                                (never Mundart in email)
+//   - Slack:                                     mixed             → en
+//   - Browsers / Notion / editors / unknowns:    mostly English    → en
 
 /**
- * Deterministic language inference. See the flowchart in the plan for the
- * full decision tree.
+ * Pick the *default* output language for a (transcript, context) pair. The
+ * model is instructed to override this default at runtime when the dictation
+ * or conversation context is clearly in a different language — so think of
+ * the returned value as a hint, not a hard constraint.
  *
- * Inputs:
- *   - transcript: the cleaned ElevenLabs transcript
- *   - ctx:        the ContextSnapshot from the client
- *   - opts:       optional recipient->language fallback (last-resort only)
+ * The `recipientFallback` opt (e.g. "David Eberle → ch-bs") still takes
+ * precedence: it captures user-curated knowledge the model can't infer.
  */
 export function inferOutputLanguage(
-  transcript: string,
+  _transcript: string,
   ctx: ContextSnapshot,
   opts?: { recipientFallback?: (ctx: ContextSnapshot) => OutputLanguage | undefined },
 ): OutputLanguage {
-  // 1. Transcript clearly English → English.
-  if (looksClearlyEnglish(transcript)) return 'en'
+  // 1. Curated recipient overrides win — user knows their contacts.
+  const fromRecipient = opts?.recipientFallback?.(ctx)
+  if (fromRecipient) return fromRecipient
 
-  // 2. Conversation messages: 3+ recent entries → scan them.
-  const messages = (ctx.conversationMessages ?? []).filter((m) => m && m.trim().length > 0)
-  if (messages.length >= 3) {
-    let ch = 0, de = 0, en = 0
-    for (const m of messages.slice(-5)) {
-      const s = scoreLanguage(m)
-      ch += s.ch; de += s.de; en += s.en
-    }
-    if (ch >= 2) return 'ch-bs'
-    if (de >= 2 && ch === 0) return 'de'
-    if (en >= 2 && ch === 0 && de === 0) return 'en'
-    // Otherwise fall through to transcript-based.
-  }
+  // 2. Per-channel default.
+  const isMessaging =
+    (ctx.bundleId && MESSAGING_BUNDLES.has(ctx.bundleId)) || ctx.appHint === 'messaging'
+  if (isMessaging) return 'ch-bs'
 
-  // 3. Last-resort recipient fallback (only when no recent messages).
-  if (messages.length === 0 && opts?.recipientFallback) {
-    const lang = opts.recipientFallback(ctx)
-    if (lang) return lang
-  }
+  const isMail =
+    (ctx.bundleId && FORMAL_BUNDLES.has(ctx.bundleId)) || ctx.appHint === 'email'
+  if (isMail) return 'de'
 
-  // 4. App-default heuristics combined with transcript scan.
-  const transcriptScore = scoreLanguage(transcript)
-  const isMessagingApp =
-    (ctx.bundleId && MESSAGING_BUNDLES.has(ctx.bundleId)) ||
-    ctx.appHint === 'messaging'
-  const isSlack =
-    (ctx.bundleId && SLACK_BUNDLES.has(ctx.bundleId)) || ctx.appHint === 'slack'
-  const isFormal =
-    (ctx.bundleId && FORMAL_BUNDLES.has(ctx.bundleId)) ||
-    ctx.appHint === 'email'
-
-  if (isMessagingApp) {
-    // WhatsApp/Telegram/iMessage default to Mundart when the transcript
-    // looks German-ish at all.
-    if (transcriptScore.ch >= 1) return 'ch-bs'
-    if (transcriptScore.de >= 1) return 'ch-bs'
-    return 'en'
-  }
-  if (isSlack) {
-    if (transcriptScore.ch >= 2) return 'ch-bs'
-    if (transcriptScore.de >= 1 && transcriptScore.en === 0) return 'de'
-    return 'en'
-  }
-  if (isFormal) {
-    // Mail/Outlook etc. — never Mundart.
-    if (transcriptScore.de >= 1) return 'de'
-    return 'en'
-  }
-
-  // Default: lean on the transcript itself.
-  if (transcriptScore.ch >= 2) return 'ch-bs'
-  if (transcriptScore.de >= 1 && transcriptScore.en === 0) return 'de'
+  // Slack, Notion, browsers, editors, prompt-optimisers — default English.
+  // The model picks the actual output language at runtime from the dictation
+  // and the [recent-messages-from-conversation] block (if present).
   return 'en'
 }
 
@@ -605,7 +525,7 @@ export function resolveChannel(ctx: ContextSnapshot): ResolvedChannel {
   if (ctx.bundleId) {
     if (MAIL_BUNDLES.has(ctx.bundleId)) return 'email'
     if (SLACK_BUNDLES.has(ctx.bundleId)) {
-      const placeholderLooksLikeReply = lower(ctx.placeholder).startsWith('reply')
+      const placeholderLooksLikeReply = (ctx.placeholder ?? '').toLowerCase().startsWith('reply')
       const hasThreadParent = !!ctx.threadParent
       return placeholderLooksLikeReply || hasThreadParent ? 'slack-thread-reply' : 'slack'
     }
@@ -679,10 +599,10 @@ const SELF_CORRECTION_RULE =
   "If the user corrected themselves (e.g. 'meet at three — no, four'), output only the corrected version, coherently. Drop hesitations, restarts and filler unless they carry meaning."
 
 const NO_STYLE_MIMICRY_RULE =
-  "The conversation context below is provided ONLY so you know which language to write in. Do NOT copy the other person's vocabulary, dialect, tone, emoji habits, or formality level. The user's own style is the source of truth."
+  "The [recent-messages-from-conversation] block (if present) is provided ONLY to (a) help you pick the right output language and (b) understand what the user is replying to. Do NOT copy the other person's vocabulary, dialect, tone, emoji habits, or formality level. The user's own style is the source of truth — never let the recipient's writing style leak into the output."
 
 const NEVER_TRANSLATE_RULE =
-  "Write in the resolved output language exactly. If the [dictation] is in a different language than the resolved output, translate it; otherwise preserve the dictation's wording as much as the channel allows."
+  "Write in the chosen output language exactly. If the [dictation] is in a different language than the output, translate it; otherwise preserve the dictation's wording as much as the channel allows."
 
 /**
  * The pivotal rule: the model must pick one of two modes on every call.
@@ -750,10 +670,9 @@ const MUNDART_CHANNEL_OVERLAYS: Partial<Record<ResolvedChannel, string>> = {
 function languageInstruction(lang: OutputLanguage): string {
   switch (lang) {
     case 'ch-bs':
-      // The Mundart prompt itself sets the language — this is only a hint.
-      return 'Output language: Baseldütsch (Janis Mundart). Follow <task>, <janis-voice>, <phonology>, <glossary>, <syntax>, <forbidden> and <self-check> strictly.'
+      return 'Output language: Baseldütsch (Janis Mundart). Follow <task>, <janis-voice>, <phonology>, <glossary>, <syntax>, <forbidden> and <self-check>.'
     case 'de':
-      return 'Output language: Standarddeutsch (Hochdeutsch). Use the formal "Sie" only when the channel demands it.'
+      return 'Output language: Standarddeutsch (Hochdeutsch). Use the formal "Sie" only when the channel demands it. NEVER output Swiss German for this channel.'
     case 'en':
       return 'Output language: English.'
   }
@@ -836,10 +755,17 @@ export function resolveCompose(
   return { channel, language, languageDemoted }
 }
 
-/** Builds the user-message envelope passed to the model: a compact `[context]`
- *  block followed by the `[dictation]`. The `[context]` block contains only
- *  labels (recipient, app, language) — raw conversation messages are NOT
- *  included so the model has no way to mimic the other person's style.
+/** Builds the user-message envelope passed to the model:
+ *    [context]               — app/recipient/channel/default-language labels
+ *    [recent-messages…]      — verbatim conversation messages (optional)
+ *    [dictation]             — the cleaned ElevenLabs transcript
+ *
+ *  Conversation messages are now passed verbatim (previously they were
+ *  scored client-side and replaced with a `recentLanguage:` label, which
+ *  proved too brittle — see git history for the bug). The prompt's
+ *  NO_STYLE_MIMICRY_RULE tells the model to use them only for (a) language
+ *  detection and (b) understanding the reply context, never to copy the
+ *  recipient's vocabulary, dialect, tone, or emoji habits.
  *
  *  The `[dictation]` label (not `[transcript]`) is intentional: it cues the
  *  model that this is the user's input *for it to handle*, not an incoming
@@ -860,27 +786,6 @@ export function buildUserMessageV2(
   if (ctx.placeholder) lines.push(`placeholder: ${ctx.placeholder}`)
   if (ctx.threadParent) lines.push(`threadParent: ${JSON.stringify(ctx.threadParent)}`)
 
-  // `recentLanguage` is a LABEL only — never the raw message text.
-  const recent = (ctx.conversationMessages ?? []).filter((m) => m && m.trim().length > 0)
-  if (recent.length > 0) {
-    const tally = recent.slice(-5).reduce<LanguageScore>(
-      (acc, m) => {
-        const s = scoreLanguage(m)
-        acc.ch += s.ch; acc.de += s.de; acc.en += s.en
-        return acc
-      },
-      { ch: 0, de: 0, en: 0 },
-    )
-    const label = tally.ch >= 2
-      ? 'ch (mixed dialects ok — output stays Basel)'
-      : tally.de >= 2
-        ? 'de'
-        : tally.en >= 2
-          ? 'en'
-          : 'unknown'
-    lines.push(`recentLanguage: ${label} (${recent.length} msgs scanned, not shown verbatim)`)
-  }
-
   if (ctx.documentContextBefore && ctx.documentContextBefore.trim().length > 0) {
     // For iOS keyboard surfaces: the partial draft is genuinely useful for
     // continuity (e.g. the user is finishing a sentence). It's their own
@@ -889,8 +794,19 @@ export function buildUserMessageV2(
   }
 
   lines.push(`channel: ${resolved.channel}`)
-  lines.push(`language: ${resolved.language}${resolved.languageDemoted ? ' (demoted from ch-bs)' : ''}`)
-  lines.push('[/context]', '', '[dictation]', transcript, '[/dictation]')
+  lines.push(`defaultLanguage: ${resolved.language}${resolved.languageDemoted ? ' (demoted from ch-bs)' : ''} (the model may override based on dictation/conversation)`)
+  lines.push('[/context]')
+
+  const recent = (ctx.conversationMessages ?? []).filter((m) => m && m.trim().length > 0)
+  if (recent.length > 0) {
+    lines.push('', '[recent-messages-from-conversation]')
+    for (const m of recent.slice(-5)) {
+      lines.push(`- ${m}`)
+    }
+    lines.push('[/recent-messages-from-conversation]')
+  }
+
+  lines.push('', '[dictation]', transcript, '[/dictation]')
   return lines.join('\n')
 }
 
