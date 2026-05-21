@@ -5,6 +5,7 @@ import { haptic, isNative } from '../../lib/native'
 import { useModelStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
 import { useAutoClassifyStore } from '../../state/autoClassify'
+import { useChatStore, type PendingFile } from '../../state/chat'
 import { MODEL_OPTIONS } from '../../gateway/presets'
 import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspaceApi'
 import { useThreadsStore } from '../../state/threads'
@@ -22,6 +23,8 @@ import {
 interface Props {
   onSend: (message: string, images?: string[]) => void
   onAbort: () => void
+  /** Abort the current stream and immediately send the queued message. */
+  onSendNow?: () => void
   isStreaming: boolean
   onRecordingChange?: (recording: boolean, duration: string, cancel: () => void) => void
   isHome?: boolean
@@ -40,14 +43,6 @@ const MAX_IMAGES = 4
 const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 const MAX_FILES = 5
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB per file
-
-interface PendingFile {
-  name: string
-  content: string
-  size: number
-  /** Local file path — the agent can read this directly */
-  localPath?: string
-}
 
 const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.xml', '.html', '.js', '.ts', '.jsx', '.tsx', '.py', '.css', '.yml', '.yaml', '.toml', '.svg', '.sh', '.env', '.log'])
 
@@ -83,7 +78,7 @@ async function extractTextContent(file: File): Promise<string> {
   return ''
 }
 
-export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
+export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
   // Initialize with the persisted draft for this column (or empty if none).
   const [value, setValue] = useState(() => (draftKey ? useDraftsStore.getState().getDraft(draftKey) : ''))
 
@@ -201,35 +196,9 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     }
   }, [])
 
-  const voice = useVoiceRecorder({
-    onTranscription: (text) => {
-      // If input already has text, append transcription to it
-      const current = value.trim()
-      if (current) {
-        const combined = current + ' ' + text
-        onSend(combined.slice(0, 10000))
-        setValue('')
-        if (textareaRef.current) textareaRef.current.style.height = 'auto'
-      } else {
-        // Auto-send voice transcription directly
-        onSend(text.slice(0, 10000))
-      }
-      haptic.tap()
-    },
-    onInsertTranscription: (text) => {
-      // Insert text into textarea without sending
-      const current = value.trim()
-      const newValue = current ? current + ' ' + text : text
-      setValue(newValue.slice(0, 10000))
-      haptic.tap()
-      setTimeout(() => textareaRef.current?.focus(), 50)
-    },
-  })
-
-  // Report recording state changes to parent (for header recording bar)
-  useEffect(() => {
-    onRecordingChange?.(voice.state === 'recording', voice.formattedDuration, voice.cancel)
-  }, [voice.state, voice.formattedDuration, voice.cancel, onRecordingChange])
+  // Forward-declared so the voice hook (defined later) can submit via this ref
+  // without depending on declaration order.
+  const handleSubmitRef = useRef<((overrideText?: string) => void) | null>(null)
 
   // Listen for suggestion clicks from empty state
   useEffect(() => {
@@ -339,8 +308,8 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
     return result.handled
   }, [threadId, onClear, onRetry, showToast])
 
-  const handleSubmit = useCallback(async () => {
-    const trimmed = value.trim()
+  const handleSubmit = useCallback(async (overrideText?: string) => {
+    const trimmed = (overrideText ?? value).trim()
     if (!trimmed && pendingImages.length === 0 && pendingFiles.length === 0) return
 
     // Try local slash command interpreter first
@@ -353,7 +322,25 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       }
     }
 
-    // During streaming, just queue the message (don't abort)
+    // During streaming: queue raw (preserves files for later editing) instead
+    // of dropping or aborting. The single-item queue auto-appends, and the
+    // drain in useChat sends it when the current response completes.
+    if (isStreaming && threadId) {
+      useChatStore.getState().enqueueOrAppend(threadId, {
+        content: trimmed,
+        files: pendingFiles.length > 0 ? pendingFiles : undefined,
+        images: pendingImages.length > 0 ? pendingImages : undefined,
+      })
+      setSendAnim(true)
+      setTimeout(() => setSendAnim(false), 300)
+      haptic.tap()
+      setValue('')
+      setPendingImages([])
+      setPendingFiles([])
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      setTimeout(() => textareaRef.current?.focus(), 50)
+      return
+    }
 
     // Build message text with file contents prepended
     let messageText = trimmed
@@ -377,7 +364,36 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
       textareaRef.current.style.height = 'auto'
     }
     setTimeout(() => textareaRef.current?.focus(), 50)
-  }, [value, onSend, pendingImages, pendingFiles, runSlash])
+  }, [value, onSend, pendingImages, pendingFiles, runSlash, isStreaming, threadId])
+
+  // Keep the forward-declared ref in sync with the latest handleSubmit.
+  useEffect(() => { handleSubmitRef.current = handleSubmit }, [handleSubmit])
+
+  const voice = useVoiceRecorder({
+    threadId,
+    onTranscription: (text) => {
+      // Combine any in-progress textarea content with the transcription, then
+      // route through handleSubmit so pendingFiles/pendingImages are attached
+      // and slash commands still work.
+      const current = value.trim()
+      const finalText = current ? current + ' ' + text : text
+      handleSubmitRef.current?.(finalText)
+      haptic.tap()
+    },
+    onInsertTranscription: (text) => {
+      // Insert text into textarea without sending
+      const current = value.trim()
+      const newValue = current ? current + ' ' + text : text
+      setValue(newValue.slice(0, 10000))
+      haptic.tap()
+      setTimeout(() => textareaRef.current?.focus(), 50)
+    },
+  })
+
+  // Report recording state changes to parent (for header recording bar)
+  useEffect(() => {
+    onRecordingChange?.(voice.state === 'recording', voice.formattedDuration, voice.cancel)
+  }, [voice.state, voice.formattedDuration, voice.cancel, onRecordingChange])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -559,6 +575,37 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
   const autoEnabled = useAutoClassifyStore((s) => s.autoEnabled)
   const autoClassification = useAutoClassifyStore((s) => threadId ? s.classifications[threadId] ?? null : null)
   const autoPending = useAutoClassifyStore((s) => threadId ? s.pending[threadId] ?? false : false)
+
+  // Queued message for this thread (set when the user submits while streaming).
+  const queuedMessage = useChatStore((s) =>
+    threadId ? s.threadStates[threadId]?.queuedMessage ?? null : null,
+  )
+
+  /** Pull queued content + attachments back into the composer for editing. */
+  const handleEditQueued = useCallback(() => {
+    if (!threadId) return
+    const queued = useChatStore.getState().pullQueuedMessage(threadId)
+    if (!queued) return
+    setValue(queued.content)
+    setPendingFiles(queued.files ?? [])
+    setPendingImages(queued.images ?? [])
+    haptic.tap()
+    setTimeout(() => textareaRef.current?.focus(), 50)
+  }, [threadId])
+
+  /** Drop the queued message without sending. */
+  const handleTrashQueued = useCallback(() => {
+    if (!threadId) return
+    useChatStore.getState().clearQueuedMessage(threadId)
+    haptic.tap()
+  }, [threadId])
+
+  /** Abort current stream and send the queued message immediately. */
+  const handleSendNowQueued = useCallback(() => {
+    if (!queuedMessage) return
+    haptic.tap()
+    onSendNow?.()
+  }, [onSendNow, queuedMessage])
 
   const menuVisible = menuState !== 'closed'
 
@@ -775,6 +822,58 @@ export function InputBar({ onSend, onAbort, isStreaming, onRecordingChange, isHo
           <div className="flex items-center justify-center mb-2 gap-2 animate-[fadeSlideIn_0.2s_ease-out]" role="status">
             <div className="voice-spinner" />
             <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Transcribing...</span>
+          </div>
+        )}
+
+        {/* Queued message row — visible above the composer while a response
+            streams and the user has submitted another message. */}
+        {queuedMessage && (
+          <div
+            className="mb-2 px-3 py-2 rounded-xl glass-heavy border border-border flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
+            role="status"
+            aria-label="Queued message"
+          >
+            <div
+              className="w-3.5 h-3.5 rounded-full border-2 border-muted-foreground/40 flex-shrink-0"
+              aria-hidden="true"
+            />
+            <div className="flex-1 min-w-0 flex items-center gap-2">
+              <span className="text-[13px] text-foreground/90 truncate">
+                {queuedMessage.content || (queuedMessage.files?.length || queuedMessage.images?.length ? 'Attachments queued' : 'Queued')}
+              </span>
+              {(queuedMessage.files?.length || queuedMessage.images?.length) ? (
+                <span className="text-[10.5px] text-muted-foreground flex-shrink-0">
+                  {queuedMessage.files?.length ? `${queuedMessage.files.length} file${queuedMessage.files.length === 1 ? '' : 's'}` : null}
+                  {queuedMessage.files?.length && queuedMessage.images?.length ? ' · ' : null}
+                  {queuedMessage.images?.length ? `${queuedMessage.images.length} image${queuedMessage.images.length === 1 ? '' : 's'}` : null}
+                </span>
+              ) : null}
+            </div>
+            <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/70 flex-shrink-0">Queued</span>
+            <button
+              onClick={handleEditQueued}
+              className="inline-btn w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+              aria-label="Edit queued message"
+              title="Edit"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            </button>
+            <button
+              onClick={handleSendNowQueued}
+              className="inline-btn w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+              aria-label="Send queued message now"
+              title="Send now"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+            </button>
+            <button
+              onClick={handleTrashQueued}
+              className="inline-btn w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              aria-label="Discard queued message"
+              title="Discard"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
           </div>
         )}
 

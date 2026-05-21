@@ -42,16 +42,46 @@ export interface Message {
   lastEventSeq?: number
 }
 
+/** A file attached to the composer (and persisted in the queue when applicable). */
+export interface PendingFile {
+  name: string
+  content: string
+  size: number
+  /** Local file path — the agent can read this directly */
+  localPath?: string
+}
+
+/** A message the user enqueued while a previous response was still streaming.
+ *  Stored raw (not composed) so editing can restore content + attachments. */
+export interface QueuedMessage {
+  content: string
+  images?: string[]
+  files?: PendingFile[]
+}
+
 export interface ThreadStreamState {
   messages: Message[]
   isStreaming: boolean
   abortController: AbortController | null
+  queuedMessage: QueuedMessage | null
 }
 
 const EMPTY_THREAD_STATE: ThreadStreamState = {
   messages: [],
   isStreaming: false,
   abortController: null,
+  queuedMessage: null,
+}
+
+/** Compose the final message text the gateway sees by prepending `<file>` blocks. */
+export function composeMessageText(content: string, files: PendingFile[] | undefined): string {
+  if (!files || files.length === 0) return content
+  const fileParts = files.map((f) => {
+    const attrs = `name="${f.name}"${f.localPath ? ` path="${f.localPath}"` : ''}`
+    if (f.content) return `<file ${attrs}>\n${f.content}\n</file>`
+    return `<file ${attrs} />`
+  })
+  return fileParts.join('\n\n') + (content ? '\n\n' + content : '')
 }
 
 interface ChatState {
@@ -75,6 +105,13 @@ interface ChatState {
   addMedia: (threadId: string, id: string, media: MediaAttachment[]) => void
   clearMessages: (threadId: string) => void
   removeMessage: (threadId: string, messageId: string) => void
+  /** Queue a message (or append to an existing one) while a response is streaming. */
+  enqueueOrAppend: (threadId: string, msg: QueuedMessage) => void
+  /** Clear the queued message for a thread (e.g. after sending or trashing it). */
+  clearQueuedMessage: (threadId: string) => void
+  /** Atomically clear the queued message and return its previous value, so the
+   *  caller can pull it back into the composer for editing. */
+  pullQueuedMessage: (threadId: string) => QueuedMessage | null
 }
 
 function saveMessages(threadId: string, messages: Message[]) {
@@ -112,7 +149,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (state) return state
     // Lazy-load from localStorage
     const messages = loadThreadMessages(threadId)
-    const newState: ThreadStreamState = { messages, isStreaming: false, abortController: null }
+    const newState: ThreadStreamState = { messages, isStreaming: false, abortController: null, queuedMessage: null }
     set((s) => ({
       threadStates: { ...s.threadStates, [threadId]: newState },
     }))
@@ -125,7 +162,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       threadStates: {
         ...s.threadStates,
-        [threadId]: { messages, isStreaming: false, abortController: null },
+        [threadId]: { messages, isStreaming: false, abortController: null, queuedMessage: null },
       },
     }))
   },
@@ -394,4 +431,53 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       }
     }),
+
+  enqueueOrAppend: (threadId, msg) => {
+    // Ensure thread state exists.
+    get().ensureThread(threadId)
+    set((state) => {
+      const ts = state.threadStates[threadId]!
+      const existing = ts.queuedMessage
+      // Single-item queue: when something is already queued, append the new
+      // content (and merge attachments) so the user never loses what they
+      // typed. Hard caps to keep payloads bounded.
+      const merged: QueuedMessage = existing
+        ? {
+            content: existing.content && msg.content
+              ? `${existing.content}\n\n${msg.content}`
+              : (existing.content || msg.content),
+            files: [...(existing.files || []), ...(msg.files || [])].slice(0, 10),
+            images: [...(existing.images || []), ...(msg.images || [])].slice(0, 8),
+          }
+        : msg
+      // Strip empty arrays so consumers can treat them as undefined.
+      if (merged.files && merged.files.length === 0) delete merged.files
+      if (merged.images && merged.images.length === 0) delete merged.images
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, queuedMessage: merged },
+        },
+      }
+    })
+  },
+
+  clearQueuedMessage: (threadId) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts || !ts.queuedMessage) return state
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, queuedMessage: null },
+        },
+      }
+    }),
+
+  pullQueuedMessage: (threadId) => {
+    const ts = get().threadStates[threadId]
+    const queued = ts?.queuedMessage ?? null
+    if (queued) get().clearQueuedMessage(threadId)
+    return queued
+  },
 }))

@@ -18,6 +18,7 @@ import { CanvasPanel } from './components/canvas/CanvasPanel.tsx'
 import { consumePendingThread } from './lib/pendingThread.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
+import { FloatingRecordingPill } from './components/voice/FloatingRecordingPill.tsx'
 
 // Lazy-loaded components (code splitting)
 const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
@@ -90,7 +91,7 @@ function waitForScrollSettle(container: HTMLElement, onSettled: () => void): () 
 
 export function App() {
   useVisualViewport()
-  const { send, abort } = useChat()
+  const { send, abort, sendNow } = useChat()
   const { checkRecovery } = useResponseRecovery()
   const { state: pushState, requestPermission } = usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
@@ -813,6 +814,13 @@ export function App() {
     }
   }, [visiblePanel, abort])
 
+  // Send-now: abort current stream + immediately send the thread's queued message.
+  const handleSendNow = useCallback(() => {
+    if (visiblePanel !== 'home') {
+      sendNow(visiblePanel)
+    }
+  }, [visiblePanel, sendNow])
+
   // Set panel ref callback
   const setPanelRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) {
@@ -1245,6 +1253,7 @@ export function App() {
             <InputBar
               onSend={handleSend}
               onAbort={handleAbort}
+              onSendNow={handleSendNow}
               isStreaming={visibleThreadStreaming}
               onRecordingChange={handleRecordingChange}
               isHome={!isDesktop && visiblePanel === 'home'}
@@ -1263,6 +1272,11 @@ export function App() {
         )}
         </div>
       </div>
+
+      {/* Persistent recording indicator — visible on panels without the
+          composer (Markdown / Finder / File viewer) so the user can stop
+          recording even after navigating away from the chat that started it. */}
+      <FloatingRecordingPill visible={!isVisibleChat} />
 
       <Suspense fallback={null}>
         <DebugOverlay />

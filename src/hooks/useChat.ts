@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { useChatStore } from '../state/chat.ts'
+import { useChatStore, composeMessageText } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
 import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
@@ -41,6 +41,9 @@ export function useChat() {
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[] }[]>([])
   const sendRef = useRef<((threadId: string, content: string, images?: string[], retryCount?: number) => Promise<void>) | undefined>(undefined)
+  // Forward-declared so `send`'s onDone callback (created earlier) can invoke
+  // the drain helper (created later) without a circular useCallback dep.
+  const drainQueueIfAnyRef = useRef<((threadId: string) => void) | null>(null)
 
   // Online/offline detection + reconnect
   useEffect(() => {
@@ -83,7 +86,14 @@ export function useChat() {
     } = store.getState()
 
     const threadState = getThreadState(threadId)
-    if (threadState.isStreaming) return
+    if (threadState.isStreaming) {
+      // Queue instead of silently dropping. The drain on stream completion
+      // will pick this up. `content` is already composed at this point —
+      // callers that need editing-friendly raw storage should use
+      // `useChatStore.enqueueOrAppend` directly.
+      store.getState().enqueueOrAppend(threadId, { content: content.trim(), images })
+      return
+    }
 
     ensureThread(threadId)
 
@@ -210,6 +220,8 @@ export function useChat() {
         }
         store.getState().setStreaming(threadId, false)
         store.getState().setAbortController(threadId, null)
+        // Drain any message the user queued while this response was streaming.
+        drainQueueIfAnyRef.current?.(threadId)
       },
       onError: (error: Error) => {
         console.error(`[Chat] Stream error (onError):`, error.name, error.message, error)
@@ -241,6 +253,14 @@ export function useChat() {
         },
       )
     } catch (error) {
+      // Ownership guard: if a newer send (e.g. via `sendNow`) has already
+      // replaced our abort controller, our cleanup is stale — bail out so we
+      // don't clobber the newer stream's state.
+      const currentController = store.getState().getThreadState(threadId).abortController
+      if (currentController !== controller && currentController !== null) {
+        return
+      }
+
       const errMsg = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
       console.error(`[Chat] Send failed (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, errMsg, error)
 
@@ -249,6 +269,7 @@ export function useChat() {
       if (error instanceof Error && error.name === 'AbortError') {
         store.getState().finalizeMessage(threadId, assistantId)
         store.getState().setStreaming(threadId, false)
+        // Stop button: queue stays (user wanted to stop). Do not drain.
         return
       }
 
@@ -336,7 +357,36 @@ export function useChat() {
     store.getState().setAbortController(threadId, null)
   }, [store])
 
-  return { send, abort }
+  /** Drain a queued message after a stream completes normally. */
+  const drainQueueIfAny = useCallback((threadId: string) => {
+    const ts = store.getState().getThreadState(threadId)
+    if (!ts.queuedMessage || ts.isStreaming) return
+    const queued = ts.queuedMessage
+    store.getState().clearQueuedMessage(threadId)
+    const composed = composeMessageText(queued.content, queued.files)
+    sendRef.current?.(threadId, composed, queued.images)
+  }, [store])
+
+  // Wire the drain helper into the closure used by streamCallbacks above.
+  // (The `send` callback captures `drainQueueIfAny` by reference via this ref
+  // pattern to avoid a circular dependency in the useCallback deps.)
+  drainQueueIfAnyRef.current = drainQueueIfAny
+
+  /** Abort the current stream and immediately send the queued message.
+   *  The catch block's ownership guard prevents the aborted stream from
+   *  clobbering the newer one's state. */
+  const sendNow = useCallback((threadId: string) => {
+    const queued = store.getState().pullQueuedMessage(threadId)
+    if (!queued) return
+    const ts = store.getState().getThreadState(threadId)
+    ts.abortController?.abort()
+    store.getState().setStreaming(threadId, false)
+    store.getState().setAbortController(threadId, null)
+    const composed = composeMessageText(queued.content, queued.files)
+    sendRef.current?.(threadId, composed, queued.images)
+  }, [store])
+
+  return { send, abort, sendNow }
 }
 
 function generateTitleIfNeeded(threadId: string) {
