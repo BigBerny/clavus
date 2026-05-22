@@ -194,7 +194,7 @@ export function useChat() {
       onToken: (token: string) => store.getState().appendToMessage(threadId, assistantId, token),
       onToolCall: handleToolCall,
       onResponseId: (responseId: string) => {
-        store.getState().setHermesResponseId(threadId, assistantId, responseId)
+        store.getState().setBackendResponseId(threadId, assistantId, responseId)
       },
       onSeq: (seq: number) => {
         store.getState().setLastEventSeq(threadId, assistantId, seq)
@@ -275,7 +275,7 @@ export function useChat() {
 
       // Try to resume from the Clavus server-side event buffer first.
       const msgForResume = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)
-      const responseId = msgForResume?.hermesResponseId
+      const responseId = msgForResume?.backendResponseId ?? msgForResume?.hermesResponseId
       const fromSeq = typeof msgForResume?.lastEventSeq === 'number' ? msgForResume.lastEventSeq + 1 : 0
 
       // Re-arm streaming flag so UI shows the response is still progressing
@@ -296,7 +296,7 @@ export function useChat() {
         setConnectionStatus('connected')
       } catch (resumeErr) {
         console.warn('[Chat] Resume failed:', resumeErr)
-        // Resume itself failed — fall back to the legacy Hermes-store path
+        // Resume itself failed — fall back to any backend-specific store path
         // (good for old responses whose buffer is gone), then retry.
       }
 
@@ -304,17 +304,17 @@ export function useChat() {
 
       store.getState().setAbortController(threadId, null)
 
-      // Legacy fallback: maybe the response is already completed in Hermes' own store.
-      const hermesState = await recoverResponse(threadId).catch(() => null)
+      // Legacy fallback: maybe the response is already completed in the backend's own store.
+      const hermesState = await recoverResponse(threadId, config).catch(() => null)
       if (hermesState && (hermesState.status === 'completed' || hermesState.status === 'incomplete') && hermesState.text) {
-        console.log('[Chat] Response already completed on Hermes, recovering text-only')
+        console.log('[Chat] Response already completed on backend, recovering text-only')
         store.getState().updateMessage(threadId, assistantId, hermesState.text)
         if (hermesState.model) store.getState().setMessageModel(threadId, assistantId, hermesState.model)
         if (hermesState.usage) store.getState().setMessageUsage(threadId, assistantId, hermesState.usage)
         if (hermesState.toolCalls && hermesState.toolCalls.length > 0) {
           store.getState().updateToolCalls(threadId, assistantId, hermesState.toolCalls)
         }
-        store.getState().setHermesResponseId(threadId, assistantId, hermesState.responseId)
+        store.getState().setBackendResponseId(threadId, assistantId, hermesState.responseId)
         store.getState().finalizeMessage(threadId, assistantId)
         store.getState().setStreaming(threadId, false)
         setConnectionStatus('connected')

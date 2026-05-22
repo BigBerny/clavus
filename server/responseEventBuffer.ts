@@ -1,7 +1,7 @@
 /**
- * Server-side buffer for Hermes Responses SSE streams.
+ * Server-side buffer for Responses SSE streams.
  *
- * Keyed by `responseId`. Each event from Hermes is appended with a monotonic
+ * Keyed by `responseId`. Each event from the chat backend is appended with a monotonic
  * sequence number, fanned out to live subscribers, and persisted to disk as
  * NDJSON so the buffer can be lazy-loaded after a Vite restart.
  *
@@ -54,7 +54,7 @@ function ensureDir() {
 }
 
 function diskPath(responseId: string): string {
-  // Defensively sanitize — responseId comes from Hermes (alphanumeric + underscore)
+  // Defensively sanitize — responseId comes from the selected backend.
   const safe = responseId.replace(/[^A-Za-z0-9_-]/g, '_')
   return nodePath.join(BUFFERS_ROOT, `${safe}.ndjson`)
 }

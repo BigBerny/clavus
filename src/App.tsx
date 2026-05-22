@@ -41,7 +41,7 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
           </div>
           <h1 className="text-xl font-semibold text-foreground mb-1">Welcome to Clavus</h1>
           <p className="text-sm text-muted-foreground">
-            Enter your Hermes API token to get started.
+            Enter your backend API token to get started.
           </p>
         </div>
         <div className="space-y-3">
@@ -50,9 +50,9 @@ function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
             value={token}
             onChange={(e) => setToken(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && token.trim() && onSave(token.trim())}
-            placeholder="Hermes API token..."
+            placeholder="Backend API token..."
             autoFocus
-            aria-label="Hermes API token"
+            aria-label="Backend API token"
             className="w-full px-4 py-3 text-sm rounded-[var(--glass-radius)] glass text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
           <button

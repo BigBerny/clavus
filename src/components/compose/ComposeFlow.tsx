@@ -149,9 +149,8 @@ export function ComposeFlow({ channel, onClose }: Props) {
     async function reformulate() {
       try {
         const gwConfig = getConfig()
-        // Apply selected model (same as useChat.ts)
-        // For chat/completions we need a real model name, not the agent routing ID.
-        // When "auto" is selected or the ID doesn't match, fall back to gpt-5.5.
+        // Apply selected model (same as useChat.ts). OpenClaw receives this as
+        // x-openclaw-model while Hermes uses it as the request model.
         const selectedModelId = useModelStore.getState().selectedModelId
         const modelOption = MODEL_OPTIONS.find((m) => m.id === selectedModelId)
         gwConfig.model = modelOption?.model ?? MODEL_OPTIONS[0].model

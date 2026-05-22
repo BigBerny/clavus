@@ -1,5 +1,6 @@
 import { isValidReasoningLevel, VALID_REASONING_LEVELS, type ReasoningLevel } from '../state/chatSettings'
 import { MODEL_OPTIONS } from '../gateway/presets'
+import { getConfig } from '../gateway/config'
 
 export interface SlashCommand {
   command: string
@@ -24,7 +25,7 @@ export interface SlashContext {
   showHelp: () => void
   showStatus: () => void
   toast: (msg: string) => void
-  /** Best-effort sync to hermes-webui. Failures are swallowed. */
+  /** Best-effort sync to backend-specific global reasoning defaults. Failures are swallowed. */
   syncReasoningToHermes?: (level: ReasoningLevel) => Promise<void>
 }
 
@@ -133,7 +134,7 @@ function handleReasoning(args: string, ctx: SlashContext): SlashResult {
   } else {
     ctx.setGlobalReasoning(level)
   }
-  // Best-effort: also sync the global default to hermes-webui
+  // Best-effort: also sync the backend global default when supported.
   void ctx.syncReasoningToHermes?.(level).catch(() => {})
   ctx.toast(`Reasoning: ${level}`)
   return { handled: true, message: level }
@@ -161,6 +162,10 @@ function handleModel(args: string, ctx: SlashContext): SlashResult {
 }
 
 async function handleTasks(args: string, ctx: SlashContext): Promise<SlashResult> {
+  if (getConfig().backend !== 'hermes') {
+    ctx.toast('Tasks are not available for this backend')
+    return { handled: true }
+  }
   try {
     const res = await fetch('/hermes-api/kanban/tasks')
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -178,7 +183,7 @@ async function handleTasks(args: string, ctx: SlashContext): Promise<SlashResult
     if (open.length > 5) lines.push(`  …and ${open.length - 5} more`)
     ctx.toast(lines.join('\n'))
   } catch {
-    ctx.toast('Could not reach Hermes')
+    ctx.toast('Could not reach tasks backend')
   }
   return { handled: true }
 }
@@ -188,8 +193,9 @@ function handleStatus(ctx: SlashContext): SlashResult {
   return { handled: true }
 }
 
-/** Best-effort POST to hermes-webui /api/reasoning to keep the global default in sync. */
+/** Best-effort POST to the backend UI to keep the global default in sync when supported. */
 export async function syncReasoningToHermes(level: ReasoningLevel): Promise<void> {
+  if (getConfig().backend !== 'hermes') return
   try {
     await fetch('/hermes-api/reasoning', {
       method: 'POST',

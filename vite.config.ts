@@ -61,6 +61,11 @@ const THREADS_DATA_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus
 const VAPID_FILE = nodePath.join(THREADS_DATA_DIR, 'vapid.json')
 const PUSH_SUBS_FILE = nodePath.join(THREADS_DATA_DIR, 'push-subscriptions.json')
 const HERMES_API_TARGET = process.env.HERMES_API_URL || 'http://127.0.0.1:8642'
+const OPENCLAW_API_TARGET = process.env.OPENCLAW_API_URL
+  || process.env.OPENCLAW_GATEWAY_URL
+  || 'http://127.0.0.1:18789'
+const CHAT_BACKEND = (process.env.CLAVUS_CHAT_BACKEND || process.env.VITE_CHAT_BACKEND || 'openclaw').toLowerCase()
+const CHAT_API_TARGET = normalizeHttpTarget(CHAT_BACKEND === 'hermes' ? HERMES_API_TARGET : OPENCLAW_API_TARGET)
 const BUILD_TIME = new Date().toISOString()
 const GIT_SHA = (() => {
   try {
@@ -74,6 +79,10 @@ function stripBrowserOrigin(proxy: any) {
   proxy.on('proxyReq', (proxyReq: any) => {
     proxyReq.removeHeader('origin')
   })
+}
+
+function normalizeHttpTarget(url: string): string {
+  return url.replace(/^ws/, 'http').replace(/\/+$/, '')
 }
 
 // Auto-generate VAPID keys on first run
@@ -101,12 +110,12 @@ const phoneServerOptions = {
   allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost', 'openclaw.random-hamster.win'],
   proxy: {
     '/v1': {
-      target: HERMES_API_TARGET,
+      target: CHAT_API_TARGET,
       changeOrigin: true,
       configure: stripBrowserOrigin,
     },
     '/health': {
-      target: HERMES_API_TARGET,
+      target: CHAT_API_TARGET,
       changeOrigin: true,
       configure: stripBrowserOrigin,
     },
@@ -163,13 +172,13 @@ async function sendPushToAll(payload: { title: string; body: string; threadId: s
 
 /**
  * Server-side SSE proxy for /v1/responses.
- * Keeps the Hermes connection alive even if the client (phone) disconnects,
- * preventing Hermes from aborting the agent run.
+ * Keeps the backend connection alive even if the client (phone) disconnects,
+ * preventing the backend from aborting the agent run.
  */
 /**
  * Buffered SSE hub for /v1/responses.
  *
- * - POST /v1/responses streams from Hermes, persists every event into an
+ * - POST /v1/responses streams from the selected chat backend, persists every event into an
  *   in-memory + on-disk buffer keyed by responseId, and fans out to subscribers
  *   (the originating POST connection plus any GET resume clients).
  * - GET /v1/responses/:id/stream subscribes to an existing buffer by responseId
@@ -177,7 +186,7 @@ async function sendPushToAll(payload: { title: string; body: string; threadId: s
  * - GET /v1/responses/by-thread/:threadId/stream resolves the active buffer for
  *   a thread and subscribes; falls back to a 404 if nothing active.
  *
- * Keeps the upstream Hermes connection alive even when no client is attached.
+ * Keeps the upstream backend connection alive even when no client is attached.
  */
 function responsesProxyPlugin() {
   initEventBuffer()
@@ -243,16 +252,25 @@ function responsesProxyPlugin() {
     if (!parsed.stream) return next()
 
     const conversation = typeof parsed.conversation === 'string' ? parsed.conversation : ''
-    const threadId = conversation.startsWith('clavus:') ? conversation.slice('clavus:'.length) : ''
+    const user = typeof parsed.user === 'string' ? parsed.user : ''
+    const headerSession = typeof req.headers['x-openclaw-session-key'] === 'string'
+      ? req.headers['x-openclaw-session-key']
+      : ''
+    const session = conversation || user || headerSession
+    const threadId = session.startsWith('clavus:') ? session.slice('clavus:'.length) : ''
 
-    // Forward to Hermes
+    // Forward to the selected chat backend.
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (req.headers.authorization) headers['Authorization'] = req.headers.authorization
     if (req.headers['idempotency-key']) headers['Idempotency-Key'] = req.headers['idempotency-key']
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (!key.startsWith('x-openclaw-') || typeof value !== 'string') continue
+      headers[key] = value
+    }
 
-    let hermesRes: Response
+    let backendRes: Response
     try {
-      hermesRes = await fetch(`${HERMES_API_TARGET}/v1/responses`, {
+      backendRes = await fetch(`${CHAT_API_TARGET}/v1/responses`, {
         method: 'POST',
         headers,
         body,
@@ -263,10 +281,10 @@ function responsesProxyPlugin() {
       return
     }
 
-    if (!hermesRes.ok || !hermesRes.body) {
-      res.statusCode = hermesRes.status
+    if (!backendRes.ok || !backendRes.body) {
+      res.statusCode = backendRes.status
       res.setHeader('Content-Type', 'application/json')
-      res.end(await hermesRes.text())
+      res.end(await backendRes.text())
       return
     }
 
@@ -321,9 +339,9 @@ function responsesProxyPlugin() {
       }
     })
 
-    // Even if client disconnects, keep reading from Hermes so the buffer
+    // Even if client disconnects, keep reading from the backend so the buffer
     // stays populated for resume clients.
-    const reader = hermesRes.body.getReader()
+    const reader = backendRes.body.getReader()
     const decoder = new TextDecoder()
     try {
       while (true) {
@@ -2062,9 +2080,9 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB — increased for Marksense editor chunk
       },
       manifest: {
-        name: 'Clavus — Hermes Chat',
+        name: 'Clavus',
         short_name: 'Clavus',
-        description: 'Mobile-first chat client for Hermes',
+        description: 'Mobile-first chat client',
         theme_color: '#111318',
         background_color: '#111318',
         display: 'standalone',

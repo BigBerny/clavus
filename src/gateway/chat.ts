@@ -49,7 +49,7 @@ export interface ChatHistoryMessage {
   model?: string
 }
 
-interface HermesCapabilities {
+interface BackendCapabilities {
   object: string
   model?: string
   auth?: { type?: string; required?: boolean }
@@ -64,10 +64,10 @@ interface HermesCapabilities {
   }
 }
 
-const capabilitiesCache = new Map<string, Promise<HermesCapabilities | null>>()
+const capabilitiesCache = new Map<string, Promise<BackendCapabilities | null>>()
 
 function apiPath(config: GatewayConfig, path: string): string {
-  const base = config.url.replace(/\/+$/, '')
+  const base = config.url.replace(/^ws/, 'http').replace(/\/+$/, '')
   return base ? `${base}${path}` : path
 }
 
@@ -76,14 +76,18 @@ function authHeaders(config: GatewayConfig): Record<string, string> {
 }
 
 function capabilityCacheKey(config: GatewayConfig): string {
-  return `${config.url || 'same-origin'}:${config.token ? 'auth' : 'anon'}`
+  return `${config.backend}:${config.url || 'same-origin'}:${config.token ? 'auth' : 'anon'}`
 }
 
 export function clearHermesCapabilityCache(): void {
   capabilitiesCache.clear()
 }
 
-export async function getHermesCapabilities(config: GatewayConfig): Promise<HermesCapabilities | null> {
+export function clearBackendCapabilityCache(): void {
+  capabilitiesCache.clear()
+}
+
+export async function getBackendCapabilities(config: GatewayConfig): Promise<BackendCapabilities | null> {
   const key = capabilityCacheKey(config)
   const cached = capabilitiesCache.get(key)
   if (cached) return cached
@@ -95,7 +99,7 @@ export async function getHermesCapabilities(config: GatewayConfig): Promise<Herm
         signal: AbortSignal.timeout(3000),
       })
       if (!res.ok) return null
-      return await res.json() as HermesCapabilities
+      return await res.json() as BackendCapabilities
     } catch {
       return null
     }
@@ -103,6 +107,52 @@ export async function getHermesCapabilities(config: GatewayConfig): Promise<Herm
 
   capabilitiesCache.set(key, request)
   return request
+}
+
+export const getHermesCapabilities = getBackendCapabilities
+
+function isOpenClaw(config: GatewayConfig): boolean {
+  return config.backend === 'openclaw'
+}
+
+function openClawAgentTarget(config: GatewayConfig): string {
+  const id = config.agentId || 'default'
+  if (id === 'openclaw' || id.startsWith('openclaw/')) return id
+  return `openclaw/${id}`
+}
+
+function isOpenClawModelTarget(model: string): boolean {
+  return model === 'openclaw' || model.startsWith('openclaw/')
+}
+
+function requestModel(config: GatewayConfig): string {
+  return isOpenClaw(config) ? openClawAgentTarget(config) : config.model
+}
+
+function backendModelOverride(config: GatewayConfig): string | null {
+  if (!isOpenClaw(config)) return null
+  return config.model && !isOpenClawModelTarget(config.model) ? config.model : null
+}
+
+function sessionKey(conversationId?: string): string | null {
+  return conversationId ? `clavus:${conversationId}` : null
+}
+
+function backendHeaders(
+  config: GatewayConfig,
+  options: { conversationId?: string } = {},
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    ...authHeaders(config),
+  }
+  if (isOpenClaw(config)) {
+    headers['x-openclaw-agent-id'] = config.agentId || 'default'
+    const modelOverride = backendModelOverride(config)
+    if (modelOverride) headers['x-openclaw-model'] = modelOverride
+    const key = sessionKey(options.conversationId)
+    if (key) headers['x-openclaw-session-key'] = key
+  }
+  return headers
 }
 
 function parseJsonMaybe<T>(value: unknown, fallback: T): T {
@@ -294,14 +344,14 @@ function dispatchResponsesEvent(
     const resp = parsed.response as Record<string, unknown> | undefined
     const respError = resp?.error as { message?: string } | undefined
     const topError = parsed.error as { message?: string } | undefined
-    callbacks.onError(new Error(respError?.message || topError?.message || 'Hermes response failed'))
+    callbacks.onError(new Error(respError?.message || topError?.message || 'Response failed'))
     return true
   }
 
   return false
 }
 
-// --- Hermes chat API ---
+// --- Chat API ---
 
 export async function sendChatStream(
   config: GatewayConfig,
@@ -310,7 +360,7 @@ export async function sendChatStream(
   signal?: AbortSignal,
   options: { conversationId?: string; reasoningEffort?: string } = {},
 ): Promise<void> {
-  const capabilities = await getHermesCapabilities(config)
+  const capabilities = await getBackendCapabilities(config)
   const canUseResponses = capabilities?.features?.responses_api !== false
     && capabilities?.features?.responses_streaming !== false
 
@@ -320,8 +370,8 @@ export async function sendChatStream(
       return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error
-      // Older Hermes builds may not expose Responses streaming despite health checks.
-      console.warn('[Hermes] Responses stream failed, falling back to chat completions:', error)
+      // Some backends may not expose Responses streaming despite health checks.
+      console.warn(`[${config.backend}] Responses stream failed, falling back to chat completions:`, error)
     }
   }
 
@@ -342,15 +392,16 @@ async function sendResponsesStream(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(config),
+      ...backendHeaders(config, options),
       'Idempotency-Key': crypto.randomUUID(),
     },
     body: JSON.stringify({
-      model: config.model,
+      model: requestModel(config),
       stream: true,
       store: true,
-      ...(options.conversationId ? { conversation: `clavus:${options.conversationId}` } : {}),
-      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
+      ...(isOpenClaw(config) && sessionKey(options.conversationId) ? { user: sessionKey(options.conversationId) } : {}),
+      ...(!isOpenClaw(config) && options.conversationId ? { conversation: `clavus:${options.conversationId}` } : {}),
+      ...(!isOpenClaw(config) && options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
       input: [{
         role: 'user',
         content: toResponsesContent(lastUser.content),
@@ -360,7 +411,7 @@ async function sendResponsesStream(
   })
 
   if (!res.ok) {
-    throw new Error(`Hermes error: ${res.status} ${res.statusText}`)
+    throw new Error(`${config.backend} error: ${res.status} ${res.statusText}`)
   }
 
   const state = createResponsesDispatchState()
@@ -433,26 +484,27 @@ async function sendChatCompletionsStream(
   messages: ChatCompletionMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  options: { reasoningEffort?: string } = {},
+  options: { conversationId?: string; reasoningEffort?: string } = {},
 ): Promise<void> {
   const res = await fetch(apiPath(config, '/v1/chat/completions'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(config),
+      ...backendHeaders(config, options),
       'Idempotency-Key': crypto.randomUUID(),
     },
     body: JSON.stringify({
-      model: config.model,
+      model: requestModel(config),
       stream: true,
       messages,
-      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
+      ...(isOpenClaw(config) && sessionKey(options.conversationId) ? { user: sessionKey(options.conversationId) } : {}),
+      ...(!isOpenClaw(config) && options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
     }),
     signal,
   })
 
   if (!res.ok) {
-    throw new Error(`Hermes error: ${res.status} ${res.statusText}`)
+    throw new Error(`${config.backend} error: ${res.status} ${res.statusText}`)
   }
 
   const toolCalls = new Map<string, ToolCallEvent>()
@@ -522,18 +574,18 @@ export async function sendChatCompletion(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...authHeaders(config),
+      ...backendHeaders(config),
       'Idempotency-Key': crypto.randomUUID(),
     },
     body: JSON.stringify({
-      model: config.model,
+      model: requestModel(config),
       stream: false,
       messages,
     }),
     signal,
   })
 
-  if (!res.ok) throw new Error(`Hermes error: ${res.status} ${res.statusText}`)
+  if (!res.ok) throw new Error(`${config.backend} error: ${res.status} ${res.statusText}`)
   const data = await res.json()
   return data.choices?.[0]?.message?.content?.trim() || ''
 }
@@ -592,7 +644,8 @@ export interface RecoveredResponse {
   usage?: UsageData
 }
 
-export async function recoverResponse(threadId: string): Promise<RecoveredResponse | null> {
+export async function recoverResponse(threadId: string, config?: GatewayConfig): Promise<RecoveredResponse | null> {
+  if (config?.backend === 'openclaw') return null
   try {
     const res = await fetch(`/api/hermes/conversation/${encodeURIComponent(threadId)}`, {
       signal: AbortSignal.timeout(5000),
@@ -621,7 +674,7 @@ export async function checkGateway(config: GatewayConfig): Promise<boolean> {
 
   try {
     const res = await fetch(apiPath(config, '/v1/models'), {
-      headers: authHeaders(config),
+      headers: backendHeaders(config),
       signal: AbortSignal.timeout(3000),
     })
     return res.ok

@@ -2,13 +2,15 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore } from '../state/chat.ts'
 import { recoverResponse, resumeChatStream } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
+import { getConfig } from '../gateway/config.ts'
 
 /**
- * Detects interrupted/missing assistant responses and recovers them from Hermes.
+ * Detects interrupted/missing assistant responses and recovers them from the
+ * server-side Responses event buffer.
  *
- * Hermes continues processing server-side even when the client disconnects
- * (e.g. iOS killing the WebView). This hook fetches the completed response
- * on app resume or thread switch.
+ * The selected chat backend can keep processing server-side even when the
+ * client disconnects (e.g. iOS killing the WebView). This hook replays the
+ * buffered stream on app resume or thread switch.
  */
 
 function needsRecovery(threadId: string): boolean {
@@ -53,7 +55,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
   // Identify (or create) the assistant message slot we will populate.
   const assistantMsg = [...ts.messages].reverse().find(m => m.role === 'assistant' && (!m.content || !!m.streaming))
   let assistantId: string | null = assistantMsg?.id || null
-  const responseId = assistantMsg?.hermesResponseId
+  const responseId = assistantMsg?.backendResponseId ?? assistantMsg?.hermesResponseId
   const fromSeq = typeof assistantMsg?.lastEventSeq === 'number' ? assistantMsg.lastEventSeq + 1 : 0
 
   // Clean up any stale connection-failed system messages before re-streaming
@@ -111,7 +113,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
         : [...existing, tc]
       useChatStore.getState().updateToolCalls(threadId, id, next)
     },
-    onResponseId: (rid: string) => useChatStore.getState().setHermesResponseId(threadId, ensureSlot(), rid),
+    onResponseId: (rid: string) => useChatStore.getState().setBackendResponseId(threadId, ensureSlot(), rid),
     onSeq: (seq: number) => {
       resumeReceivedEvent = true
       // Only persist seq if we have a slot (i.e. real content has flowed)
@@ -146,14 +148,14 @@ async function attemptRecovery(threadId: string): Promise<void> {
     // Resume returned 200 but emitted no events (unlikely with our buffer) —
     // fall through to legacy recovery.
   } catch (e) {
-    console.warn('[Recovery] Buffer resume not available, falling back to Hermes-store recovery:', e)
+    console.warn('[Recovery] Buffer resume not available, trying backend-store recovery:', e)
     useChatStore.getState().setStreaming(threadId, false)
   }
 
-  // 2) Legacy fallback: Hermes-store-only recovery (text + reasoning + tool calls extracted from completed response).
-  const recovered = await recoverResponse(threadId)
+  // 2) Legacy fallback: backend-store-only recovery when the selected backend supports it.
+  const recovered = await recoverResponse(threadId, getConfig())
   if (!recovered) {
-    console.log('[Recovery] No response found in Hermes for', threadId)
+    console.log('[Recovery] No backend response found for', threadId)
     // If we eagerly created a slot but neither path produced content, remove it.
     if (createdSlot && assistantId) {
       useChatStore.getState().removeMessage(threadId, assistantId)
@@ -164,7 +166,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
   // Dedup: if our assistant slot already references this responseId, do nothing.
   if (recovered.responseId) {
     const existing = useChatStore.getState().getThreadState(threadId).messages
-      .find(m => m.hermesResponseId === recovered.responseId && m.content)
+      .find(m => (m.backendResponseId ?? m.hermesResponseId) === recovered.responseId && m.content)
     if (existing) {
       console.log('[Recovery] Already have this response, skipping')
       return
@@ -184,7 +186,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
       }
       if (recovered.model) freshStore.setMessageModel(threadId, targetId, recovered.model)
       if (recovered.usage) freshStore.setMessageUsage(threadId, targetId, recovered.usage)
-      freshStore.setHermesResponseId(threadId, targetId, recovered.responseId)
+      freshStore.setBackendResponseId(threadId, targetId, recovered.responseId)
       freshStore.finalizeMessage(threadId, targetId)
     } else {
       const newId = freshStore.addMessage(threadId, {
@@ -199,12 +201,13 @@ async function attemptRecovery(threadId: string): Promise<void> {
           outputTokens: recovered.usage.outputTokens,
           totalTokens: recovered.usage.totalTokens,
         } : undefined,
+        backendResponseId: recovered.responseId,
         hermesResponseId: recovered.responseId,
       })
       freshStore.finalizeMessage(threadId, newId)
     }
 
-    console.log('[Recovery] Response recovered via Hermes store for thread', threadId, recovered.responseId)
+    console.log('[Recovery] Response recovered via backend store for thread', threadId, recovered.responseId)
     return
   }
 

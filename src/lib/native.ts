@@ -162,7 +162,7 @@ export async function setupNativeShell(): Promise<void> {
     /* noop */
   }
 
-  // Sync Hermes config to App Group so the keyboard extension can use it
+  // Sync backend config to App Group so the keyboard extension can use it
   syncKeyboardConfig()
 }
 

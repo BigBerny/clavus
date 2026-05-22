@@ -52,8 +52,8 @@ export const useUIStore = create<UIState>((set) => ({
   resolvedTheme: initialResolved,
   connectionStatus: 'checking',
   currentView: 'home',
-  gatewayUrl: localStorage.getItem('clavus-hermes-url') || localStorage.getItem('clavus-gateway-url') || '',
-  gatewayToken: localStorage.getItem('clavus-hermes-token') || localStorage.getItem('clavus-gateway-token') || '',
+  gatewayUrl: localStorage.getItem('clavus-backend-url') || localStorage.getItem('clavus-gateway-url') || localStorage.getItem('clavus-hermes-url') || '',
+  gatewayToken: localStorage.getItem('clavus-backend-token') || localStorage.getItem('clavus-gateway-token') || localStorage.getItem('clavus-hermes-token') || '',
   elevenLabsApiKey: localStorage.getItem('clavus-elevenlabs-key') || '',
 
   setThemeChoice: (choice) => {
@@ -67,12 +67,14 @@ export const useUIStore = create<UIState>((set) => ({
   setCurrentView: (view) => set({ currentView: view }),
 
   setGatewayUrl: (url) => {
+    localStorage.setItem('clavus-backend-url', url)
     localStorage.setItem('clavus-hermes-url', url)
     localStorage.setItem('clavus-gateway-url', url)
     set({ gatewayUrl: url })
   },
 
   setGatewayToken: (token) => {
+    localStorage.setItem('clavus-backend-token', token)
     localStorage.setItem('clavus-hermes-token', token)
     localStorage.setItem('clavus-gateway-token', token)
     set({ gatewayToken: token })

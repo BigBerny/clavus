@@ -36,6 +36,8 @@ export interface Message {
   model?: string
   usage?: MessageUsage
   media?: MediaAttachment[]
+  backendResponseId?: string
+  /** @deprecated use backendResponseId */
   hermesResponseId?: string
   /** Highest seq id received from the Clavus server-side event buffer.
    *  Used to resume the stream after disconnect (`?last_event_id=<seq>`). */
@@ -100,6 +102,7 @@ interface ChatState {
   updateToolCalls: (threadId: string, id: string, toolCalls: ToolCall[]) => void
   setMessageModel: (threadId: string, id: string, model: string) => void
   setMessageUsage: (threadId: string, id: string, usage: MessageUsage) => void
+  setBackendResponseId: (threadId: string, id: string, responseId: string) => void
   setHermesResponseId: (threadId: string, id: string, responseId: string) => void
   setLastEventSeq: (threadId: string, id: string, seq: number) => void
   addMedia: (threadId: string, id: string, media: MediaAttachment[]) => void
@@ -352,7 +355,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }),
 
-  setHermesResponseId: (threadId, id, responseId) =>
+  setBackendResponseId: (threadId, id, responseId) =>
     set((state) => {
       const ts = state.threadStates[threadId]
       if (!ts) return state
@@ -362,12 +365,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
           [threadId]: {
             ...ts,
             messages: ts.messages.map((m) =>
-              m.id === id ? { ...m, hermesResponseId: responseId } : m,
+              m.id === id ? { ...m, backendResponseId: responseId, hermesResponseId: responseId } : m,
             ),
           },
         },
       }
     }),
+
+  setHermesResponseId: (threadId, id, responseId) =>
+    useChatStore.getState().setBackendResponseId(threadId, id, responseId),
 
   setLastEventSeq: (threadId, id, seq) =>
     set((state) => {

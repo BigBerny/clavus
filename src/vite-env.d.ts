@@ -1,6 +1,11 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
+  readonly VITE_CHAT_BACKEND: string
+  readonly VITE_OPENCLAW_URL: string
+  readonly VITE_OPENCLAW_TOKEN: string
+  readonly VITE_OPENCLAW_MODEL: string
+  readonly VITE_OPENCLAW_AGENT_ID: string
   readonly VITE_HERMES_URL: string
   readonly VITE_HERMES_TOKEN: string
   readonly VITE_HERMES_MODEL: string
