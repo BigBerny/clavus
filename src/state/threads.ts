@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Message } from './chat'
 import { useTabsStore } from './tabs'
+import { useModelStore } from './preset'
 
 export interface LinkedDoc {
   path: string
@@ -17,6 +18,8 @@ export interface Thread {
   archived?: boolean
   /** Marksense docs referenced from this thread (via @-mention or message scan). */
   linkedDocs?: LinkedDoc[]
+  /** Per-thread model preference (restored when switching to this thread). */
+  modelId?: string
 }
 
 interface ThreadsState {
@@ -30,6 +33,7 @@ interface ThreadsState {
   updateThreadPreview: (id: string, preview: string) => void
   archiveThread: (id: string) => void
   unarchiveThread: (id: string) => void
+  updateThreadModel: (id: string, modelId: string) => void
   addLinkedDoc: (threadId: string, doc: LinkedDoc) => void
   getActiveThread: () => Thread | undefined
 }
@@ -374,6 +378,10 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     if (!thread) return
     saveActiveThreadId(id)
     set({ activeThreadId: id })
+    // Restore the per-thread model selection.
+    if (thread.modelId) {
+      useModelStore.getState().setSelectedModelId(thread.modelId)
+    }
   },
 
   updateThreadTitle: (id, title) => {
@@ -386,6 +394,16 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     })
     // Also update the corresponding tab title
     useTabsStore.getState().updateTab(id, { title })
+  },
+
+  updateThreadModel: (id, modelId) => {
+    set((state) => {
+      const threads = state.threads.map((t) =>
+        t.id === id ? { ...t, modelId } : t,
+      )
+      saveThreads(threads)
+      return { threads }
+    })
   },
 
   updateThreadPreview: (id, preview) => {

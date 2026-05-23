@@ -306,7 +306,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       threadId: threadId ?? null,
       setReasoningOverride: (tid, level) => useChatSettingsStore.getState().setReasoningOverride(tid, level),
       getReasoningOverride: (tid) => useChatSettingsStore.getState().getReasoningOverride(tid),
-      setModelId: (id) => useModelStore.getState().setSelectedModelId(id),
+      setModelId: (id) => { useModelStore.getState().setSelectedModelId(id); if (threadId) useThreadsStore.getState().updateThreadModel(threadId, id) },
       getModelId: () => useModelStore.getState().selectedModelId,
       setGlobalReasoning: (level) => useChatSettingsStore.getState().setGlobalReasoning(level),
       clearChat: () => onClear?.(),
@@ -588,7 +588,11 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     }
   }, [pendingImages.length, pendingFiles.length, threadId])
 
-  const { selectedModelId, setSelectedModelId } = useModelStore()
+  const { selectedModelId, setSelectedModelId: setGlobalModelId } = useModelStore()
+  const setSelectedModelId = useCallback((id: string) => {
+    setGlobalModelId(id)
+    if (threadId) useThreadsStore.getState().updateThreadModel(threadId, id)
+  }, [setGlobalModelId, threadId])
   const currentModel = MODEL_OPTIONS.find((m) => m.id === selectedModelId) || MODEL_OPTIONS[0]
   const autoEnabled = useAutoClassifyStore((s) => s.autoEnabled)
   const autoClassification = useAutoClassifyStore((s) => threadId ? s.classifications[threadId] ?? null : null)
