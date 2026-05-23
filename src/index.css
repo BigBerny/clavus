@@ -654,6 +654,13 @@ html.theme-ready *::after {
     -webkit-backdrop-filter: blur(8px) saturate(150%);
     border: 1px solid var(--glass-border);
   }
+  /* Warm-tinted glass for user bubbles — subtle, not loud */
+  .glass-user {
+    background: color-mix(in oklch, var(--color-primary) 12%, var(--glass-bg));
+    backdrop-filter: blur(10px) saturate(160%);
+    -webkit-backdrop-filter: blur(10px) saturate(160%);
+    border: 1px solid color-mix(in oklch, var(--color-primary) 18%, var(--glass-border));
+  }
 }
 
 /* Accessibility: reduce transparency fallback */

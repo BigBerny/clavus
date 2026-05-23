@@ -490,7 +490,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
         <div
           className={`px-3.5 py-2 min-w-0 w-fit relative transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
-              ? `text-primary-foreground ${
+              ? `glass-user text-foreground ${
                   showAvatar && isLastInGroup ? 'rounded-[16px]' :
                   showAvatar ? 'rounded-[16px] rounded-br-[5px]' :
                   isLastInGroup ? 'rounded-[16px] rounded-tr-[5px]' :
@@ -503,9 +503,6 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                   'rounded-[16px] rounded-l-[5px]'
                 }`
           }`}
-          style={isUser ? {
-            background: 'linear-gradient(135deg, var(--color-primary), color-mix(in oklch, var(--color-primary) 70%, var(--color-cat-violet)))',
-          } : undefined}
         >
           {/* Image attachments (user-sent) */}
           {message.images && message.images.length > 0 && (
