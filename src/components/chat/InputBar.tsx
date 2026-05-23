@@ -252,6 +252,20 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     }
   }, [pendingImages.length])
 
+  // Listen for screenshots from the Clavus desktop dictation overlay.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const images = (e as CustomEvent).detail?.images as string[] | undefined
+      if (!images || images.length === 0) return
+      setPendingImages((prev) => {
+        const combined = [...prev, ...images]
+        return combined.slice(0, MAX_IMAGES)
+      })
+    }
+    window.addEventListener('clavus-screenshot', handler)
+    return () => window.removeEventListener('clavus-screenshot', handler)
+  }, [])
+
   // Toast (slash command feedback)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)

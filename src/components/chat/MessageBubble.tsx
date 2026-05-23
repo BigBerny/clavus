@@ -36,7 +36,7 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
     <div className="mb-2">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="inline-btn flex items-center gap-1.5 text-[12px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
+        className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -54,8 +54,8 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
         )}
       </button>
       {expanded && (
-        <div className="mt-1.5 pl-4 border-l-2 border-text-light-muted/15 dark:border-text-dark-muted/15">
-          <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] text-text-light-muted/60 dark:text-text-dark-muted/60 leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_h1]:text-[14px] [&_h2]:text-[14px] [&_h3]:text-[13px] [&_h4]:text-[13px] [&_strong]:text-text-light-muted/80 dark:[&_strong]:text-text-dark-muted/80" style={{ overflowWrap: 'break-word' }}>
+        <div className="mt-1.5 pl-3.5 border-l border-text-light-muted/12 dark:border-text-dark-muted/12">
+          <div className="prose prose-sm dark:prose-invert max-w-none text-[12px] text-text-light-muted/50 dark:text-text-dark-muted/50 leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_h1]:text-[13px] [&_h2]:text-[13px] [&_h3]:text-[12px] [&_h4]:text-[12px] [&_strong]:text-text-light-muted/70 dark:[&_strong]:text-text-dark-muted/70" style={{ overflowWrap: 'break-word' }}>
             <Suspense fallback={<p className="whitespace-pre-wrap">{thinking}</p>}>
               <RichMessageRenderer content={thinking} />
             </Suspense>
@@ -488,19 +488,19 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     >
       <div className={`flex items-end gap-1 max-w-[95%] md:max-w-[750px] min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
         <div
-          className={`px-4 py-2.5 min-w-0 w-fit relative transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
+          className={`px-3.5 py-2 min-w-0 w-fit relative transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
             isUser
               ? `text-primary-foreground ${
-                  showAvatar && isLastInGroup ? 'rounded-[18px]' :
-                  showAvatar ? 'rounded-[18px] rounded-br-[6px]' :
-                  isLastInGroup ? 'rounded-[18px] rounded-tr-[6px]' :
-                  'rounded-[18px] rounded-r-[6px]'
+                  showAvatar && isLastInGroup ? 'rounded-[16px]' :
+                  showAvatar ? 'rounded-[16px] rounded-br-[5px]' :
+                  isLastInGroup ? 'rounded-[16px] rounded-tr-[5px]' :
+                  'rounded-[16px] rounded-r-[5px]'
                 }`
               : `glass-light text-foreground ${
-                  showAvatar && isLastInGroup ? 'rounded-[18px]' :
-                  showAvatar ? 'rounded-[18px] rounded-bl-[6px]' :
-                  isLastInGroup ? 'rounded-[18px] rounded-tl-[6px]' :
-                  'rounded-[18px] rounded-l-[6px]'
+                  showAvatar && isLastInGroup ? 'rounded-[16px]' :
+                  showAvatar ? 'rounded-[16px] rounded-bl-[5px]' :
+                  isLastInGroup ? 'rounded-[16px] rounded-tl-[5px]' :
+                  'rounded-[16px] rounded-l-[5px]'
                 }`
           }`}
           style={isUser ? {
@@ -555,10 +555,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55]" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
           ) : message.streaming && !message.content && !message.thinking && !message.toolCalls?.length ? (
-            <div className="flex items-center gap-[4px] py-0.5">
-              <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_infinite]" />
-              <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_0.2s_infinite]" />
-              <span className="w-[5px] h-[5px] rounded-full bg-text-light-muted/40 dark:bg-text-dark-muted/40 animate-[bounce_1.4s_ease-in-out_0.4s_infinite]" />
+            <div className="flex items-center gap-[3px] py-0.5">
+              <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_infinite]" />
+              <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_0.2s_infinite]" />
+              <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_0.4s_infinite]" />
             </div>
           ) : (
             <>

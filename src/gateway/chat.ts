@@ -411,7 +411,7 @@ async function sendResponsesStream(
       store: true,
       ...(isOpenClaw(config) && sessionKey(options.conversationId) ? { user: sessionKey(options.conversationId) } : {}),
       ...(!isOpenClaw(config) && options.conversationId ? { conversation: `clavus:${options.conversationId}` } : {}),
-      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
+      ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort, summary: 'auto' } } : {}),
       input: isOpenClaw(config)
         ? toOpenClawResponsesInput(lastUser.content)
         : [{
