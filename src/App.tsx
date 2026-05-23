@@ -445,14 +445,21 @@ export function App() {
       const tabId = applyRoute(route)
       if (tabId === null) {
         setVisiblePanel('home')
+        if (!isDesktop) requestAnimationFrame(() => scrollToTabRef.current('home'))
       } else {
         setVisiblePanel(tabId)
+        if (!isDesktop) {
+          // External/PWA deep links can arrive while the app is already open.
+          // Setting visiblePanel alone updates state/sidebar, but the mobile
+          // scroll-snap viewport stays where it was unless we explicitly move it.
+          requestAnimationFrame(() => requestAnimationFrame(() => scrollToTabRef.current(tabId)))
+        }
       }
     }
     apply(getCurrentRoute())
     const unsub = onRouteChange(apply)
     return unsub
-  }, [setVisiblePanel])
+  }, [setVisiblePanel, isDesktop])
 
   useEffect(() => {
     if (needsToken) return
@@ -513,41 +520,50 @@ export function App() {
     }
   }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop])
 
-  // Initial scroll to home (rightmost panel)
+  // Initial scroll. If the app was opened via a deep link, land directly
+  // on that file/chat panel. Otherwise keep the old behavior: Home is the
+  // rightmost panel and should be the startup target. This fixes iOS/PWA links
+  // where the target tab was created but the initial Home scroll hid it.
   useEffect(() => {
     if (needsToken) return
     const container = scrollContainerRef.current
     if (!container) return
 
-    // If home is the only panel (no tabs), no scroll needed
-    if (sortedTabs.length === 0) {
-      initialScrollDone.current = true
-      setInitialReady(true)
-      return
-    }
+    const initialRoute = getCurrentRoute()
+    const routeTabId = initialRoute && initialRoute.kind !== 'home' && initialRoute.kind !== 'transcripts'
+      ? applyRoute(initialRoute)
+      : null
+    const targetPanelId = routeTabId ?? 'home'
 
-    const scrollToHome = () => {
+    const scrollToTarget = () => {
+      const target = targetPanelId === 'home'
+        ? panelRefs.current.get('home')
+        : panelRefs.current.get(targetPanelId)
+      if (!target) return false
+
       isProgrammaticScroll.current = true
-      container.scrollLeft = container.scrollWidth
-      setVisiblePanel('home')
+      container.scrollLeft = target.offsetLeft
+      setVisiblePanel(targetPanelId)
       requestAnimationFrame(() => {
-        if (container.scrollWidth > container.clientWidth) {
-          container.scrollLeft = container.scrollWidth
-          initialScrollDone.current = true
-          setInitialReady(true)
-        }
+        const currentTarget = panelRefs.current.get(targetPanelId)
+        if (currentTarget) container.scrollLeft = currentTarget.offsetLeft
+        initialScrollDone.current = true
+        setInitialReady(true)
         isProgrammaticScroll.current = false
       })
+      return true
     }
 
     if (!initialScrollDone.current) {
-      requestAnimationFrame(scrollToHome)
-      const timer = setTimeout(scrollToHome, 100)
-      return () => clearTimeout(timer)
+      requestAnimationFrame(() => {
+        if (scrollToTarget()) return
+        const timer = setTimeout(scrollToTarget, 100)
+        return () => clearTimeout(timer)
+      })
     } else {
       setInitialReady(true)
     }
-  }, [needsToken, sortedTabs.length])
+  }, [needsToken, sortedTabs.length, setVisiblePanel])
 
   // Keep Home/current panel stable while iOS focuses the input and starts the
   // keyboard animation. The horizontal snap container can briefly emit a

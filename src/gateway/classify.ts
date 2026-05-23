@@ -11,19 +11,19 @@ const FALLBACK: ClassificationResult = { modelId: 'gpt', reasoning: 'medium', la
 const SYSTEM_PROMPT = `You are a message classifier. Given a user's first message in a conversation, determine the best AI model and reasoning level.
 
 Return ONLY valid JSON with these fields:
-- "model": "opus" or "gpt"
+- "model": "flash", "gpt", or "opus"
 - "reasoning": "minimal", "low", "medium", "high", or "xhigh"
 - "label": a 2-4 word category (e.g. "Writing task", "Knowledge question", "Coaching", "Code task", "Creative writing", "Simple factual")
 
 Rules:
 - Use "opus" for: strategic thinking, personal advice, coaching, medicine/health advice, creative writing, writing/formulating text, collaborative work (brainstorming, co-editing, drafting), conceptual discussions, life decisions. Reasoning: "high"
   - Exception: if the user explicitly asks for deep thinking or high reasoning → reasoning: "xhigh"
-- Use "gpt" for everything else: technical questions, code, research, factual knowledge, how-things-work explanations, tasks, execution. Reasoning based on complexity:
-  - Trivial/simple factual (e.g. "What is the capital of France?") → reasoning: "minimal"
+- Use "flash" for very simple requests that do not need careful writing or deep reasoning: greetings, tiny factual questions, simple confirmations, quick formatting, short translations, one-step how-to, and other low-risk utility tasks. Reasoning: "minimal"
+- Use "gpt" for everything else: technical questions, code, research, factual knowledge beyond trivial facts, tasks, execution. Reasoning based on complexity:
   - Normal straightforward questions → reasoning: "low"
   - Moderate complexity → reasoning: "medium"
   - Complex multi-step or analytical → reasoning: "high"
-- If the task involves calling tools, accessing websites, or interacting with external services → reasoning must be at least "low" (never "none" or "minimal")`
+- If the task involves calling tools, accessing websites, or interacting with external services → reasoning must be at least "low" (never "none" or "minimal") and model must not be "flash"`
 
 export async function classifyMessage(
   openrouterApiKey: string,
@@ -59,9 +59,11 @@ export async function classifyMessage(
     const jsonStr = raw.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '')
     const parsed = JSON.parse(jsonStr)
 
-    const modelId = parsed.model === 'opus' ? 'opus' : 'gpt'
+    const modelId = parsed.model === 'opus' ? 'opus' : parsed.model === 'flash' ? 'flash' : 'gpt'
     const validReasonings: ReasoningLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
     let reasoning: ReasoningLevel = validReasonings.includes(parsed.reasoning) ? parsed.reasoning : 'medium'
+    // Flash is only for very simple work; keep it cheap and fast.
+    if (modelId === 'flash') reasoning = 'minimal'
     // GPT should never use "none" — floor to "minimal"
     if (modelId === 'gpt' && reasoning === 'none') reasoning = 'minimal'
     // Opus should always use at least "high"

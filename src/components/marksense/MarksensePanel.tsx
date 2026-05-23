@@ -36,6 +36,7 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   const [loadedFor, setLoadedFor] = useState<string | null>(null)
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   // If the path changed under us, drop the stale content immediately so the
   // editor doesn't mount with the wrong file's text.
@@ -48,20 +49,30 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
     setLoading(true)
     setContent(null)
     setLoadedFor(null)
+    setError('')
     const myPath = path
     fetch(`${DOCUMENTS_API}${path}`)
-      .then(r => r.json())
+      .then(async r => {
+        const data = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(data?.error || `Failed to load document (${r.status})`)
+        return data
+      })
       .then(data => {
         // Guard against out-of-order responses: ignore if the user has since
         // switched to a different doc.
         if (myPath !== path) return
-        setContent(data.content || '')
+        if (typeof data.content !== 'string') {
+          throw new Error('Document response did not include text content')
+        }
+        setContent(data.content)
         setLoadedFor(myPath)
         setLoading(false)
       })
       .catch(err => {
         if (myPath !== path) return
         console.error('[MarksensePanel] load failed:', err)
+        setError(err instanceof Error ? err.message : 'Failed to load document')
+        setContent(null)
         setLoading(false)
       })
   }, [path, isVisible])
@@ -169,8 +180,13 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
             </Suspense>
           </EditorErrorBoundary>
         ) : (
-          <div className="flex items-center justify-center h-full text-[13px] text-text-light-muted dark:text-text-dark-muted">
-            {path ? 'Failed to load document' : 'No document selected'}
+          <div className="flex flex-col items-center justify-center h-full gap-2 px-6 text-center text-[13px] text-text-light-muted dark:text-text-dark-muted">
+            <div>{path ? 'Failed to load document' : 'No document selected'}</div>
+            {path && (
+              <div className="max-w-full rounded-lg bg-red-500/10 px-3 py-2 text-[12px] text-red-500 break-words">
+                {error || `Could not open ${path}`}
+              </div>
+            )}
           </div>
         )}
       </div>

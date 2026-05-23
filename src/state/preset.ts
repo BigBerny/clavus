@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { MODEL_OPTIONS } from '../gateway/presets'
+import { DEFAULT_MODEL_ID, MODEL_OPTIONS } from '../gateway/presets'
 import { useAutoClassifyStore } from './autoClassify'
 
 const STORAGE_KEY = 'clavus-selected-model'
@@ -30,7 +30,10 @@ interface ModelState {
   setSelectedModelId: (id: string) => void
 }
 
-const initialModelId = localStorage.getItem(STORAGE_KEY) || migrateFromPreset() || 'auto'
+const storedModelId = localStorage.getItem(STORAGE_KEY) || migrateFromPreset() || 'auto'
+const initialModelId = storedModelId === 'auto' || MODEL_OPTIONS.some((m) => m.id === storedModelId)
+  ? storedModelId
+  : DEFAULT_MODEL_ID
 
 // Sync autoEnabled on initial load
 if (initialModelId === 'auto') {
@@ -41,9 +44,10 @@ export const useModelStore = create<ModelState>((set) => ({
   selectedModelId: initialModelId,
 
   setSelectedModelId: (id: string) => {
-    const isAuto = id === 'auto'
+    const safeId = id === 'auto' || MODEL_OPTIONS.some((m) => m.id === id) ? id : DEFAULT_MODEL_ID
+    const isAuto = safeId === 'auto'
     useAutoClassifyStore.getState().setAutoEnabled(isAuto)
-    localStorage.setItem(STORAGE_KEY, id)
-    set({ selectedModelId: id })
+    localStorage.setItem(STORAGE_KEY, safeId)
+    set({ selectedModelId: safeId })
   },
 }))

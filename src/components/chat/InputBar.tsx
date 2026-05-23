@@ -308,8 +308,12 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     return result.handled
   }, [threadId, onClear, onRetry, showToast])
 
-  const handleSubmit = useCallback(async (overrideText?: string) => {
-    const trimmed = (overrideText ?? value).trim()
+  const handleSubmit = useCallback(async (overrideText?: string | React.SyntheticEvent) => {
+    // React passes the click/submit event when this function is used directly
+    // as an event handler. Treat non-string values as "no override"; otherwise
+    // `(overrideText ?? value).trim()` crashes and sending silently fails.
+    const sourceText = typeof overrideText === 'string' ? overrideText : value
+    const trimmed = sourceText.trim()
     if (!trimmed && pendingImages.length === 0 && pendingFiles.length === 0) return
 
     // Try local slash command interpreter first

@@ -210,6 +210,16 @@ function toResponsesContent(content: ChatCompletionMessage['content']): string |
   })
 }
 
+function toOpenClawResponsesInput(content: ChatCompletionMessage['content']): string {
+  if (typeof content === 'string') return content
+  return content
+    .map((part) => {
+      if (part.type === 'text') return part.text
+      return `[image: ${part.image_url.url}]`
+    })
+    .join('\n')
+}
+
 // --- Responses API event dispatch ---
 
 interface ResponsesDispatchState {
@@ -361,8 +371,8 @@ export async function sendChatStream(
   options: { conversationId?: string; reasoningEffort?: string } = {},
 ): Promise<void> {
   const capabilities = await getBackendCapabilities(config)
-  const canUseResponses = capabilities?.features?.responses_api !== false
-    && capabilities?.features?.responses_streaming !== false
+  const canUseResponses = capabilities?.features?.responses_api === true
+    && capabilities?.features?.responses_streaming === true
 
   if (canUseResponses) {
     try {
@@ -401,11 +411,13 @@ async function sendResponsesStream(
       store: true,
       ...(isOpenClaw(config) && sessionKey(options.conversationId) ? { user: sessionKey(options.conversationId) } : {}),
       ...(!isOpenClaw(config) && options.conversationId ? { conversation: `clavus:${options.conversationId}` } : {}),
-      ...(!isOpenClaw(config) && options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
-      input: [{
-        role: 'user',
-        content: toResponsesContent(lastUser.content),
-      }],
+      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
+      input: isOpenClaw(config)
+        ? toOpenClawResponsesInput(lastUser.content)
+        : [{
+            role: 'user',
+            content: toResponsesContent(lastUser.content),
+          }],
     }),
     signal,
   })
@@ -498,7 +510,7 @@ async function sendChatCompletionsStream(
       stream: true,
       messages,
       ...(isOpenClaw(config) && sessionKey(options.conversationId) ? { user: sessionKey(options.conversationId) } : {}),
-      ...(!isOpenClaw(config) && options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
+      ...(options.reasoningEffort ? { reasoning_effort: options.reasoningEffort } : {}),
     }),
     signal,
   })
