@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clavus Keyboard Extension — Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --glass-bg: oklch(0.95 0.008 50 / 0.04);
+    --glass-bg-heavy: oklch(0.95 0.008 50 / 0.07);
+    --glass-inner-glow: oklch(0.95 0.008 50 / 0.06);
+    --glass-border: oklch(0.95 0.008 50 / 0.08);
+    --glass-border-strong: oklch(0.95 0.008 50 / 0.16);
+
+    --text-primary: #F2F2F7;
+    --text-muted: oklch(0.55 0.01 50);
+    --text-bright: oklch(0.85 0.01 50);
+    --accent: #A78BFA;
+
+    --ch-message: #10B981;
+    --ch-slack: #A855F7;
+    --ch-email: #3B82F6;
+    --ch-prompt: #A78BFA;
+    --ch-url: #F59E0B;
+
+    --en-active: oklch(0.75 0.12 145);
+    --en-bg: oklch(0.55 0.15 145 / 0.1);
+    --en-border: oklch(0.6 0.12 145 / 0.2);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    background: #18181b;
+    color: #e8e6e3;
+    min-height: 100vh;
+    padding: 40px 24px;
+  }
+
+  /* === SPEC === */
+  .spec {
+    max-width: 680px;
+    margin: 0 auto 56px;
+    padding: 24px 28px;
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--glass-border);
+    border-radius: 1.75rem;
+    box-shadow: 0 8px 32px oklch(0 0 0 / 0.35), inset 0 1px 0 var(--glass-inner-glow);
+  }
+  .spec h1 { font-size: 16px; font-weight: 600; color: #e8e6e3; margin-bottom: 16px; }
+  .spec h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #888; margin: 20px 0 8px; }
+  .spec h2:first-of-type { margin-top: 0; }
+  .spec p, .spec li { font-size: 13px; color: #aaa; line-height: 1.7; }
+  .spec ul { padding-left: 18px; }
+  .spec li { margin-bottom: 4px; }
+  .spec code { font-size: 12px; background: oklch(0.95 0.008 50 / 0.06); padding: 1px 5px; border-radius: 4px; color: #ccc; }
+  .spec .flow-step { display: flex; gap: 10px; margin-bottom: 6px; }
+  .spec .flow-num { font-size: 11px; font-weight: 600; color: #ef7f5b; min-width: 18px; flex-shrink: 0; }
+  .spec .flow-text { font-size: 13px; color: #aaa; line-height: 1.6; }
+  .spec .divider { height: 1px; background: var(--glass-border); margin: 16px 0; }
+  .spec .token { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--glass-border); background: var(--glass-bg); margin: 2px; }
+  .spec .token .dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* === LAYOUT === */
+  .page-title {
+    font-size: 13px; font-weight: 500; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #777; margin-bottom: 48px; text-align: center;
+  }
+
+  .mockup-grid {
+    display: flex; flex-wrap: wrap; gap: 64px;
+    justify-content: center; max-width: 1400px; margin: 0 auto;
+  }
+
+  .mockup-section {
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+
+  .mockup-label {
+    font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+    text-transform: uppercase; color: #666; margin-bottom: 4px;
+  }
+
+  .mockup-sublabel {
+    font-size: 11px; color: #555; max-width: 380px; text-align: center; line-height: 1.5;
+  }
+
+  /* === PHONE FRAME === */
+  .phone-frame {
+    width: 375px;
+    border-radius: 42px;
+    background: linear-gradient(180deg, #1c1c1e 0%, #1a1a1c 100%);
+    border: 3px solid #333;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 12px 48px oklch(0 0 0 / 0.5);
+  }
+
+  .phone-status {
+    height: 54px;
+    display: flex; align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 28px 6px;
+    font-size: 12px; font-weight: 600; color: #fff;
+  }
+  .phone-status .time { font-size: 15px; font-weight: 700; }
+  .phone-status .icons { display: flex; gap: 5px; align-items: center; }
+  .phone-status .icons span { font-size: 11px; }
+
+  .host-app { padding: 0 16px 16px; }
+  .host-app-bar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0 12px;
+  }
+  .host-app-bar .back-arrow { font-size: 18px; color: #007AFF; }
+  .host-app-bar .title { font-size: 16px; font-weight: 600; color: #fff; }
+  .host-app-bar .avatar { width: 32px; height: 32px; border-radius: 50%; background: oklch(0.45 0.1 200); }
+
+  .host-chat-area {
+    display: flex; flex-direction: column; gap: 8px;
+    padding-bottom: 12px; min-height: 120px;
+  }
+  .host-bubble {
+    max-width: 70%; padding: 8px 12px;
+    border-radius: 16px; font-size: 13px; line-height: 1.4;
+  }
+  .host-bubble.incoming {
+    background: #2c2c2e; color: #e5e5ea;
+    align-self: flex-start; border-bottom-left-radius: 4px;
+  }
+  .host-bubble.outgoing {
+    background: #007AFF; color: #fff;
+    align-self: flex-end; border-bottom-right-radius: 4px;
+  }
+
+  .host-input {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 12px; background: #2c2c2e;
+    border-radius: 20px; border: 1px solid #3a3a3c;
+  }
+  .host-input .cursor-line {
+    width: 1.5px; height: 18px; background: #007AFF;
+    animation: blink 1s step-end infinite;
+  }
+  .host-input .placeholder { font-size: 14px; color: #636366; }
+  .host-input .inserted-text { font-size: 14px; color: #e5e5ea; }
+
+  @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
+  /* === KEYBOARD AREA — fully transparent, glass only === */
+  .kb-area {
+    /* No background color — fully transparent, host app shows through */
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+    border-top: 1px solid oklch(0.95 0.008 50 / 0.05);
+  }
+
+  .home-indicator {
+    display: flex; justify-content: center; padding: 8px 0 6px;
+  }
+  .home-indicator .bar {
+    width: 134px; height: 5px; border-radius: 100px;
+    background: oklch(0.5 0 0 / 0.3);
+  }
+
+  /* Globe toolbar */
+  .kb-toolbar {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 2px 14px 0;
+  }
+  .kb-toolbar-btn {
+    width: 26px; height: 26px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; cursor: pointer;
+  }
+  .kb-toolbar-btn svg {
+    width: 16px; height: 16px; fill: none;
+    stroke: oklch(0.4 0.01 50); stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round;
+  }
+
+  /* === TRANSCRIPT PREVIEW — minimal floating glass === */
+  .transcript-preview {
+    margin: 6px 10px 4px;
+    padding: 8px 12px;
+    background: oklch(0.15 0.005 50 / 0.65);
+    backdrop-filter: blur(20px) saturate(200%);
+    -webkit-backdrop-filter: blur(20px) saturate(200%);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    box-shadow: inset 0 1px 0 var(--glass-inner-glow);
+  }
+  .transcript-text {
+    font-size: 13px; color: oklch(0.78 0.008 50); line-height: 1.5;
+    display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden;
+  }
+
+  /* === FORMAT ROW — icon-only glass circles === */
+  .format-row {
+    display: flex; align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 8px 12px 4px;
+  }
+
+  /* Icon button — glass circle */
+  .fmt-icon {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s;
+    border: 1px solid transparent;
+    background: oklch(0.15 0.005 50 / 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    position: relative;
+  }
+  .fmt-icon svg {
+    width: 17px; height: 17px; fill: none;
+    stroke: oklch(0.5 0.01 50); stroke-width: 1.5;
+    stroke-linecap: round; stroke-linejoin: round;
+    transition: stroke 0.15s;
+  }
+
+  /* Active state — lifted glass with channel-colored ring */
+  .fmt-icon.active {
+    background: oklch(0.18 0.005 50 / 0.6);
+    border-color: var(--glass-border-strong);
+    box-shadow:
+      inset 0 1px 0 var(--glass-inner-glow),
+      0 2px 8px oklch(0 0 0 / 0.2);
+  }
+  .fmt-icon.active svg { stroke: var(--text-bright); }
+
+  .fmt-icon.active.ch-insert { border-color: oklch(0.6 0.15 270 / 0.35); box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 0 10px oklch(0.6 0.15 270 / 0.08); }
+  .fmt-icon.active.ch-insert svg { stroke: var(--accent); }
+
+  .fmt-icon.active.ch-slack { border-color: oklch(0.6 0.12 300 / 0.35); background: oklch(0.55 0.15 300 / 0.08); box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 0 10px oklch(0.55 0.15 300 / 0.08); }
+  .fmt-icon.active.ch-slack svg { stroke: var(--ch-slack); }
+
+  .fmt-icon.active.ch-message { border-color: oklch(0.6 0.12 160 / 0.35); background: oklch(0.6 0.15 160 / 0.08); box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 0 10px oklch(0.6 0.15 160 / 0.08); }
+  .fmt-icon.active.ch-message svg { stroke: var(--ch-message); }
+
+  .fmt-icon.active.ch-email { border-color: oklch(0.6 0.12 250 / 0.35); background: oklch(0.55 0.15 250 / 0.08); box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 0 10px oklch(0.55 0.15 250 / 0.08); }
+  .fmt-icon.active.ch-email svg { stroke: var(--ch-email); }
+
+  .fmt-icon.active.ch-prompt { border-color: oklch(0.6 0.15 270 / 0.35); background: oklch(0.55 0.18 270 / 0.08); box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 0 10px oklch(0.55 0.18 270 / 0.08); }
+  .fmt-icon.active.ch-prompt svg { stroke: var(--ch-prompt); }
+
+  .fmt-icon.active.ch-url { border-color: oklch(0.65 0.12 80 / 0.35); background: oklch(0.65 0.15 80 / 0.08); box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 0 10px oklch(0.65 0.15 80 / 0.08); }
+  .fmt-icon.active.ch-url svg { stroke: var(--ch-url); }
+
+  /* Loading state — spinner ring on the button itself */
+  .fmt-icon.loading::after {
+    content: '';
+    position: absolute; inset: -3px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite;
+  }
+  .fmt-icon.loading.ch-message::after { border-top-color: var(--ch-message); }
+  .fmt-icon.loading.ch-slack::after { border-top-color: var(--ch-slack); }
+  .fmt-icon.loading.ch-email::after { border-top-color: var(--ch-email); }
+  .fmt-icon.loading.ch-prompt::after { border-top-color: var(--ch-prompt); }
+  .fmt-icon.loading.ch-url::after { border-top-color: var(--ch-url); }
+
+  /* URL text button */
+  .fmt-text {
+    height: 38px; padding: 0 12px;
+    border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s;
+    border: 1px solid transparent;
+    background: oklch(0.15 0.005 50 / 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    font-size: 11px; font-weight: 600;
+    color: oklch(0.5 0.01 50);
+  }
+  .fmt-text.active {
+    background: oklch(0.18 0.005 50 / 0.6);
+    border-color: var(--glass-border-strong);
+    box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 2px 8px oklch(0 0 0 / 0.2);
+    color: var(--text-bright);
+  }
+  .fmt-text.active.ch-url {
+    color: var(--ch-url);
+    border-color: oklch(0.65 0.12 80 / 0.35);
+    box-shadow: inset 0 1px 0 var(--glass-inner-glow), 0 0 10px oklch(0.65 0.15 80 / 0.08);
+  }
+  /* Loading on text button */
+  .fmt-text.loading { position: relative; }
+  .fmt-text.loading::after {
+    content: '';
+    position: absolute; inset: -3px;
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    border-top-color: var(--ch-url);
+    animation: spin 0.7s linear infinite;
+  }
+
+  /* Separator */
+  .fmt-sep {
+    width: 1px; height: 20px;
+    background: oklch(0.95 0.008 50 / 0.06); flex-shrink: 0; margin: 0 3px;
+  }
+
+  /* EN toggle */
+  .lang-toggle {
+    height: 38px; padding: 0 10px;
+    border-radius: 9999px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.15s;
+    border: 1px solid transparent;
+    background: oklch(0.15 0.005 50 / 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+    color: oklch(0.42 0.01 50);
+  }
+  .lang-toggle.active {
+    background: var(--en-bg);
+    border-color: var(--en-border);
+    color: var(--en-active);
+    box-shadow: inset 0 1px 0 oklch(0.8 0.08 145 / 0.08), 0 0 10px oklch(0.55 0.15 145 / 0.06);
+  }
+
+  @keyframes spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ==================== FEATURE SPEC ==================== -->
+<div class="spec">
+  <h1>Clavus Keyboard Extension &mdash; Feature Spec</h1>
+
+  <h2>Overview</h2>
+  <p>A custom iOS keyboard extension that reads dictation transcripts from App Group shared storage and <strong>auto-inserts</strong> them into the active text field. The keyboard is a transparent glass overlay with a single row of format icons. Pre-select the channel, dictate via Action Button, text is processed and inserted &mdash; then the keyboard dismisses itself.</p>
+
+  <div class="divider"></div>
+
+  <h2>Interaction Flow</h2>
+  <div class="flow-step"><span class="flow-num">1.</span><span class="flow-text">User opens Clavus keyboard. Format icons shown with auto-detected channel pre-selected. Keyboard area is transparent glass.</span></div>
+  <div class="flow-step"><span class="flow-num">2.</span><span class="flow-text">User can optionally change the channel or toggle EN before dictating.</span></div>
+  <div class="flow-step"><span class="flow-num">3.</span><span class="flow-text">User presses Action Button &rarr; Shortcut records + transcribes &rarr; writes to shared storage.</span></div>
+  <div class="flow-step"><span class="flow-num">4.</span><span class="flow-text">Keyboard detects the new transcript (0.5s polling). Transcript preview shown briefly above the icons.</span></div>
+  <div class="flow-step"><span class="flow-num">5.</span><span class="flow-text">Auto-insert begins immediately:</span></div>
+  <div class="flow-step"><span class="flow-num">&nbsp;</span><span class="flow-text">&bull; <strong>Insert / URL:</strong> text inserted directly. No LLM call.</span></div>
+  <div class="flow-step"><span class="flow-num">&nbsp;</span><span class="flow-text">&bull; <strong>Channel (Slack/Message/Email/Prompt):</strong> loading spinner appears as a ring around the active icon. Hermes reformulates, then inserts.</span></div>
+  <div class="flow-step"><span class="flow-num">6.</span><span class="flow-text">Text inserted &rarr; keyboard dismisses itself.</span></div>
+  <div class="flow-step"><span class="flow-num">7.</span><span class="flow-text"><strong>Override:</strong> If user taps a different icon before auto-insert completes, it cancels and restarts with the new channel.</span></div>
+
+  <div class="divider"></div>
+
+  <h2>Real-Time Polling</h2>
+  <ul>
+    <li>0.5s <code>Timer</code> polls <code>SharedStorage.activeEntries()</code> while keyboard is visible.</li>
+    <li>New transcript ID detected &rarr; show preview, start auto-insert pipeline.</li>
+    <li>Timer starts in <code>viewDidAppear</code>, stops in <code>viewDidDisappear</code>.</li>
+  </ul>
+
+  <div class="divider"></div>
+
+  <h2>Format Buttons</h2>
+  <p>Icon-only glass circles, matching the macOS dictation widget. 38pt, frosted glass background, colored ring when active. Loading state is a spinner ring around the button &mdash; no separate loading bar.</p>
+  <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px;">
+    <span class="token"><span class="dot" style="background: var(--accent)"></span> Insert <span style="font-size:9px;color:#666">(icon)</span></span>
+    <span class="token"><span class="dot" style="background: var(--ch-slack)"></span> Slack <span style="font-size:9px;color:#666">(icon)</span></span>
+    <span class="token"><span class="dot" style="background: var(--ch-message)"></span> Message <span style="font-size:9px;color:#666">(icon)</span></span>
+    <span class="token"><span class="dot" style="background: var(--ch-email)"></span> Email <span style="font-size:9px;color:#666">(icon)</span></span>
+    <span class="token"><span class="dot" style="background: var(--ch-prompt)"></span> Prompt <span style="font-size:9px;color:#666">(icon)</span></span>
+    <span class="token">&vert;</span>
+    <span class="token"><span class="dot" style="background: var(--en-active)"></span> EN <span style="font-size:9px;color:#666">(toggle)</span></span>
+  </div>
+  <p style="margin-top: 8px">Conditional: <strong>URL</strong> text button appears when transcript looks like a URL. No other text labels.</p>
+
+  <div class="divider"></div>
+
+  <h2>Keyboard Transparency</h2>
+  <ul>
+    <li>Keyboard background is <strong>fully transparent</strong> with only <code>backdrop-filter: blur(24px) saturate(200%)</code> &mdash; the host app content shows through as a frosted blur.</li>
+    <li>On iOS 26: use <code>.regularMaterial</code> as the root background for system-level glass integration. On older iOS: <code>.ultraThinMaterial</code>.</li>
+    <li>No opaque background color. The buttons themselves have a subtle glass fill (<code>oklch(0.15 / 0.4)</code>) so they're visible against any content.</li>
+  </ul>
+
+  <div class="divider"></div>
+
+  <h2>Auto-Dismiss</h2>
+  <ul>
+    <li>After text is inserted via <code>textDocumentProxy.insertText()</code>, call <code>dismissKeyboard()</code> after a ~0.3s delay.</li>
+    <li>No success flash or confirmation &mdash; the inserted text in the field is confirmation enough.</li>
+  </ul>
+
+  <div class="divider"></div>
+
+  <h2>Height Budget</h2>
+  <ul>
+    <li><strong>Idle:</strong> ~50px &mdash; format row + globe toolbar + home indicator.</li>
+    <li><strong>With transcript:</strong> ~90px &mdash; preview + format row + globe + home indicator. Temporary &mdash; dismisses after insert.</li>
+  </ul>
+
+  <div class="divider"></div>
+
+  <h2>SwiftUI Notes</h2>
+  <ul>
+    <li>Root surface: <code>.background(.regularMaterial)</code> on iOS 26, <code>.ultraThinMaterial</code> fallback. No <code>ClavusTheme.bg</code> fill.</li>
+    <li>Icons: 38pt glass circles with <code>clavusGlassChip(cornerRadius: 19)</code>. Loading ring: <code>Circle().trim(from: 0, to: 0.7).stroke(lineWidth: 2).rotationEffect(...)</code> animated.</li>
+    <li>Auto-dismiss: <code>textDocumentProxy.insertText(result)</code> then <code>DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { self.dismissKeyboard() }</code>.</li>
+    <li>SF Symbols: <code>doc.plaintext</code> (Insert), <code>number</code> (Slack), <code>bubble.left.fill</code> (Message), <code>envelope.fill</code> (Email), <code>bolt.fill</code> (Prompt), <code>link</code> (URL).</li>
+  </ul>
+</div>
+
+
+<!-- ==================== MOCKUPS ==================== -->
+<h1 class="page-title">Mockups</h1>
+
+<div class="mockup-grid">
+
+  <!-- ==================== 1: iMessage — idle, Message pre-selected ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">1 &middot; iMessage &mdash; Message pre-selected</div>
+    <div class="mockup-sublabel">Transparent keyboard. Message auto-detected. Ready to receive dictation &mdash; will auto-insert as casual message.</div>
+    <div class="phone-frame">
+      <div class="phone-status">
+        <span class="time">9:41</span>
+        <div class="icons"><span>5G</span> <span>100%</span></div>
+      </div>
+      <div class="host-app">
+        <div class="host-app-bar">
+          <span class="back-arrow">&lsaquo;</span>
+          <div class="avatar"></div>
+          <span class="title">Sarah</span>
+        </div>
+        <div class="host-chat-area">
+          <div class="host-bubble incoming">Hey, are you coming to the meeting later?</div>
+          <div class="host-bubble outgoing">Yes, I'll be there at 3!</div>
+          <div class="host-bubble incoming">Great, can you bring the design docs?</div>
+        </div>
+        <div class="host-input">
+          <div class="cursor-line"></div>
+          <span class="placeholder">iMessage</span>
+        </div>
+      </div>
+      <div class="kb-area">
+        <div class="format-row">
+          <div class="fmt-icon" title="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon" title="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/></svg></div>
+          <div class="fmt-icon active ch-message" title="Message"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/></svg></div>
+          <div class="fmt-icon" title="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon" title="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+          <div class="fmt-sep"></div>
+          <div class="lang-toggle">EN</div>
+        </div>
+        <div class="kb-toolbar">
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M2.5 12h19M12 2.5c-3 3.5-3 13.5 0 19m0-19c3 3.5 3 13.5 0 19"/></svg></div>
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><path d="M12 20l-8-8 2-2 6 6 6-6 2 2z"/></svg></div>
+        </div>
+        <div class="home-indicator"><div class="bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 2: Slack + EN — idle ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">2 &middot; Slack + EN toggled</div>
+    <div class="mockup-sublabel">Slack auto-detected, user toggled EN. Next dictation will be translated to English + Slack-formatted.</div>
+    <div class="phone-frame">
+      <div class="phone-status">
+        <span class="time">9:41</span>
+        <div class="icons"><span>5G</span> <span>100%</span></div>
+      </div>
+      <div class="host-app">
+        <div class="host-app-bar">
+          <span class="back-arrow">&lsaquo;</span>
+          <span class="title">#design-team</span>
+        </div>
+        <div class="host-chat-area" style="min-height: 100px;">
+          <div class="host-bubble incoming">Anyone free for a quick sync at 2?</div>
+          <div class="host-bubble incoming">I can do 2:30</div>
+        </div>
+        <div class="host-input">
+          <div class="cursor-line"></div>
+          <span class="placeholder">Message #design-team</span>
+        </div>
+      </div>
+      <div class="kb-area">
+        <div class="format-row">
+          <div class="fmt-icon" title="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon active ch-slack" title="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/></svg></div>
+          <div class="fmt-icon" title="Message"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/></svg></div>
+          <div class="fmt-icon" title="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon" title="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+          <div class="fmt-sep"></div>
+          <div class="lang-toggle active">EN</div>
+        </div>
+        <div class="kb-toolbar">
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M2.5 12h19M12 2.5c-3 3.5-3 13.5 0 19m0-19c3 3.5 3 13.5 0 19"/></svg></div>
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><path d="M12 20l-8-8 2-2 6 6 6-6 2 2z"/></svg></div>
+        </div>
+        <div class="home-indicator"><div class="bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 3: Transcript arrived + loading on Message button ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">3 &middot; Transcript arrived &mdash; reformulating</div>
+    <div class="mockup-sublabel">Transcript just arrived from shared storage. Preview shown above icons. Spinner ring animates around the active Message button while Hermes reformulates.</div>
+    <div class="phone-frame">
+      <div class="phone-status">
+        <span class="time">9:41</span>
+        <div class="icons"><span>5G</span> <span>100%</span></div>
+      </div>
+      <div class="host-app">
+        <div class="host-app-bar">
+          <span class="back-arrow">&lsaquo;</span>
+          <div class="avatar"></div>
+          <span class="title">Sarah</span>
+        </div>
+        <div class="host-chat-area">
+          <div class="host-bubble incoming">Hey, are you coming to the meeting later?</div>
+          <div class="host-bubble outgoing">Yes, I'll be there at 3!</div>
+          <div class="host-bubble incoming">Great, can you bring the design docs?</div>
+        </div>
+        <div class="host-input">
+          <div class="cursor-line"></div>
+          <span class="placeholder">iMessage</span>
+        </div>
+      </div>
+      <div class="kb-area">
+        <div class="transcript-preview">
+          <div class="transcript-text">Ja klar, ich bringe die Design-Dokumente mit. Soll ich auch die neuesten Mockups ausdrucken?</div>
+        </div>
+        <div class="format-row">
+          <div class="fmt-icon" title="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon" title="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/></svg></div>
+          <!-- Loading spinner ring on the active button -->
+          <div class="fmt-icon active ch-message loading" title="Message"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/></svg></div>
+          <div class="fmt-icon" title="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon" title="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+          <div class="fmt-sep"></div>
+          <div class="lang-toggle">EN</div>
+        </div>
+        <div class="kb-toolbar">
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M2.5 12h19M12 2.5c-3 3.5-3 13.5 0 19m0-19c3 3.5 3 13.5 0 19"/></svg></div>
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><path d="M12 20l-8-8 2-2 6 6 6-6 2 2z"/></svg></div>
+        </div>
+        <div class="home-indicator"><div class="bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 4: Email — loading with EN ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">4 &middot; Mail &mdash; Email + EN loading</div>
+    <div class="mockup-sublabel">Email auto-detected, EN on. Transcript arrived, spinner on Email button. Will translate to English + email-format, insert, then dismiss.</div>
+    <div class="phone-frame">
+      <div class="phone-status">
+        <span class="time">9:41</span>
+        <div class="icons"><span>5G</span> <span>100%</span></div>
+      </div>
+      <div class="host-app">
+        <div class="host-app-bar">
+          <span class="back-arrow">&lsaquo;</span>
+          <span class="title">New Message</span>
+        </div>
+        <div class="host-chat-area" style="min-height: 80px;">
+          <div style="padding: 8px 0; border-bottom: 1px solid #2c2c2e;">
+            <span style="font-size: 13px; color: #636366;">To: </span>
+            <span style="font-size: 13px; color: #fff;">team@company.com</span>
+          </div>
+          <div style="padding: 8px 0; border-bottom: 1px solid #2c2c2e;">
+            <span style="font-size: 13px; color: #636366;">Subject: </span>
+            <span style="font-size: 13px; color: #fff;">Design review</span>
+          </div>
+        </div>
+        <div class="host-input" style="border-radius: 0; background: transparent; border: none; padding: 12px 0;">
+          <div class="cursor-line"></div>
+        </div>
+      </div>
+      <div class="kb-area">
+        <div class="transcript-preview">
+          <div class="transcript-text">Hallo zusammen, anbei die aktualisierten Designs f&uuml;r das Dashboard. K&ouml;nnt ihr bis Freitag Feedback geben?</div>
+        </div>
+        <div class="format-row">
+          <div class="fmt-icon" title="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon" title="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/></svg></div>
+          <div class="fmt-icon" title="Message"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/></svg></div>
+          <div class="fmt-icon active ch-email loading" title="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon" title="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+          <div class="fmt-sep"></div>
+          <div class="lang-toggle active">EN</div>
+        </div>
+        <div class="kb-toolbar">
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M2.5 12h19M12 2.5c-3 3.5-3 13.5 0 19m0-19c3 3.5 3 13.5 0 19"/></svg></div>
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><path d="M12 20l-8-8 2-2 6 6 6-6 2 2z"/></svg></div>
+        </div>
+        <div class="home-indicator"><div class="bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 5: URL auto-detected ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">5 &middot; Safari &mdash; URL detected</div>
+    <div class="mockup-sublabel">Transcript looks like a URL. URL text button auto-appears and is selected. Will clean into a real URL and insert immediately &mdash; no LLM call.</div>
+    <div class="phone-frame">
+      <div class="phone-status">
+        <span class="time">9:41</span>
+        <div class="icons"><span>5G</span> <span>100%</span></div>
+      </div>
+      <div class="host-app">
+        <div class="host-app-bar">
+          <span class="title" style="font-size: 14px; color: #999;">Safari</span>
+        </div>
+        <div class="host-chat-area" style="min-height: 80px; justify-content: center; align-items: center;">
+          <div style="width: 100%; padding: 10px 14px; background: #2c2c2e; border-radius: 12px; border: 1px solid #3a3a3c; display: flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#636366" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="5.5"/><path d="M11 11l3.5 3.5"/></svg>
+            <div class="cursor-line" style="height: 16px;"></div>
+          </div>
+        </div>
+      </div>
+      <div class="kb-area">
+        <div class="transcript-preview">
+          <div class="transcript-text" style="color: var(--ch-url);">github.com slash anthropics slash claude code</div>
+        </div>
+        <div class="format-row">
+          <div class="fmt-text active ch-url">URL</div>
+          <div class="fmt-icon" title="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon" title="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/></svg></div>
+          <div class="fmt-icon" title="Message"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/></svg></div>
+          <div class="fmt-icon" title="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon" title="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+          <div class="fmt-sep"></div>
+          <div class="lang-toggle">EN</div>
+        </div>
+        <div class="kb-toolbar">
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M2.5 12h19M12 2.5c-3 3.5-3 13.5 0 19m0-19c3 3.5 3 13.5 0 19"/></svg></div>
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><path d="M12 20l-8-8 2-2 6 6 6-6 2 2z"/></svg></div>
+        </div>
+        <div class="home-indicator"><div class="bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 6: Notes — Insert default ==================== -->
+  <div class="mockup-section">
+    <div class="mockup-label">6 &middot; Notes &mdash; Insert default</div>
+    <div class="mockup-sublabel">Generic app, no channel detected. Insert pre-selected. Next dictation will be raw-inserted immediately, then keyboard dismisses.</div>
+    <div class="phone-frame">
+      <div class="phone-status">
+        <span class="time">9:41</span>
+        <div class="icons"><span>5G</span> <span>100%</span></div>
+      </div>
+      <div class="host-app">
+        <div class="host-app-bar">
+          <span class="back-arrow">&lsaquo;</span>
+          <span class="title">Notes</span>
+        </div>
+        <div class="host-chat-area" style="min-height: 180px;">
+          <div style="padding: 12px; font-size: 14px; color: #636366;">Start typing...</div>
+        </div>
+        <div class="host-input">
+          <div class="cursor-line"></div>
+        </div>
+      </div>
+      <div class="kb-area">
+        <div class="format-row">
+          <div class="fmt-icon active ch-insert" title="Insert As"><svg viewBox="0 0 16 16"><path d="M4 2.5h5.5L13 6v7.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z"/><path d="M9.5 2.5V6H13"/><path d="M6 10h4"/><path d="M6 12.5h2.5"/></svg></div>
+          <div class="fmt-icon" title="Slack"><svg viewBox="0 0 16 16"><path d="M5.5 2a1.5 1.5 0 0 0 0 3H7V3.5A1.5 1.5 0 0 0 5.5 2z"/><path d="M2 5.5a1.5 1.5 0 0 0 3 0V4H3.5A1.5 1.5 0 0 0 2 5.5z"/><path d="M10.5 4a1.5 1.5 0 0 0 0-3H9v1.5A1.5 1.5 0 0 0 10.5 4z"/><path d="M14 5.5A1.5 1.5 0 0 0 11 5.5V7h1.5A1.5 1.5 0 0 0 14 5.5z"/></svg></div>
+          <div class="fmt-icon" title="Message"><svg viewBox="0 0 16 16"><path d="M2.5 3A1.5 1.5 0 0 1 4 1.5h8A1.5 1.5 0 0 1 13.5 3v7A1.5 1.5 0 0 1 12 11.5H5.5L2.5 14V3z"/></svg></div>
+          <div class="fmt-icon" title="Email"><svg viewBox="0 0 16 16"><rect x="1.5" y="3" width="13" height="10" rx="1.5"/><path d="M1.5 4.5l6.5 4 6.5-4"/></svg></div>
+          <div class="fmt-icon" title="Prompt"><svg viewBox="0 0 16 16"><path d="M5 5.5l3 2.5-3 2.5"/><line x1="10" y1="10.5" x2="13" y2="10.5"/></svg></div>
+          <div class="fmt-sep"></div>
+          <div class="lang-toggle">EN</div>
+        </div>
+        <div class="kb-toolbar">
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M2.5 12h19M12 2.5c-3 3.5-3 13.5 0 19m0-19c3 3.5 3 13.5 0 19"/></svg></div>
+          <div class="kb-toolbar-btn"><svg viewBox="0 0 24 24"><path d="M12 20l-8-8 2-2 6 6 6-6 2 2z"/></svg></div>
+        </div>
+        <div class="home-indicator"><div class="bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
