@@ -66,6 +66,18 @@ interface BackendCapabilities {
 
 const capabilitiesCache = new Map<string, Promise<BackendCapabilities | null>>()
 
+class ResponsesStreamError extends Error {
+  streamStarted: boolean
+  cause?: unknown
+
+  constructor(message: string, streamStarted: boolean, cause?: unknown) {
+    super(message)
+    this.name = 'ResponsesStreamError'
+    this.streamStarted = streamStarted
+    this.cause = cause
+  }
+}
+
 function apiPath(config: GatewayConfig, path: string): string {
   const base = config.url.replace(/^ws/, 'http').replace(/\/+$/, '')
   return base ? `${base}${path}` : path
@@ -371,8 +383,12 @@ export async function sendChatStream(
   options: { conversationId?: string; reasoningEffort?: string } = {},
 ): Promise<void> {
   const capabilities = await getBackendCapabilities(config)
-  const canUseResponses = capabilities?.features?.responses_api === true
-    && capabilities?.features?.responses_streaming === true
+  // OpenClaw's Gateway exposes `/v1/responses` but not `/v1/capabilities`.
+  // Treat OpenClaw as Responses-capable by default so long-running streams go
+  // through the Clavus response buffer/resume path instead of chat completions.
+  const canUseResponses = isOpenClaw(config)
+    || (capabilities?.features?.responses_api === true
+      && capabilities?.features?.responses_streaming === true)
 
   if (canUseResponses) {
     try {
@@ -380,8 +396,14 @@ export async function sendChatStream(
       return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error
-      // Some backends may not expose Responses streaming despite health checks.
-      console.warn(`[${config.backend}] Responses stream failed, falling back to chat completions:`, error)
+      if (error instanceof ResponsesStreamError && error.streamStarted) {
+        // Once a Responses stream emitted any event, retrying through chat
+        // completions would create a second run and lose the event cursor.
+        throw error
+      }
+      // Some non-OpenClaw backends may not expose Responses streaming despite
+      // health checks. A pre-event OpenClaw failure may also be an older gateway.
+      console.warn(`[${config.backend}] Responses stream failed before first event, falling back to chat completions:`, error)
     }
   }
 
@@ -423,18 +445,29 @@ async function sendResponsesStream(
   })
 
   if (!res.ok) {
-    throw new Error(`${config.backend} error: ${res.status} ${res.statusText}`)
+    throw new ResponsesStreamError(`${config.backend} error: ${res.status} ${res.statusText}`, false)
   }
 
   const state = createResponsesDispatchState()
+  let streamStarted = false
 
-  await readSseResponse(res, (ev) => {
-    dispatchResponsesEvent(ev.name, ev.data, callbacks, state)
-    if (ev.id !== undefined) {
-      const seq = Number(ev.id)
-      if (Number.isFinite(seq)) callbacks.onSeq?.(seq)
-    }
-  })
+  try {
+    await readSseResponse(res, (ev) => {
+      streamStarted = true
+      dispatchResponsesEvent(ev.name, ev.data, callbacks, state)
+      if (ev.id !== undefined) {
+        const seq = Number(ev.id)
+        if (Number.isFinite(seq)) callbacks.onSeq?.(seq)
+      }
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') throw error
+    throw new ResponsesStreamError(
+      error instanceof Error ? error.message : 'Responses stream failed',
+      streamStarted,
+      error,
+    )
+  }
 
   if (!state.done) {
     state.done = true
