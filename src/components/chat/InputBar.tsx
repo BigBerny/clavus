@@ -851,7 +851,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
             streams and the user has submitted another message. */}
         {queuedMessage && (
           <div
-            className="mb-2 px-3 py-2 rounded-xl glass-heavy border border-border flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
+            className="mb-2 px-3 py-2 rounded-[var(--glass-radius)] glass-heavy flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
             role="status"
             aria-label="Queued message"
           >
