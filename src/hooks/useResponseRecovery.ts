@@ -218,15 +218,26 @@ async function attemptRecovery(threadId: string): Promise<void> {
   console.log('[Recovery] Cannot recover — status:', recovered.status, 'text:', recovered.text?.length || 0)
 }
 
-/** Check all threads that might need recovery (e.g., on startup) */
+/** Check threads that might need recovery (e.g., on startup).
+ *  Only checks non-archived threads to avoid flooding with requests,
+ *  and processes them sequentially with a small delay between each. */
 export function checkAllThreadsRecovery() {
-  const threads = useThreadsStore.getState().threads
-  for (const thread of threads) {
-    if (needsRecovery(thread.id)) {
-      console.log('[Recovery] Thread needs recovery:', thread.id)
-      attemptRecovery(thread.id)
-    }
+  const threads = useThreadsStore.getState().threads.filter(t => !t.archived)
+  // Cap at 5 most-recent threads to avoid a recovery storm
+  const candidates = threads.filter(t => needsRecovery(t.id)).slice(0, 5)
+  if (candidates.length === 0) return
+
+  let i = 0
+  const processNext = () => {
+    if (i >= candidates.length) return
+    const thread = candidates[i++]
+    console.log('[Recovery] Thread needs recovery:', thread.id)
+    attemptRecovery(thread.id).finally(() => {
+      // Stagger recovery attempts to avoid main-thread congestion
+      setTimeout(processNext, 300)
+    })
   }
+  processNext()
 }
 
 export function useResponseRecovery() {

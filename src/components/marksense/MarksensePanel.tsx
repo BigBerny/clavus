@@ -50,31 +50,30 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
     setContent(null)
     setLoadedFor(null)
     setError('')
-    const myPath = path
-    fetch(`${DOCUMENTS_API}${path}`)
+    const controller = new AbortController()
+    fetch(`${DOCUMENTS_API}${path}`, { signal: controller.signal })
       .then(async r => {
         const data = await r.json().catch(() => ({}))
         if (!r.ok) throw new Error(data?.error || `Failed to load document (${r.status})`)
         return data
       })
       .then(data => {
-        // Guard against out-of-order responses: ignore if the user has since
-        // switched to a different doc.
-        if (myPath !== path) return
+        if (controller.signal.aborted) return
         if (typeof data.content !== 'string') {
           throw new Error('Document response did not include text content')
         }
         setContent(data.content)
-        setLoadedFor(myPath)
+        setLoadedFor(path)
         setLoading(false)
       })
       .catch(err => {
-        if (myPath !== path) return
+        if (controller.signal.aborted) return
         console.error('[MarksensePanel] load failed:', err)
         setError(err instanceof Error ? err.message : 'Failed to load document')
         setContent(null)
         setLoading(false)
       })
+    return () => controller.abort()
   }, [path, isVisible])
 
   // Suppress color-transition flash: start with transitions disabled, enable after first paint.
