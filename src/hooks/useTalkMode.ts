@@ -121,7 +121,10 @@ export function useTalkMode(
     const keyterms = [
       'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
       'Typewise', 'David Eberle',
-        'Jane', 'Clavus', 'Hermes', 'Marksense',
+      'Jane', 'Clavus', 'Hermes', 'Marksense',
+      'OpenClaw', 'Markdown', 'Cloudflare',
+      'Tailscale', 'Zustand', 'Drizzle', 'Tauri',
+      'ElevenLabs', 'Spotify', 'Tiptap',
       'Dennlerstrasse', 'Buckhauserstrasse',
       'Wollishofen', 'Rodersdorf', 'Rütihof',
     ]

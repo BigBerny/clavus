@@ -143,6 +143,9 @@ async function transcribe(blob: Blob) {
       'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
       'Typewise', 'David Eberle',
       'Jane', 'Clavus', 'Hermes', 'Marksense',
+      'OpenClaw', 'Markdown', 'Cloudflare',
+      'Tailscale', 'Zustand', 'Drizzle', 'Tauri',
+      'ElevenLabs', 'Spotify', 'Tiptap',
       'Dennlerstrasse', 'Buckhauserstrasse',
       'Wollishofen', 'Rodersdorf', 'Rütihof',
     ]
@@ -322,7 +325,7 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
 
   cancel: () => {
     cancelled = true
-    if (mediaRecorder?.state === 'recording') {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop()
     } else {
       cleanupHardware()
