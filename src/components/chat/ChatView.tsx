@@ -301,9 +301,6 @@ export function ChatView({ messages, title, threadId }: Props) {
                 <div key={msg.id} className={spacing}>
                   <MessageBubble
                     message={msg}
-                    isSpeaking={tts.speakingId === msg.id}
-                    ttsLoading={tts.loading && tts.speakingId === msg.id}
-                    onSpeak={tts.speak}
                     showAvatar={showAvatar}
                     isLastInGroup={isLastInGroup}
                     threadId={threadId}
