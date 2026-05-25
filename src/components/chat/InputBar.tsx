@@ -413,6 +413,20 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     onRecordingChange?.(voice.state === 'recording', voice.formattedDuration, voice.cancel)
   }, [voice.state, voice.formattedDuration, voice.cancel, onRecordingChange])
 
+  // Global Escape key listener to cancel active recordings regardless of focus
+  useEffect(() => {
+    if (voice.state !== 'recording') return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        voice.cancel()
+      }
+    }
+    document.addEventListener('keydown', onKeyDown, true)
+    return () => document.removeEventListener('keydown', onKeyDown, true)
+  }, [voice.state, voice.cancel])
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (showSlashPalette && filteredCommands.length > 0) {
