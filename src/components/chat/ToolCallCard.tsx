@@ -87,8 +87,8 @@ function ToolCallDetail({ toolCall }: { toolCall: ToolCall }) {
           hasDetails ? 'hover:bg-surface-light-3/30 dark:hover:bg-surface-dark-3/30' : 'cursor-default'
         }`}
       >
-        <span className="shrink-0 text-[10px]">{icon}</span>
-        <span className={`flex-1 truncate ${isRunning ? 'animate-pulse' : ''} text-text-light-muted/70 dark:text-text-dark-muted/70`}>
+        <span className="shrink-0 text-[10px] leading-none">{icon}</span>
+        <span className={`flex-1 truncate leading-none ${isRunning ? 'animate-pulse' : ''} text-text-light-muted/70 dark:text-text-dark-muted/70`}>
           {isRunning ? `${label}...` : label}
           {detail && <span className="ml-1 text-text-light-muted/45 dark:text-text-dark-muted/45 italic">{detail}</span>}
         </span>
@@ -169,8 +169,8 @@ export function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCall[
           >
             <polyline points="9 18 15 12 9 6"/>
           </svg>
-          <span className="text-[10px]">{icon}</span>
-          <span className="truncate">{totalCount === 1 ? label : `${totalCount} actions`}</span>
+          <span className="text-[10px] leading-none">{icon}</span>
+          <span className="truncate leading-none">{totalCount === 1 ? label : `${totalCount} actions`}</span>
         </button>
       </div>
     )
@@ -190,8 +190,8 @@ export function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCall[
           >
             <polyline points="9 18 15 12 9 6"/>
           </svg>
-          <span className="text-[10px]">{icon}</span>
-          <span className="truncate">{label}</span>
+          <span className="text-[10px] leading-none">{icon}</span>
+          <span className="truncate leading-none">{label}</span>
           {isRunning && (
             <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
           )}
@@ -213,7 +213,7 @@ export function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCall[
         >
           <polyline points="9 18 15 12 9 6"/>
         </svg>
-        <span>{toolCalls.length} actions</span>
+        <span className="leading-none">{toolCalls.length} actions</span>
         {isRunning && (
           <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
         )}
