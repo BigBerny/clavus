@@ -935,14 +935,15 @@ export function App() {
     const tab = sortedTabs.find(t => t.id === tabId)
     if (tab?.type === 'chat') {
       switchThread((tab as ChatTab).threadId)
-    } else {
-      // Close split view when switching away from chat
-      setSplitDocPath(null)
-      setSplitExpanded(null)
     }
+    // Always close split view when switching tabs to avoid stale split state
+    setSplitDocPath(null)
+    setSplitExpanded(null)
   }, [sortedTabs, switchThread])
 
   const handleDesktopNewChat = useCallback(() => {
+    setSplitDocPath(null)
+    setSplitExpanded(null)
     const createThread = useThreadsStore.getState().createThread
     const newThreadId = createThread()
     switchThread(newThreadId)
@@ -1140,7 +1141,7 @@ export function App() {
             activeTabId={visiblePanel}
             onSelectTab={handleDesktopSelectTab}
             onNewChat={handleDesktopNewChat}
-            onGoHome={() => setVisiblePanel('home')}
+            onGoHome={() => { setVisiblePanel('home'); setSplitDocPath(null); setSplitExpanded(null) }}
             onOpenDoc={(path, title) => {
               // On desktop, if a chat tab is active, open the doc in split view
               if (visibleTab?.type === 'chat' && path.endsWith('.md')) {
@@ -1153,6 +1154,7 @@ export function App() {
               if (tabId) setVisiblePanel(tabId)
             }}
             onOpenThread={(threadId) => {
+              setSplitDocPath(null); setSplitExpanded(null)
               const tabId = applyRoute({ kind: 'chat', threadId })
               if (tabId) setVisiblePanel(tabId)
             }}
@@ -1166,11 +1168,12 @@ export function App() {
         {/* Desktop: panel view with optional split */}
         {isDesktop ? (
           <div className="row-start-1 col-start-1 min-h-0 flex flex-row">
-            {/* Main panel */}
-            <div className={`min-h-0 min-w-0 flex flex-col ${
-              splitDocPath && visibleTab?.type === 'chat'
-                ? splitExpanded === 'doc' ? 'hidden' : splitExpanded === 'chat' ? 'flex-1' : 'flex-1'
-                : 'flex-1'
+            {/* Main panel — when doc is expanded to full width, collapse to zero
+                but keep in DOM to avoid unmount/remount thrashing */}
+            <div className={`min-h-0 flex flex-col ${
+              splitDocPath && visibleTab?.type === 'chat' && splitExpanded === 'doc'
+                ? 'w-0 overflow-hidden'
+                : 'flex-1 min-w-0'
             }`}>
               {/* Split expand button — only when split is active */}
               {splitDocPath && visibleTab?.type === 'chat' && splitExpanded !== 'doc' && (
@@ -1238,9 +1241,11 @@ export function App() {
               )}
             </div>
             {/* Split document panel (desktop only) */}
-            {splitDocPath && visibleTab?.type === 'chat' && splitExpanded !== 'chat' && (
-              <div className={`min-h-0 shrink-0 border-l border-surface-light-3/20 dark:border-surface-dark-3/20 flex flex-col ${
-                splitExpanded === 'doc' ? 'flex-1' : 'w-1/2'
+            {splitDocPath && visibleTab?.type === 'chat' && (
+              <div className={`min-h-0 border-l border-surface-light-3/20 dark:border-surface-dark-3/20 flex flex-col ${
+                splitExpanded === 'chat'
+                  ? 'w-0 overflow-hidden border-l-0'
+                  : splitExpanded === 'doc' ? 'flex-1' : 'w-1/2 shrink-0'
               }`}>
                 <div className="flex items-center gap-2 px-3 py-1.5 shrink-0 border-b border-surface-light-3/10 dark:border-surface-dark-3/10">
                   <span className="flex-1 text-[12px] font-medium text-text-light-muted dark:text-text-dark-muted truncate">{splitDocTitle}</span>
