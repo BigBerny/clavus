@@ -108,6 +108,11 @@ interface ChatState {
   addMedia: (threadId: string, id: string, media: MediaAttachment[]) => void
   clearMessages: (threadId: string) => void
   removeMessage: (threadId: string, messageId: string) => void
+  /** Remove the message with the given id and all messages after it.
+   *  Returns the removed messages so callers can inspect them. */
+  truncateMessagesFrom: (threadId: string, messageId: string) => Message[]
+  /** Bulk-set the entire messages array for a thread (e.g. for branching). */
+  setThreadMessages: (threadId: string, messages: Message[]) => void
   /** Queue a message (or append to an existing one) while a response is streaming. */
   enqueueOrAppend: (threadId: string, msg: QueuedMessage) => void
   /** Clear the queued message for a thread (e.g. after sending or trashing it). */
@@ -437,6 +442,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
       }
     }),
+
+  truncateMessagesFrom: (threadId, messageId) => {
+    const ts = get().threadStates[threadId]
+    if (!ts) return []
+    const idx = ts.messages.findIndex((m) => m.id === messageId)
+    if (idx < 0) return []
+    const removed = ts.messages.slice(idx)
+    const remaining = ts.messages.slice(0, idx)
+    saveMessages(threadId, remaining)
+    set((state) => ({
+      threadStates: {
+        ...state.threadStates,
+        [threadId]: { ...state.threadStates[threadId]!, messages: remaining },
+      },
+    }))
+    return removed
+  },
+
+  setThreadMessages: (threadId, messages) => {
+    get().ensureThread(threadId)
+    saveMessages(threadId, messages)
+    set((state) => ({
+      threadStates: {
+        ...state.threadStates,
+        [threadId]: { ...state.threadStates[threadId]!, messages },
+      },
+    }))
+  },
 
   enqueueOrAppend: (threadId, msg) => {
     // Ensure thread state exists.

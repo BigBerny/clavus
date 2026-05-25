@@ -91,7 +91,7 @@ function waitForScrollSettle(container: HTMLElement, onSettled: () => void): () 
 
 export function App() {
   useVisualViewport()
-  const { send, abort, sendNow } = useChat()
+  const { send, abort, sendNow, regenerate, editAndResend } = useChat()
   const { checkRecovery } = useResponseRecovery()
   const { state: pushState, requestPermission } = usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
@@ -837,6 +837,37 @@ export function App() {
     }
   }, [visiblePanel, sendNow])
 
+  const handleRegenerate = useCallback((threadId: string, assistantMessageId: string) => {
+    regenerate(threadId, assistantMessageId)
+  }, [regenerate])
+
+  const handleEditAndResend = useCallback((threadId: string, messageId: string, newContent: string) => {
+    editAndResend(threadId, messageId, newContent)
+  }, [editAndResend])
+
+  const handleBranch = useCallback((threadId: string, messageId: string) => {
+    const ts = useChatStore.getState().getThreadState(threadId)
+    const idx = ts.messages.findIndex((m) => m.id === messageId)
+    if (idx < 0) return
+
+    // Clone messages up to and including the branch point with new IDs
+    const clonedMessages = ts.messages.slice(0, idx + 1).map((m) => ({
+      ...m,
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      streaming: false,
+    }))
+
+    const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
+    const newTitle = `Branch of ${thread?.title || 'conversation'}`
+    const newThreadId = useThreadsStore.getState().createThread()
+    useThreadsStore.getState().updateThreadTitle(newThreadId, newTitle)
+    useChatStore.getState().setThreadMessages(newThreadId, clonedMessages)
+
+    // Open in a new tab and switch to it
+    ensureChatTab(newThreadId, newTitle)
+    setVisiblePanel(newThreadId)
+  }, [setVisiblePanel])
+
   // Set panel ref callback
   const setPanelRef = useCallback((id: string) => (el: HTMLDivElement | null) => {
     if (el) {
@@ -1137,6 +1168,9 @@ export function App() {
                   {visibleTab?.type === 'chat' && (
                     <ChatViewPanel
                       threadId={(visibleTab as ChatTab).threadId}
+                      onRegenerate={handleRegenerate}
+                      onEdit={handleEditAndResend}
+                      onBranch={handleBranch}
                     />
                   )}
                   {visibleTab?.type === 'marksense' && (
@@ -1211,6 +1245,9 @@ export function App() {
                       {tab.type === 'chat' && (
                         <ChatViewPanel
                           threadId={(tab as ChatTab).threadId}
+                          onRegenerate={handleRegenerate}
+                          onEdit={handleEditAndResend}
+                          onBranch={handleBranch}
                         />
                       )}
                       {tab.type === 'marksense' && (
@@ -1335,7 +1372,12 @@ export function App() {
 // fresh array on every read (which throws React into a getSnapshot infinite
 // loop when the thread state hasn't been hydrated yet).
 const EMPTY_MESSAGES: ReturnType<typeof useChatStore.getState>['threadStates'][string]['messages'] = []
-function ChatViewPanel({ threadId }: { threadId: string }) {
+function ChatViewPanel({ threadId, onRegenerate, onEdit, onBranch }: {
+  threadId: string
+  onRegenerate?: (threadId: string, assistantMessageId: string) => void
+  onEdit?: (threadId: string, messageId: string, newContent: string) => void
+  onBranch?: (threadId: string, messageId: string) => void
+}) {
   const threads = useThreadsStore((s) => s.threads)
   const thread = threads.find(t => t.id === threadId)
 
@@ -1345,5 +1387,14 @@ function ChatViewPanel({ threadId }: { threadId: string }) {
     useChatStore.getState().ensureThread(threadId)
   }, [threadId])
 
-  return <ChatView messages={messages} title={thread?.title} threadId={threadId} />
+  return (
+    <ChatView
+      messages={messages}
+      title={thread?.title}
+      threadId={threadId}
+      onRegenerate={onRegenerate ? (msgId) => onRegenerate(threadId, msgId) : undefined}
+      onEdit={onEdit ? (msgId, content) => onEdit(threadId, msgId, content) : undefined}
+      onBranch={onBranch ? (msgId) => onBranch(threadId, msgId) : undefined}
+    />
+  )
 }

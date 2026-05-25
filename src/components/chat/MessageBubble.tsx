@@ -354,6 +354,8 @@ interface Props {
   ttsLoading?: boolean
   onSpeak?: (id: string, text: string) => void
   onRegenerate?: (messageId: string) => void
+  onEdit?: (messageId: string, newContent: string) => void
+  onBranch?: (messageId: string) => void
   showAvatar?: boolean
   isLastInGroup?: boolean
   /** Thread id — propagated to RichMessageRenderer for linkedDoc tracking. */
@@ -378,7 +380,7 @@ function fullDateTime(timestamp: number): string {
   })
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, onRegenerate, showAvatar = true, isLastInGroup = true, threadId }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, onRegenerate, onEdit, onBranch, showAvatar = true, isLastInGroup = true, threadId }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
@@ -397,6 +399,8 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   )
   const isError = isSystem && message.content.startsWith('Error:')
   const [copied, setCopied] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editText, setEditText] = useState('')
   const [showFullTime, setShowFullTime] = useState(false)
   const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
   const [infoUnlocked, setInfoUnlocked] = useState(false)
@@ -548,7 +552,46 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             </div>
           )}
           {isUser ? (
-            message.content ? (
+            editing ? (
+              <div className="flex flex-col gap-2 min-w-[200px]">
+                <textarea
+                  autoFocus
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  className="w-full bg-transparent text-[15px] leading-[1.55] resize-none outline-none min-h-[60px] placeholder:text-muted-foreground/40"
+                  style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      if (editText.trim() && onEdit) {
+                        onEdit(message.id, editText.trim())
+                        setEditing(false)
+                      }
+                    }
+                    if (e.key === 'Escape') setEditing(false)
+                  }}
+                />
+                <div className="flex justify-end gap-1.5">
+                  <button
+                    onClick={() => setEditing(false)}
+                    className="inline-btn px-2.5 py-1 rounded-lg text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editText.trim() && onEdit) {
+                        onEdit(message.id, editText.trim())
+                        setEditing(false)
+                      }
+                    }}
+                    className="inline-btn px-2.5 py-1 rounded-lg text-[11px] bg-accent/20 text-accent font-medium hover:bg-accent/30 transition-colors"
+                  >
+                    Save & Send
+                  </button>
+                </div>
+              </div>
+            ) : message.content ? (
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55]" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
           ) : message.streaming && !message.content && !message.thinking && !message.toolCalls?.length ? (
@@ -652,6 +695,16 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
               </button>
             )}
+            {!message.streaming && onBranch && (
+              <button
+                onClick={() => onBranch(message.id)}
+                className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
+                aria-label="Branch conversation"
+                title="Branch off"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+              </button>
+            )}
             {!message.streaming && infoUnlocked && (message.model || message.usage) && (
               <div className="relative">
                 <button
@@ -665,6 +718,31 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 </button>
                 <MessageInfoPopover open={infoOpen} onClose={() => setInfoOpen(false)} model={message.model} usage={message.usage} />
               </div>
+            )}
+          </div>
+        )}
+        {/* User message action buttons */}
+        {isUser && message.content && isLastInGroup && !editing && (
+          <div className="flex flex-col gap-0.5 flex-shrink-0 mb-0.5">
+            {onEdit && (
+              <button
+                onClick={() => { setEditText(message.content); setEditing(true) }}
+                className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
+                aria-label="Edit message"
+                title="Edit"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
+            )}
+            {onBranch && (
+              <button
+                onClick={() => onBranch(message.id)}
+                className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
+                aria-label="Branch conversation"
+                title="Branch off"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
+              </button>
             )}
           </div>
         )}

@@ -7,12 +7,15 @@ interface Props {
   messages: Message[]
   title?: string
   threadId: string
+  onRegenerate?: (assistantMessageId: string) => void
+  onEdit?: (messageId: string, newContent: string) => void
+  onBranch?: (messageId: string) => void
 }
 
 // Cache scroll positions per thread
 const scrollPositionCache = new Map<string, number>()
 
-export function ChatView({ messages, title, threadId }: Props) {
+export function ChatView({ messages, title, threadId, onRegenerate, onEdit, onBranch }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -304,6 +307,9 @@ export function ChatView({ messages, title, threadId }: Props) {
                     showAvatar={showAvatar}
                     isLastInGroup={isLastInGroup}
                     threadId={threadId}
+                    onRegenerate={onRegenerate}
+                    onEdit={onEdit}
+                    onBranch={onBranch}
                   />
                 </div>
               )

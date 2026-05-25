@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { useChatStore, composeMessageText } from '../state/chat.ts'
+import { useChatStore, composeMessageText, type Message } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
 import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
@@ -386,7 +386,39 @@ export function useChat() {
     sendRef.current?.(threadId, composed, queued.images)
   }, [store])
 
-  return { send, abort, sendNow }
+  /** Regenerate: remove the target assistant message and its preceding user
+   *  message, then re-send the original user content. */
+  const regenerate = useCallback((threadId: string, assistantMessageId: string) => {
+    const ts = store.getState().getThreadState(threadId)
+    const messages = ts.messages
+    const targetIdx = messages.findIndex((m) => m.id === assistantMessageId)
+    if (targetIdx < 0) return
+
+    // Find the user message that preceded this assistant response
+    let userMsg: Message | null = null
+    for (let i = targetIdx - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') {
+        userMsg = messages[i]
+        break
+      }
+    }
+    if (!userMsg) return
+
+    // Remove from the user message onward (inclusive)
+    store.getState().truncateMessagesFrom(threadId, userMsg.id)
+
+    // Re-send the user message content
+    sendRef.current?.(threadId, userMsg.content, userMsg.images)
+  }, [store])
+
+  /** Edit a user message: truncate from that message onward and re-send with
+   *  new content. */
+  const editAndResend = useCallback((threadId: string, messageId: string, newContent: string) => {
+    store.getState().truncateMessagesFrom(threadId, messageId)
+    sendRef.current?.(threadId, newContent)
+  }, [store])
+
+  return { send, abort, sendNow, regenerate, editAndResend }
 }
 
 function generateTitleIfNeeded(threadId: string) {
