@@ -212,6 +212,12 @@ export function App() {
   const [canvasContent, setCanvasContent] = useState('')
   const [canvasTitle, setCanvasTitle] = useState('')
 
+  // Split view state (desktop only)
+  const [splitDocPath, setSplitDocPath] = useState<string | null>(null)
+  const [splitDocTitle, setSplitDocTitle] = useState('')
+  // Which panel is expanded to full width: 'chat', 'doc', or null (split 50/50)
+  const [splitExpanded, setSplitExpanded] = useState<'chat' | 'doc' | null>(null)
+
   // Threads pulled from store for filtering archived chat tabs (below).
   const allThreadsForTabFilter = useThreadsStore((s) => s.threads)
 
@@ -929,6 +935,10 @@ export function App() {
     const tab = sortedTabs.find(t => t.id === tabId)
     if (tab?.type === 'chat') {
       switchThread((tab as ChatTab).threadId)
+    } else {
+      // Close split view when switching away from chat
+      setSplitDocPath(null)
+      setSplitExpanded(null)
     }
   }, [sortedTabs, switchThread])
 
@@ -1132,6 +1142,13 @@ export function App() {
             onNewChat={handleDesktopNewChat}
             onGoHome={() => setVisiblePanel('home')}
             onOpenDoc={(path, title) => {
+              // On desktop, if a chat tab is active, open the doc in split view
+              if (visibleTab?.type === 'chat' && path.endsWith('.md')) {
+                setSplitDocPath(path)
+                setSplitDocTitle(title || path.split('/').pop() || 'Document')
+                setSplitExpanded(null)
+                return
+              }
               const tabId = applyRoute({ kind: 'file', path, title })
               if (tabId) setVisiblePanel(tabId)
             }}
@@ -1146,11 +1163,32 @@ export function App() {
         {/* Content area */}
         <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 grid-rows-1">
 
-        {/* Desktop: single panel view */}
+        {/* Desktop: panel view with optional split */}
         {isDesktop ? (
           <div className="row-start-1 col-start-1 min-h-0 flex flex-row">
             {/* Main panel */}
-            <div className="flex-1 min-h-0 min-w-0 flex flex-col">
+            <div className={`min-h-0 min-w-0 flex flex-col ${
+              splitDocPath && visibleTab?.type === 'chat'
+                ? splitExpanded === 'doc' ? 'hidden' : splitExpanded === 'chat' ? 'flex-1' : 'flex-1'
+                : 'flex-1'
+            }`}>
+              {/* Split expand button — only when split is active */}
+              {splitDocPath && visibleTab?.type === 'chat' && splitExpanded !== 'doc' && (
+                <div className="flex items-center justify-end px-3 py-1.5 shrink-0">
+                  <button
+                    onClick={() => setSplitExpanded((prev) => prev === 'chat' ? null : 'chat')}
+                    className="inline-btn p-1.5 rounded-lg text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-3/30 dark:hover:bg-surface-dark-3/30 transition-colors"
+                    aria-label={splitExpanded === 'chat' ? 'Show split view' : 'Expand chat'}
+                    title={splitExpanded === 'chat' ? 'Split view' : 'Expand'}
+                  >
+                    {splitExpanded === 'chat' ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                    )}
+                  </button>
+                </div>
+              )}
               {visiblePanel === 'home' || !sortedTabs.find(t => t.id === visiblePanel) ? (
                 <HomeScreen
                   onCompose={(channel) => setComposeChannel(channel)}
@@ -1199,8 +1237,48 @@ export function App() {
                 </Suspense>
               )}
             </div>
+            {/* Split document panel (desktop only) */}
+            {splitDocPath && visibleTab?.type === 'chat' && splitExpanded !== 'chat' && (
+              <div className={`min-h-0 shrink-0 border-l border-surface-light-3/20 dark:border-surface-dark-3/20 flex flex-col ${
+                splitExpanded === 'doc' ? 'flex-1' : 'w-1/2'
+              }`}>
+                <div className="flex items-center gap-2 px-3 py-1.5 shrink-0 border-b border-surface-light-3/10 dark:border-surface-dark-3/10">
+                  <span className="flex-1 text-[12px] font-medium text-text-light-muted dark:text-text-dark-muted truncate">{splitDocTitle}</span>
+                  <button
+                    onClick={() => setSplitExpanded((prev) => prev === 'doc' ? null : 'doc')}
+                    className="inline-btn p-1.5 rounded-lg text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-3/30 dark:hover:bg-surface-dark-3/30 transition-colors"
+                    aria-label={splitExpanded === 'doc' ? 'Show split view' : 'Expand document'}
+                    title={splitExpanded === 'doc' ? 'Split view' : 'Expand'}
+                  >
+                    {splitExpanded === 'doc' ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => { setSplitDocPath(null); setSplitExpanded(null) }}
+                    className="inline-btn p-1.5 rounded-lg text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-3/30 dark:hover:bg-surface-dark-3/30 transition-colors"
+                    aria-label="Close document"
+                    title="Close"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+                    <MarksensePanel
+                      path={splitDocPath}
+                      title={splitDocTitle}
+                      isVisible={true}
+                      onOpenFinder={handleOpenFinder}
+                    />
+                  </Suspense>
+                </div>
+              </div>
+            )}
             {/* Canvas side panel (desktop only) */}
-            {canvasOpen && (
+            {canvasOpen && !splitDocPath && (
               <div className="w-[400px] xl:w-[480px] shrink-0 border-l border-surface-light-3/20 dark:border-surface-dark-3/20">
                 <CanvasPanel
                   content={canvasContent}
