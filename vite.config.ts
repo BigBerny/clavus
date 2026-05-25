@@ -18,6 +18,7 @@ import {
   setThreadId as bufferSetThreadId,
   subscribe as bufferSubscribe,
 } from './server/responseEventBuffer.ts'
+import { initGatewayWs, getGatewayWs } from './server/gatewayWs.ts'
 import { createSseParser, formatSseFrame } from './src/lib/sseParse.ts'
 import {
   buildSystemPrompt,
@@ -56,6 +57,8 @@ const OPENAI_KEY = (() => {
     return match?.[1]?.trim() || ''
   } catch { return '' }
 })()
+
+const GATEWAY_TOKEN = readEnvKey('VITE_GATEWAY_TOKEN', 'OPENCLAW_GATEWAY_TOKEN')
 
 const THREADS_DATA_DIR = nodePath.join(process.env.HOME || '', '.openclaw/clavus-data')
 const VAPID_FILE = nodePath.join(THREADS_DATA_DIR, 'vapid.json')
@@ -129,6 +132,12 @@ const phoneServerOptions = {
       changeOrigin: true,
       rewrite: (path: string) => path.replace(/^\/hermes-api/, '/api'),
     },
+    '/gateway-ws': {
+      target: CHAT_API_TARGET.replace(/^http/, 'ws'),
+      changeOrigin: false,
+      ws: true,
+      rewrite: (path: string) => path.replace(/^\/gateway-ws/, ''),
+    },
     '/dashboard-logger.js': {
       target: 'https://localhost:4000',
       changeOrigin: true,
@@ -191,6 +200,13 @@ async function sendPushToAll(payload: { title: string; body: string; threadId: s
 function responsesProxyPlugin() {
   initEventBuffer()
 
+  // Initialize the server-side gateway WS connection for OpenClaw agent RPC
+  if (CHAT_BACKEND === 'openclaw' && GATEWAY_TOKEN) {
+    const gwUrl = OPENCLAW_API_TARGET.replace(/^http/, 'ws')
+    console.log(`[responses-proxy] Connecting to gateway WS at ${gwUrl}`)
+    initGatewayWs(gwUrl, GATEWAY_TOKEN)
+  }
+
   function writeSseHeaders(res: any) {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
@@ -239,6 +255,131 @@ function responsesProxyPlugin() {
     return true
   }
 
+  /**
+   * Route a streaming request through the gateway WebSocket `agent` RPC.
+   * Converts gateway events (thinking.delta, assistant.delta, lifecycle, etc.)
+   * into the Responses API SSE format that the browser client already understands.
+   * Returns true if handled, false to fall through to HTTP.
+   */
+  async function handlePostViaWs(req: any, res: any, parsed: any, threadId: string): Promise<boolean> {
+    const gw = getGatewayWs()
+    if (!gw.isConnected) return false
+
+    const input = typeof parsed.input === 'string'
+      ? parsed.input
+      : Array.isArray(parsed.input)
+        ? parsed.input.map((p: any) => typeof p === 'string' ? p : p?.text ?? '').join('\n')
+        : ''
+    if (!input) return false
+
+    const sessionKey = typeof parsed.user === 'string' ? parsed.user
+      : typeof req.headers['x-openclaw-session-key'] === 'string' ? req.headers['x-openclaw-session-key']
+      : undefined
+
+    // Note: model overrides via x-openclaw-model are not supported for
+    // backend/gateway-client connections. The agent uses its default model.
+    const reasoning = parsed.reasoning as { effort?: string } | undefined
+
+    // Generate a synthetic response ID for the buffer system
+    const responseId = `resp_${crypto.randomUUID()}`
+
+    // Create buffer and subscribe the client
+    createBuffer(responseId, threadId || undefined)
+    if (threadId) bufferSetThreadId(responseId, threadId)
+
+    writeSseHeaders(res)
+
+    // Emit response.created
+    const createdEvent = JSON.stringify({
+      type: 'response.created',
+      response: { id: responseId, object: 'response', created_at: Math.floor(Date.now() / 1000), status: 'in_progress', model: parsed.model || 'openclaw/default', output: [], usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } },
+    })
+    bufferAppendEvent(responseId, 'response.created', createdEvent)
+
+    // Subscribe client to buffer (replays the created event + all subsequent)
+    attachSubscriber(res, responseId, 0)
+
+    let finalStatus: 'completed' | 'failed' | 'aborted' = 'completed'
+
+    try {
+      await gw.runAgent(
+        {
+          message: input,
+          sessionKey,
+          thinking: reasoning?.effort,
+          agentId: req.headers['x-openclaw-agent-id'] || undefined,
+        },
+        {
+          onThinking: (delta) => {
+            bufferAppendEvent(responseId, 'response.reasoning_summary_text.delta', JSON.stringify({
+              type: 'response.reasoning_summary_text.delta',
+              delta,
+            }))
+          },
+          onThinkingDone: () => {
+            bufferAppendEvent(responseId, 'response.reasoning_summary_text.done', JSON.stringify({
+              type: 'response.reasoning_summary_text.done',
+            }))
+          },
+          onToken: (delta) => {
+            bufferAppendEvent(responseId, 'response.output_text.delta', JSON.stringify({
+              type: 'response.output_text.delta',
+              delta,
+            }))
+          },
+          onToolCall: (tc) => {
+            const eventType = tc.status === 'running' ? 'response.output_item.added' : 'response.output_item.done'
+            bufferAppendEvent(responseId, eventType, JSON.stringify({
+              type: eventType,
+              item: {
+                type: tc.status === 'completed' ? 'function_call_output' : 'function_call',
+                call_id: tc.id,
+                name: tc.name,
+                arguments: JSON.stringify(tc.args),
+                output: tc.result,
+                status: tc.status === 'error' ? 'error' : undefined,
+              },
+            }))
+          },
+          onUsage: (usage) => {
+            bufferAppendEvent(responseId, 'response.completed', JSON.stringify({
+              type: 'response.completed',
+              response: {
+                id: responseId,
+                status: 'completed',
+                model: usage.model || parsed.model || 'openclaw/default',
+                usage: {
+                  input_tokens: usage.inputTokens,
+                  output_tokens: usage.outputTokens,
+                  total_tokens: usage.totalTokens,
+                },
+              },
+            }))
+          },
+          onDone: () => {
+            // Ensure response.completed was emitted even without usage
+          },
+          onError: (error) => {
+            finalStatus = 'failed'
+            bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
+              type: 'response.failed',
+              response: { id: responseId, status: 'failed', error: { message: error.message } },
+            }))
+          },
+        },
+      )
+    } catch (e: any) {
+      finalStatus = 'failed'
+      bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
+        type: 'response.failed',
+        response: { id: responseId, status: 'failed', error: { message: e.message } },
+      }))
+    }
+
+    markFinished(responseId, finalStatus)
+    return true
+  }
+
   async function handlePost(req: any, res: any, next: any) {
     // Read the request body
     const chunks: Buffer[] = []
@@ -259,7 +400,17 @@ function responsesProxyPlugin() {
     const session = conversation || user || headerSession
     const threadId = session.startsWith('clavus:') ? session.slice('clavus:'.length) : ''
 
-    // Forward to the selected chat backend.
+    // Try the WebSocket agent RPC path for OpenClaw (provides real-time thinking)
+    if (CHAT_BACKEND === 'openclaw') {
+      try {
+        const handled = await handlePostViaWs(req, res, parsed, threadId)
+        if (handled) return
+      } catch (e: any) {
+        console.warn('[responses-proxy] WS agent run failed, falling back to HTTP:', e.message)
+      }
+    }
+
+    // Forward to the selected chat backend via HTTP (fallback).
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
     if (req.headers.authorization) headers['Authorization'] = req.headers.authorization
     if (req.headers['idempotency-key']) headers['Idempotency-Key'] = req.headers['idempotency-key']
