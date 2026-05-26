@@ -218,6 +218,14 @@ export function App() {
   // Which panel is expanded to full width: 'chat', 'doc', or null (split 50/50)
   const [splitExpanded, setSplitExpanded] = useState<'chat' | 'doc' | null>(null)
 
+  // Editing-a-message state: when set, the InputBar pre-fills with the message
+  // content and submit triggers editAndResend instead of a fresh send.
+  const [editingMessage, setEditingMessage] = useState<{
+    threadId: string
+    messageId: string
+    originalContent: string
+  } | null>(null)
+
   // Threads pulled from store for filtering archived chat tabs (below).
   const allThreadsForTabFilter = useThreadsStore((s) => s.threads)
 
@@ -847,9 +855,22 @@ export function App() {
     regenerate(threadId, assistantMessageId)
   }, [regenerate])
 
-  const handleEditAndResend = useCallback((threadId: string, messageId: string, newContent: string) => {
+  /** User clicked "Edit" on a sent message — load it into the main InputBar. */
+  const handleStartEditMessage = useCallback((threadId: string, messageId: string, content: string) => {
+    setEditingMessage({ threadId, messageId, originalContent: content })
+  }, [])
+
+  /** Submit the edited message: truncate from this msg onward and re-send. */
+  const handleSubmitEditMessage = useCallback((newContent: string) => {
+    if (!editingMessage) return
+    const { threadId, messageId } = editingMessage
+    setEditingMessage(null)
     editAndResend(threadId, messageId, newContent)
-  }, [editAndResend])
+  }, [editingMessage, editAndResend])
+
+  const handleCancelEditMessage = useCallback(() => {
+    setEditingMessage(null)
+  }, [])
 
   const handleBranch = useCallback((threadId: string, messageId: string) => {
     const ts = useChatStore.getState().getThreadState(threadId)
@@ -1143,9 +1164,13 @@ export function App() {
             onNewChat={handleDesktopNewChat}
             onGoHome={() => { setVisiblePanel('home'); setSplitDocPath(null); setSplitExpanded(null) }}
             onOpenDoc={(path, title) => {
-              // Always open as a regular tab (split view auto-trigger disabled
-              // due to a render-loop freeze when opening linkedDocs over a chat;
-              // see investigation 2026-05-26)
+              // On desktop, if a chat tab is active, open the doc in split view
+              if (visibleTab?.type === 'chat' && path.endsWith('.md')) {
+                setSplitDocPath(path)
+                setSplitDocTitle(title || path.split('/').pop() || 'Document')
+                setSplitExpanded(null)
+                return
+              }
               const tabId = applyRoute({ kind: 'file', path, title })
               if (tabId) setVisiblePanel(tabId)
             }}
@@ -1206,7 +1231,8 @@ export function App() {
                     <ChatViewPanel
                       threadId={(visibleTab as ChatTab).threadId}
                       onRegenerate={handleRegenerate}
-                      onEdit={handleEditAndResend}
+                      onStartEdit={handleStartEditMessage}
+                      editingMessageId={editingMessage?.threadId === (visibleTab as ChatTab).threadId ? editingMessage.messageId : null}
                       onBranch={handleBranch}
                     />
                   )}
@@ -1325,7 +1351,8 @@ export function App() {
                         <ChatViewPanel
                           threadId={(tab as ChatTab).threadId}
                           onRegenerate={handleRegenerate}
-                          onEdit={handleEditAndResend}
+                          onStartEdit={handleStartEditMessage}
+                          editingMessageId={editingMessage?.threadId === (tab as ChatTab).threadId ? editingMessage.messageId : null}
                           onBranch={handleBranch}
                         />
                       )}
@@ -1399,6 +1426,9 @@ export function App() {
                 if (lastUser) handleSend(lastUser.content, lastUser.images)
               } : undefined}
               talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening, interrupt: talkMode.interrupt }}
+              editingMessage={editingMessage?.threadId === visiblePanel ? editingMessage : null}
+              onEditSubmit={handleSubmitEditMessage}
+              onEditCancel={handleCancelEditMessage}
             />
           </div>
         )}
@@ -1451,10 +1481,12 @@ export function App() {
 // fresh array on every read (which throws React into a getSnapshot infinite
 // loop when the thread state hasn't been hydrated yet).
 const EMPTY_MESSAGES: ReturnType<typeof useChatStore.getState>['threadStates'][string]['messages'] = []
-function ChatViewPanel({ threadId, onRegenerate, onEdit, onBranch }: {
+function ChatViewPanel({ threadId, onRegenerate, onStartEdit, editingMessageId, onBranch }: {
   threadId: string
   onRegenerate?: (threadId: string, assistantMessageId: string) => void
-  onEdit?: (threadId: string, messageId: string, newContent: string) => void
+  onStartEdit?: (threadId: string, messageId: string, content: string) => void
+  /** When set and equal to a message's id, that message is being edited in the InputBar. */
+  editingMessageId?: string | null
   onBranch?: (threadId: string, messageId: string) => void
 }) {
   const threads = useThreadsStore((s) => s.threads)
@@ -1472,7 +1504,8 @@ function ChatViewPanel({ threadId, onRegenerate, onEdit, onBranch }: {
       title={thread?.title}
       threadId={threadId}
       onRegenerate={onRegenerate ? (msgId) => onRegenerate(threadId, msgId) : undefined}
-      onEdit={onEdit ? (msgId, content) => onEdit(threadId, msgId, content) : undefined}
+      onStartEdit={onStartEdit ? (msgId, content) => onStartEdit(threadId, msgId, content) : undefined}
+      editingMessageId={editingMessageId ?? null}
       onBranch={onBranch ? (msgId) => onBranch(threadId, msgId) : undefined}
     />
   )

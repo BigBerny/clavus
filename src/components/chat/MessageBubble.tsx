@@ -354,7 +354,10 @@ interface Props {
   ttsLoading?: boolean
   onSpeak?: (id: string, text: string) => void
   onRegenerate?: (messageId: string) => void
-  onEdit?: (messageId: string, newContent: string) => void
+  /** Begin editing this user message — content is loaded into the main InputBar. */
+  onStartEdit?: (messageId: string, content: string) => void
+  /** This message is currently being edited in the InputBar — show a hint and dim the bubble. */
+  isBeingEdited?: boolean
   onBranch?: (messageId: string) => void
   showAvatar?: boolean
   isLastInGroup?: boolean
@@ -380,7 +383,7 @@ function fullDateTime(timestamp: number): string {
   })
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, onRegenerate, onEdit, onBranch, showAvatar = true, isLastInGroup = true, threadId }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, onRegenerate, onStartEdit, isBeingEdited, onBranch, showAvatar = true, isLastInGroup = true, threadId }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
@@ -399,8 +402,6 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   )
   const isError = isSystem && message.content.startsWith('Error:')
   const [copied, setCopied] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [editText, setEditText] = useState('')
   const [showFullTime, setShowFullTime] = useState(false)
   const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
   const [infoUnlocked, setInfoUnlocked] = useState(false)
@@ -492,7 +493,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     >
       <div className={`flex items-end gap-1 max-w-[95%] md:max-w-[750px] min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
         <div
-          className={`px-3.5 py-2 min-w-0 w-fit relative transition-[min-height] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${
+          className={`px-3.5 py-2 min-w-0 w-fit relative transition-[min-height,opacity] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${isBeingEdited ? 'opacity-50' : ''} ${
             isUser
               ? `glass-user text-foreground ${
                   showAvatar && isLastInGroup ? 'rounded-[16px]' :
@@ -552,46 +553,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             </div>
           )}
           {isUser ? (
-            editing ? (
-              <div className="flex flex-col gap-2 min-w-[200px]">
-                <textarea
-                  autoFocus
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  className="w-full bg-transparent text-[15px] leading-[1.55] resize-none outline-none min-h-[60px] placeholder:text-muted-foreground/40"
-                  style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault()
-                      if (editText.trim() && onEdit) {
-                        onEdit(message.id, editText.trim())
-                        setEditing(false)
-                      }
-                    }
-                    if (e.key === 'Escape') setEditing(false)
-                  }}
-                />
-                <div className="flex justify-end gap-1.5">
-                  <button
-                    onClick={() => setEditing(false)}
-                    className="inline-btn px-2.5 py-1 rounded-lg text-[11px] text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (editText.trim() && onEdit) {
-                        onEdit(message.id, editText.trim())
-                        setEditing(false)
-                      }
-                    }}
-                    className="inline-btn px-2.5 py-1 rounded-lg text-[11px] bg-accent/20 text-accent font-medium hover:bg-accent/30 transition-colors"
-                  >
-                    Save & Send
-                  </button>
-                </div>
-              </div>
-            ) : message.content ? (
+            message.content ? (
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55]" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
           ) : message.streaming && !message.content && !message.thinking && !message.toolCalls?.length ? (
@@ -722,14 +684,18 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           </div>
         )}
         {/* User message action buttons */}
-        {isUser && message.content && isLastInGroup && !editing && (
+        {isUser && message.content && isLastInGroup && (
           <div className="flex flex-col gap-0.5 flex-shrink-0 mb-0.5">
-            {onEdit && (
+            {onStartEdit && (
               <button
-                onClick={() => { setEditText(message.content); setEditing(true) }}
-                className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
+                onClick={() => onStartEdit(message.id, message.content)}
+                className={`inline-btn p-1.5 rounded-full active:scale-90 transition-all ${
+                  isBeingEdited
+                    ? 'text-accent'
+                    : 'text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark'
+                }`}
                 aria-label="Edit message"
-                title="Edit"
+                title={isBeingEdited ? 'Editing in input field below' : 'Edit'}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
               </button>

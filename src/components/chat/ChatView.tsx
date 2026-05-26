@@ -8,14 +8,17 @@ interface Props {
   title?: string
   threadId: string
   onRegenerate?: (assistantMessageId: string) => void
-  onEdit?: (messageId: string, newContent: string) => void
+  /** Begin editing this user message — content is loaded into the main InputBar. */
+  onStartEdit?: (messageId: string, content: string) => void
+  /** The id of the message currently being edited in the InputBar, if any. */
+  editingMessageId?: string | null
   onBranch?: (messageId: string) => void
 }
 
 // Cache scroll positions per thread
 const scrollPositionCache = new Map<string, number>()
 
-export function ChatView({ messages, title, threadId, onRegenerate, onEdit, onBranch }: Props) {
+export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit, editingMessageId, onBranch }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
@@ -308,7 +311,8 @@ export function ChatView({ messages, title, threadId, onRegenerate, onEdit, onBr
                     isLastInGroup={isLastInGroup}
                     threadId={threadId}
                     onRegenerate={onRegenerate}
-                    onEdit={onEdit}
+                    onStartEdit={onStartEdit}
+                    isBeingEdited={editingMessageId === msg.id}
                     onBranch={onBranch}
                   />
                 </div>

@@ -37,6 +37,12 @@ interface Props {
   talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void; interrupt: () => void }
   /** Stable key for draft persistence — e.g. 'home', a thread id, or a doc path. */
   draftKey?: string
+  /** When set, the InputBar is editing this message instead of composing a fresh one. */
+  editingMessage?: { messageId: string; originalContent: string } | null
+  /** Called when the user submits the edit. */
+  onEditSubmit?: (newContent: string) => void
+  /** Called when the user cancels the edit (X button or Escape). */
+  onEditCancel?: () => void
 }
 
 const MAX_IMAGES = 4
@@ -78,7 +84,7 @@ async function extractTextContent(file: File): Promise<string> {
   return ''
 }
 
-export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey }: Props) {
+export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey, editingMessage, onEditSubmit, onEditCancel }: Props) {
   // Initialize with the persisted draft for this column (or empty if none).
   const [value, setValue] = useState(() => (draftKey ? useDraftsStore.getState().getDraft(draftKey) : ''))
 
@@ -99,11 +105,57 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     setValue(draftKey ? useDraftsStore.getState().getDraft(draftKey) : '')
   }, [draftKey])
 
-  // Persist edits whenever the draftKey is set (debounced inside the store)
+  // Persist edits whenever the draftKey is set (debounced inside the store).
+  // Skip persistence while editing a message — the textarea is holding the
+  // message content, not a draft for this column.
   useEffect(() => {
     if (!draftKey) return
+    if (editingMessage) return
     useDraftsStore.getState().setDraft(draftKey, value)
-  }, [value, draftKey])
+  }, [value, draftKey, editingMessage])
+
+  // Entering/leaving edit mode: stash the current draft and load the message
+  // content; on exit, restore whichever draft was active before.
+  const editingMessageIdRef = useRef<string | null>(null)
+  const stashedDraftRef = useRef<string | null>(null)
+  useEffect(() => {
+    const current = editingMessage?.messageId ?? null
+    if (current === editingMessageIdRef.current) return // no transition
+    if (current) {
+      // ENTERING edit mode — save the current textarea content as the draft so
+      // we can restore it on cancel/submit.
+      stashedDraftRef.current = valueRef.current
+      setValue(editingMessage!.originalContent)
+      setTimeout(() => {
+        const ta = textareaRef.current
+        if (ta) {
+          ta.focus()
+          // Auto-resize to fit the loaded content.
+          ta.style.height = 'auto'
+          ta.style.height = `${ta.scrollHeight}px`
+          // Place cursor at the end.
+          const len = ta.value.length
+          try { ta.setSelectionRange(len, len) } catch {}
+        }
+      }, 0)
+    } else {
+      // LEAVING edit mode — restore the stashed draft (if any).
+      if (stashedDraftRef.current !== null) {
+        setValue(stashedDraftRef.current)
+        stashedDraftRef.current = null
+      } else {
+        setValue('')
+      }
+      setTimeout(() => {
+        const ta = textareaRef.current
+        if (ta) {
+          ta.style.height = 'auto'
+          ta.style.height = `${ta.scrollHeight}px`
+        }
+      }, 0)
+    }
+    editingMessageIdRef.current = current
+  }, [editingMessage])
   const [sendAnim, setSendAnim] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
@@ -330,6 +382,19 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     const trimmed = sourceText.trim()
     if (!trimmed && pendingImages.length === 0 && pendingFiles.length === 0) return
 
+    // Editing a previously-sent message: route through onEditSubmit instead of
+    // creating a new message. Attachments and slash commands are bypassed —
+    // the edit just replaces the message text and re-runs from that point.
+    if (editingMessage && onEditSubmit) {
+      if (!trimmed) return
+      onEditSubmit(trimmed.slice(0, 100000))
+      setSendAnim(true)
+      setTimeout(() => setSendAnim(false), 300)
+      haptic.tap()
+      if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      return
+    }
+
     // Try local slash command interpreter first
     if (trimmed.startsWith('/')) {
       const handled = await runSlash(trimmed)
@@ -382,7 +447,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       textareaRef.current.style.height = 'auto'
     }
     setTimeout(() => textareaRef.current?.focus(), 50)
-  }, [value, onSend, pendingImages, pendingFiles, runSlash, isStreaming, threadId])
+  }, [value, onSend, pendingImages, pendingFiles, runSlash, isStreaming, threadId, editingMessage, onEditSubmit])
 
   // Keep the forward-declared ref in sync with the latest handleSubmit.
   useEffect(() => { handleSubmitRef.current = handleSubmit }, [handleSubmit])
@@ -452,12 +517,18 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
         }
         // Enter falls through to submit — runSlash handles execution.
       }
+      // Escape cancels an in-progress message edit (restores the previous draft).
+      if (e.key === 'Escape' && editingMessage) {
+        e.preventDefault()
+        onEditCancel?.()
+        return
+      }
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault()
         handleSubmit()
       }
     },
-    [handleSubmit, showSlashPalette, filteredCommands, slashIndex, selectSlashCommand],
+    [handleSubmit, showSlashPalette, filteredCommands, slashIndex, selectSlashCommand, editingMessage, onEditCancel],
   )
 
   // Hold-to-record + tap-to-toggle hybrid
@@ -858,6 +929,35 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           <div className="flex items-center justify-center mb-2 gap-2 animate-[fadeSlideIn_0.2s_ease-out]" role="status">
             <div className="voice-spinner" />
             <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Transcribing...</span>
+          </div>
+        )}
+
+        {/* Editing-message row — visible above the composer while the user is
+            editing a previously-sent message. Submitting truncates the
+            conversation from that point and re-sends with the new content. */}
+        {editingMessage && (
+          <div
+            className="mb-2 px-3 py-2 rounded-[var(--glass-radius)] glass-heavy flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
+            role="status"
+            aria-label="Editing message"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              className="text-accent flex-shrink-0"
+              aria-hidden="true"
+            ><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+            <span className="flex-1 text-[13px] text-foreground/90 truncate">
+              Editing message — submit will re-run from this point
+            </span>
+            <button
+              onClick={() => onEditCancel?.()}
+              className="inline-btn w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06] transition-colors"
+              aria-label="Cancel edit"
+              title="Cancel"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
           </div>
         )}
 
