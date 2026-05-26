@@ -21,6 +21,12 @@ interface Props {
    * so we route by threadId rather than tabId.
    */
   onOpenThread?: (threadId: string) => void
+  /** Which panel is expanded in split view: 'chat', 'doc', or null (50/50). */
+  splitExpanded?: 'chat' | 'doc' | null
+  /** Title of the document open in split view. */
+  splitDocTitle?: string
+  /** Return to split view from expanded state. */
+  onSplitReturn?: () => void
 }
 
 const SIDEBAR_MIN = 200
@@ -103,6 +109,9 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   onGoHome,
   onOpenDoc,
   onOpenThread,
+  splitExpanded,
+  splitDocTitle,
+  onSplitReturn,
 }: Props) {
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
   const [archiveOpen, setArchiveOpen] = useState(false)
@@ -112,6 +121,9 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const threads = useThreadsStore((s) => s.threads)
+
+  // When doc is expanded in split view, the chat tab should appear dimmed
+  const isDocExpanded = splitExpanded === 'doc'
   const archiveThread = useThreadsStore((s) => s.archiveThread)
   const unarchiveThread = useThreadsStore((s) => s.unarchiveThread)
   const { results: searchResults, loading: searchLoading } = useThreadSearch(searchQuery)
@@ -131,6 +143,10 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   }, [])
 
   const handleSelectSearchHit = useCallback((hit: SearchHit) => {
+    // Un-archive so the thread renders properly in the tab list
+    const thread = useThreadsStore.getState().threads.find((t) => t.id === hit.threadId)
+    if (thread?.archived) useThreadsStore.getState().unarchiveThread(hit.threadId)
+
     // If the thread already has an open tab, focus it; otherwise route by threadId.
     const existing = tabs.find((t) => t.type === 'chat' && (t as ChatTab).threadId === hit.threadId)
     if (existing) {
@@ -217,6 +233,8 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
   const renderTabRow = (tab: Tab, opts?: { muted?: boolean }) => {
     const isActive = tab.id === activeTabId
+    // Dim the active chat tab when the split doc is expanded to full width
+    const isDimmedByDocExpand = isActive && isDocExpanded && tab.type === 'chat'
     const isHovered = tab.id === hoveredTab
     const accent = accentForTab(tab)
     const thread = threadFor(tab)
@@ -229,13 +247,20 @@ export const DesktopSidebar = memo(function DesktopSidebar({
           onMouseLeave={() => setHoveredTab(null)}
         >
           <button
-            onClick={() => onSelectTab(tab.id)}
-            title={fullDateTime(tab.updatedAt)}
+            onClick={() => {
+              // When doc is expanded and user clicks the active chat tab, return to split view
+              if (isDimmedByDocExpand && onSplitReturn) {
+                onSplitReturn()
+              } else {
+                onSelectTab(tab.id)
+              }
+            }}
+            title={isDimmedByDocExpand ? 'Return to split view' : fullDateTime(tab.updatedAt)}
             className={`inline-btn w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors group ${
-              isActive
+              isActive && !isDimmedByDocExpand
                 ? 'bg-primary/12'
                 : 'hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
-            } ${opts?.muted && !isActive ? 'opacity-70 hover:opacity-100' : ''}`}
+            } ${(opts?.muted && !isActive) || isDimmedByDocExpand ? 'opacity-50 hover:opacity-100' : ''}`}
           >
             <span
               className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -244,7 +269,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
             <div className="flex-1 min-w-0">
               <div
                 className={`text-[13px] truncate pr-5 ${
-                  isActive ? 'text-primary font-medium' : 'text-foreground/85'
+                  isActive && !isDimmedByDocExpand ? 'text-primary font-medium' : 'text-foreground/85'
                 }`}
               >
                 {tab.title || 'Untitled'}
@@ -294,6 +319,19 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                 </button>
               )
             })}
+          </div>
+        )}
+        {/* Split-view doc indicator: shown when this chat tab's doc is expanded */}
+        {isActive && isDocExpanded && splitDocTitle && (
+          <div className="ml-[26px] mr-3 pl-[5px]">
+            <button
+              onClick={() => onSplitReturn?.()}
+              className="inline-btn w-full pl-2 pr-2 py-1 rounded-lg flex items-center gap-1.5 text-left text-[12px] transition-colors text-primary font-medium bg-primary/12"
+              title="Return to split view"
+            >
+              <span className="shrink-0" style={{ color: 'var(--color-cat-doc)' }}>{FileIcon}</span>
+              <span className="truncate">{splitDocTitle}</span>
+            </button>
           </div>
         )}
       </div>

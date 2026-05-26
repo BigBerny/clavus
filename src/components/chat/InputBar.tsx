@@ -1,5 +1,4 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
-import mammoth from 'mammoth'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
 import { haptic, isNative } from '../../lib/native'
 import { useModelStore } from '../../state/preset'
@@ -21,7 +20,7 @@ import {
 } from '../../lib/slashCommands'
 
 interface Props {
-  onSend: (message: string, images?: string[]) => void
+  onSend: (message: string, images?: string[], files?: PendingFile[]) => void
   onAbort: () => void
   /** Abort the current stream and immediately send the queued message. */
   onSendNow?: () => void
@@ -50,15 +49,6 @@ const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 const MAX_FILES = 5
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB per file
 
-const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.json', '.csv', '.xml', '.html', '.js', '.ts', '.jsx', '.tsx', '.py', '.css', '.yml', '.yaml', '.toml', '.svg', '.sh', '.env', '.log'])
-
-function isTextFile(file: File): boolean {
-  if (file.type.startsWith('text/')) return true
-  if (file.type === 'application/json' || file.type === 'application/xml') return true
-  const ext = '.' + file.name.split('.').pop()?.toLowerCase()
-  return TEXT_EXTENSIONS.has(ext)
-}
-
 async function uploadFile(file: File, threadId?: string | null): Promise<{ path: string } | null> {
   try {
     const form = new FormData()
@@ -70,18 +60,6 @@ async function uploadFile(file: File, threadId?: string | null): Promise<{ path:
   } catch {
     return null
   }
-}
-
-async function extractTextContent(file: File): Promise<string> {
-  const ext = file.name.split('.').pop()?.toLowerCase()
-  if (ext === 'docx') {
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const { value } = await mammoth.extractRawText({ arrayBuffer })
-      return value
-    } catch { return '' }
-  }
-  return ''
 }
 
 export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey, editingMessage, onEditSubmit, onEditCancel }: Props) {
@@ -206,7 +184,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     const trimmed = path.startsWith('/') ? path.slice(1) : path
     const link = `[${filename}](${window.location.origin}/#/file/${encodeURIComponent(trimmed)}) `
     const next = value.slice(0, at) + link + value.slice(caret)
-    setValue(next.slice(0, 10000))
+    setValue(next.slice(0, 100000))
     setAtQuery(null)
     // Record the linked doc on the active thread immediately
     if (threadId) {
@@ -278,7 +256,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     adjustHeight()
   }, [value, adjustHeight])
 
-  // Image paste handler
+  // Image paste handler + long text auto-attach
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items
     if (!items) return
@@ -302,7 +280,21 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
         return // Only handle the first image
       }
     }
-  }, [pendingImages.length])
+
+    // Long text paste: auto-attach as a file instead of filling the textarea
+    const textData = e.clipboardData?.getData('text/plain')
+    if (textData && textData.length > 2000 && pendingFiles.length < MAX_FILES) {
+      e.preventDefault()
+      const blob = new Blob([textData], { type: 'text/plain' })
+      const file = new File([blob], `pasted-${Date.now()}.txt`, { type: 'text/plain' })
+      uploadFile(file, threadId).then((uploaded) => {
+        if (!uploaded) return
+        setPendingFiles((prev) => prev.length >= MAX_FILES ? prev : [
+          ...prev, { name: file.name, content: '', size: textData.length, localPath: uploaded.path },
+        ])
+      })
+    }
+  }, [pendingImages.length, pendingFiles.length, threadId])
 
   // Listen for screenshots from the Clavus desktop dictation overlay.
   useEffect(() => {
@@ -425,21 +417,10 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       return
     }
 
-    // Build message text with file contents prepended
-    let messageText = trimmed
-    if (pendingFiles.length > 0) {
-      const fileParts = pendingFiles.map(f => {
-        const attrs = `name="${f.name}"${f.localPath ? ` path="${f.localPath}"` : ''}`
-        if (f.content) return `<file ${attrs}>\n${f.content}\n</file>`
-        return `<file ${attrs} />`
-      })
-      messageText = fileParts.join('\n\n') + (trimmed ? '\n\n' + trimmed : '')
-    }
-
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
     haptic.tap()
-    onSend(messageText.slice(0, 100000), pendingImages.length > 0 ? pendingImages : undefined)
+    onSend(trimmed.slice(0, 100000), pendingImages.length > 0 ? pendingImages : undefined, pendingFiles.length > 0 ? pendingFiles : undefined)
     setValue('')
     setPendingImages([])
     setPendingFiles([])
@@ -467,7 +448,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       // Insert text into textarea without sending
       const current = value.trim()
       const newValue = current ? current + ' ' + text : text
-      setValue(newValue.slice(0, 10000))
+      setValue(newValue.slice(0, 100000))
       haptic.tap()
       setTimeout(() => textareaRef.current?.focus(), 50)
     },
@@ -590,26 +571,15 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           })
         }
         reader.readAsDataURL(file)
-      } else if (isTextFile(file)) {
-        if (pendingFiles.length >= MAX_FILES) continue
-        if (file.size > MAX_FILE_SIZE) continue
-        const reader = new FileReader()
-        reader.onload = () => {
-          setPendingFiles((prev) => {
-            if (prev.length >= MAX_FILES) return prev
-            return [...prev, { name: file.name, content: reader.result as string, size: file.size }]
-          })
-        }
-        reader.readAsText(file)
       } else {
-        // Other files (DOCX, PDF, etc.): save locally and extract text where possible
+        // All non-image files: upload to get a local path the agent can read directly
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
         const f = file
-        Promise.all([uploadFile(f, threadId), extractTextContent(f)]).then(([uploaded, content]) => {
+        uploadFile(f, threadId).then((uploaded) => {
           setPendingFiles((prev) => {
             if (prev.length >= MAX_FILES) return prev
-            return [...prev, { name: f.name, content, size: f.size, localPath: uploaded?.path }]
+            return [...prev, { name: f.name, content: '', size: f.size, localPath: uploaded?.path }]
           })
         })
       }
@@ -649,22 +619,14 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
         }
         reader.readAsDataURL(file)
-      } else if (isTextFile(file)) {
-        if (pendingFiles.length >= MAX_FILES) continue
-        if (file.size > MAX_FILE_SIZE) continue
-        const reader = new FileReader()
-        reader.onload = () => {
-          setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, { name: file.name, content: reader.result as string, size: file.size }])
-        }
-        reader.readAsText(file)
       } else {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue
         const f = file
-        Promise.all([uploadFile(f, threadId), extractTextContent(f)]).then(([uploaded, content]) => {
+        uploadFile(f, threadId).then((uploaded) => {
           setPendingFiles(prev => prev.length >= MAX_FILES ? prev : [...prev, {
             name: f.name,
-            content,
+            content: '',
             size: f.size,
             localPath: uploaded?.path,
           }])
@@ -1124,7 +1086,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
               rows={1}
               disabled={isTranscribing}
               aria-label="Chat message input"
-              maxLength={10000}
+              maxLength={100000}
               className="w-full bg-transparent resize-none focus:outline-none placeholder:text-muted-foreground/70 px-4 pt-3 pb-1 text-[15px] leading-[1.5] text-foreground"
             />
           )}
@@ -1212,11 +1174,11 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           </div>
 
           {/* Character count near limit (overlay top-right of toolbar) */}
-          {value.length > 9000 && (
+          {value.length > 90000 && (
             <div className={`absolute right-3 -top-5 text-[11px] font-mono tabular-nums ${
-              value.length > 9800 ? 'text-red-400' : 'text-muted-foreground/60'
+              value.length > 98000 ? 'text-red-400' : 'text-muted-foreground/60'
             }`}>
-              {value.length.toLocaleString()}/10,000
+              {value.length.toLocaleString()}/100,000
             </div>
           )}
         </div>

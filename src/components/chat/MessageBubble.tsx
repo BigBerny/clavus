@@ -552,6 +552,18 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               ))}
             </div>
           )}
+          {/* File attachments */}
+          {message.attachments && message.attachments.length > 0 && (
+            <div className={`flex flex-wrap gap-1.5 ${message.content ? 'mb-2' : ''}`}>
+              {message.attachments.map((file, i) => (
+                <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-light-2/40 dark:bg-surface-dark-2/40 text-[12.5px] text-text-light-muted dark:text-text-dark-muted">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                  <span className="truncate max-w-[200px]">{file.name}</span>
+                  {file.size > 0 && <span className="opacity-50 shrink-0">{file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`}</span>}
+                </span>
+              ))}
+            </div>
+          )}
           {isUser ? (
             message.content ? (
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55]" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
@@ -698,16 +710,6 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 title={isBeingEdited ? 'Editing in input field below' : 'Edit'}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-              </button>
-            )}
-            {onBranch && (
-              <button
-                onClick={() => onBranch(message.id)}
-                className="inline-btn p-1.5 rounded-full active:scale-90 transition-all text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light dark:hover:text-text-dark"
-                aria-label="Branch conversation"
-                title="Branch off"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></svg>
               </button>
             )}
           </div>

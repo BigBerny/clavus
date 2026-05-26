@@ -39,8 +39,8 @@ function delay(ms: number) {
 export function useChat() {
   const store = useChatStore
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
-  const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[] }[]>([])
-  const sendRef = useRef<((threadId: string, content: string, images?: string[], retryCount?: number) => Promise<void>) | undefined>(undefined)
+  const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[]; files?: import('../state/chat').PendingFile[] }[]>([])
+  const sendRef = useRef<((threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount?: number) => Promise<void>) | undefined>(undefined)
   // Forward-declared so `send`'s onDone callback (created earlier) can invoke
   // the drain helper (created later) without a circular useCallback dep.
   const drainQueueIfAnyRef = useRef<((threadId: string) => void) | null>(null)
@@ -56,8 +56,8 @@ export function useChat() {
 
       if (ok && offlineQueueRef.current.length > 0) {
         const queued = offlineQueueRef.current.splice(0)
-        for (const { threadId, content, images } of queued) {
-          sendRef.current?.(threadId, content, images)
+        for (const { threadId, content, images, files } of queued) {
+          sendRef.current?.(threadId, content, images, files)
         }
       }
     }
@@ -74,8 +74,8 @@ export function useChat() {
     }
   }, [setConnectionStatus])
 
-  const send = useCallback(async (threadId: string, content: string, images?: string[], retryCount = 0) => {
-    if (!content.trim() && (!images || images.length === 0)) return
+  const send = useCallback(async (threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0) => {
+    if (!content.trim() && (!images || images.length === 0) && (!files || files.length === 0)) return
 
     const {
       getThreadState,
@@ -91,7 +91,7 @@ export function useChat() {
       // will pick this up. `content` is already composed at this point —
       // callers that need editing-friendly raw storage should use
       // `useChatStore.enqueueOrAppend` directly.
-      store.getState().enqueueOrAppend(threadId, { content: content.trim(), images })
+      store.getState().enqueueOrAppend(threadId, { content: content.trim(), images, files })
       return
     }
 
@@ -99,14 +99,14 @@ export function useChat() {
 
     // If offline, queue
     if (!navigator.onLine) {
-      addMessage(threadId, { role: 'user', content: content.trim(), images })
+      addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files })
       addMessage(threadId, { role: 'system', content: 'You are offline. Message will be sent when connection is restored.' })
-      offlineQueueRef.current.push({ threadId, content: content.trim(), images })
+      offlineQueueRef.current.push({ threadId, content: content.trim(), images, files })
       return
     }
 
     if (retryCount === 0) {
-      addMessage(threadId, { role: 'user', content: content.trim(), images })
+      addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files })
       // Fire title generation immediately (async, non-blocking)
       generateTitleIfNeeded(threadId)
       // Reactivate thread if it was auto-archived
@@ -158,15 +158,19 @@ export function useChat() {
       .getThreadState(threadId)
       .messages.filter((m) => m.role !== 'system' && !(m.role === 'assistant' && m.streaming && !m.content))
       .map((m) => {
+        // Compose file attachment references into the text sent to the gateway
+        const text = m.attachments && m.attachments.length > 0
+          ? composeMessageText(m.content, m.attachments)
+          : m.content
         if (m.images && m.images.length > 0) {
           const parts: ChatCompletionMessage['content'] = []
-          if (m.content) parts.push({ type: 'text' as const, text: m.content })
+          if (text) parts.push({ type: 'text' as const, text })
           for (const img of m.images) {
             parts.push({ type: 'image_url' as const, image_url: { url: img } })
           }
           return { role: m.role, content: parts }
         }
-        return { role: m.role, content: m.content }
+        return { role: m.role, content: text }
       })
 
     const controller = new AbortController()
@@ -335,7 +339,7 @@ export function useChat() {
         setConnectionStatus('reconnecting')
         store.getState().addMessage(threadId, { role: 'system', content: `Connection failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})` })
         await delay(RETRY_DELAY)
-        return sendRef.current?.(threadId, content, images, retryCount + 1)
+        return sendRef.current?.(threadId, content, images, files, retryCount + 1)
       }
 
       setConnectionStatus('disconnected')
@@ -363,8 +367,7 @@ export function useChat() {
     if (!ts.queuedMessage || ts.isStreaming) return
     const queued = ts.queuedMessage
     store.getState().clearQueuedMessage(threadId)
-    const composed = composeMessageText(queued.content, queued.files)
-    sendRef.current?.(threadId, composed, queued.images)
+    sendRef.current?.(threadId, queued.content, queued.images, queued.files)
   }, [store])
 
   // Wire the drain helper into the closure used by streamCallbacks above.
@@ -382,8 +385,7 @@ export function useChat() {
     ts.abortController?.abort()
     store.getState().setStreaming(threadId, false)
     store.getState().setAbortController(threadId, null)
-    const composed = composeMessageText(queued.content, queued.files)
-    sendRef.current?.(threadId, composed, queued.images)
+    sendRef.current?.(threadId, queued.content, queued.images, queued.files)
   }, [store])
 
   /** Regenerate: remove the target assistant message and its preceding user
@@ -407,8 +409,8 @@ export function useChat() {
     // Remove from the user message onward (inclusive)
     store.getState().truncateMessagesFrom(threadId, userMsg.id)
 
-    // Re-send the user message content
-    sendRef.current?.(threadId, userMsg.content, userMsg.images)
+    // Re-send the user message content (including any file attachments)
+    sendRef.current?.(threadId, userMsg.content, userMsg.images, userMsg.attachments)
   }, [store])
 
   /** Edit a user message: truncate from that message onward and re-send with

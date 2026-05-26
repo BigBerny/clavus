@@ -36,6 +36,19 @@ export function TocSidebar({
   const { tocContent, navigateToHeading, normalizeHeadingDepths } = useToc()
   const hasRestoredHashRef = useRef(false)
 
+  // Detect narrow container (e.g. split view) to force compact hover-reveal mode
+  const compactRef = useRef<HTMLDivElement>(null)
+  const [isCompact, setIsCompact] = useState(false)
+  useEffect(() => {
+    const el = compactRef.current?.closest('.notion-like-editor-layout, .notion-like-editor-wrapper') as HTMLElement | null
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      setIsCompact(entry.contentRect.width < 1280)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   // Manual active id (from user clicks). Persists until the user scrolls
   // the page manually, at which point we hand back to the extension's isActive.
   const [manualActiveId, setManualActiveId] = useState<string | null>(null)
@@ -297,7 +310,7 @@ export function TocSidebar({
   const hasHeadings = headingList.length > 0
 
   return (
-    <div className={cn("toc-sidebar", className)} {...props}>
+    <div ref={compactRef} className={cn("toc-sidebar", isCompact && "toc-sidebar--compact", className)} {...props}>
       <div className="toc-sidebar-wrapper">
         <div className="toc-sidebar-inner">
           {/* Progress rail */}

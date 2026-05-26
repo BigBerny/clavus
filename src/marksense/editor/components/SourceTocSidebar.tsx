@@ -66,6 +66,19 @@ export function SourceTocSidebar({ sourceContent, editorView, actions }: SourceT
   const navOffsetCurrentRef = useRef(0)
   const navAnimationFrameRef = useRef<number | null>(null)
 
+  // Detect narrow container (e.g. split view) to force compact hover-reveal mode
+  const compactRef = useRef<HTMLDivElement>(null)
+  const [isCompact, setIsCompact] = useState(false)
+  useEffect(() => {
+    const el = compactRef.current?.closest('.notion-like-editor-layout, .notion-like-editor-wrapper') as HTMLElement | null
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => {
+      setIsCompact(entry.contentRect.width < 1280)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   const depthById = useMemo(() => {
     const map = new Map<string, number>()
     headings.forEach((h, i) => {
@@ -287,7 +300,7 @@ export function SourceTocSidebar({ sourceContent, editorView, actions }: SourceT
   const hasHeadings = headings.length > 0
 
   return (
-    <div className="toc-sidebar">
+    <div ref={compactRef} className={`toc-sidebar${isCompact ? ' toc-sidebar--compact' : ''}`}>
       <div className="toc-sidebar-wrapper">
         <div className="toc-sidebar-inner">
           {/* Progress rail */}

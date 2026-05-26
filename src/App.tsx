@@ -792,7 +792,7 @@ export function App() {
   }, [sortedTabs, visiblePanel])
 
   // Handle sending from any panel — thread-scoped
-  const handleSend = useCallback((text: string, images?: string[]) => {
+  const handleSend = useCallback((text: string, images?: string[], files?: import('./state/chat').PendingFile[]) => {
     if (isHomeVisible()) {
       // Create a NEW thread, send to it directly
       const createThread = useThreadsStore.getState().createThread
@@ -803,7 +803,7 @@ export function App() {
       ensureChatTab(newThreadId, 'New conversation')
 
       // Send immediately targeting the new thread
-      send(newThreadId, text, images)
+      send(newThreadId, text, images, files)
       setVisiblePanel(newThreadId)
 
       // Scroll to the new thread panel once it renders
@@ -821,7 +821,7 @@ export function App() {
         const tab = sortedTabs.find(t => t.id === visiblePanel)
         if (tab?.type === 'chat') {
           switchThread(visiblePanel)
-          send(visiblePanel, text, images)
+          send(visiblePanel, text, images, files)
         }
       }
     }
@@ -1179,6 +1179,9 @@ export function App() {
               const tabId = applyRoute({ kind: 'chat', threadId })
               if (tabId) setVisiblePanel(tabId)
             }}
+            splitExpanded={splitDocPath ? splitExpanded : undefined}
+            splitDocTitle={splitDocTitle}
+            onSplitReturn={() => setSplitExpanded(null)}
           />
           </div>
         )}

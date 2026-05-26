@@ -36,6 +36,7 @@ export interface Message {
   model?: string
   usage?: MessageUsage
   media?: MediaAttachment[]
+  attachments?: PendingFile[]
   backendResponseId?: string
   /** @deprecated use backendResponseId */
   hermesResponseId?: string
@@ -75,12 +76,12 @@ const EMPTY_THREAD_STATE: ThreadStreamState = {
   queuedMessage: null,
 }
 
-/** Compose the final message text the gateway sees by prepending `<file>` blocks. */
+/** Compose the final message text the gateway sees by prepending `<file>` blocks.
+ *  Only sends path references — the agent can read files directly. */
 export function composeMessageText(content: string, files: PendingFile[] | undefined): string {
   if (!files || files.length === 0) return content
   const fileParts = files.map((f) => {
     const attrs = `name="${f.name}"${f.localPath ? ` path="${f.localPath}"` : ''}`
-    if (f.content) return `<file ${attrs}>\n${f.content}\n</file>`
     return `<file ${attrs} />`
   })
   return fileParts.join('\n\n') + (content ? '\n\n' + content : '')

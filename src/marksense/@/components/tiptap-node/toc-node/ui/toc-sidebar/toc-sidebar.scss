@@ -344,6 +344,69 @@
     }
   }
 
+  /* =========================
+     Compact mode: forced hover-reveal (e.g. split view where container < 1280px)
+     Overrides the wide-screen rules when the container is narrow.
+     ========================= */
+  &.toc-sidebar--compact {
+    pointer-events: auto;
+
+    .toc-sidebar-wrapper {
+      position: fixed;
+      right: 0;
+      top: 130px;
+      padding-top: 0;
+    }
+
+    .toc-sidebar-progress {
+      display: flex;
+    }
+
+    .toc-sidebar-nav {
+      position: absolute;
+      top: 0;
+      right: 100%;
+      pointer-events: none;
+      transform: translate(-10px, var(--toc-nav-offset, 0px));
+      opacity: 0;
+      width: 16rem;
+
+      &::before {
+        display: none;
+      }
+    }
+
+    .toc-sidebar-popover {
+      background-color: var(--tt-toc-sidebar-popover-bg);
+      border: 1px solid var(--tt-toc-sidebar-popover-border);
+      border-radius: 0.75rem;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+      padding: 0.5rem;
+      max-height: 24rem;
+      overflow: auto;
+    }
+
+    .toc-sidebar-actions {
+      display: none;
+    }
+
+    @media (hover: hover) {
+      .toc-sidebar-wrapper:hover .toc-sidebar-nav {
+        pointer-events: auto;
+        transform: translate(0, var(--toc-nav-offset, 0px));
+        opacity: 1;
+      }
+    }
+
+    @media (hover: none) {
+      .toc-sidebar-nav {
+        pointer-events: auto;
+        transform: translate(0, var(--toc-nav-offset, 0px));
+        opacity: 1;
+      }
+    }
+  }
+
   /* Mobile: hide entirely */
   @media screen and (max-width: 768px) {
     & {

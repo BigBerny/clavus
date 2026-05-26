@@ -399,8 +399,9 @@ export const DragContextMenu: React.FC<DragContextMenuProps> = ({
 
           return {
             mainAxis: mainAxisOffset,
-            // if height is more than 40px, then it's likely a block node
-            crossAxis: nodeHeight > 40 ? 0 : crossAxis,
+            // Always top-align so the handle sits next to the first line of
+            // text (and next to list bullets / numbers).
+            crossAxis: 0,
           }
         }),
       ],
