@@ -1143,13 +1143,9 @@ export function App() {
             onNewChat={handleDesktopNewChat}
             onGoHome={() => { setVisiblePanel('home'); setSplitDocPath(null); setSplitExpanded(null) }}
             onOpenDoc={(path, title) => {
-              // On desktop, if a chat tab is active, open the doc in split view
-              if (visibleTab?.type === 'chat' && path.endsWith('.md')) {
-                setSplitDocPath(path)
-                setSplitDocTitle(title || path.split('/').pop() || 'Document')
-                setSplitExpanded(null)
-                return
-              }
+              // Always open as a regular tab (split view auto-trigger disabled
+              // due to a render-loop freeze when opening linkedDocs over a chat;
+              // see investigation 2026-05-26)
               const tabId = applyRoute({ kind: 'file', path, title })
               if (tabId) setVisiblePanel(tabId)
             }}
