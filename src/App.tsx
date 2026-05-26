@@ -1194,11 +1194,12 @@ export function App() {
           <div className="row-start-1 col-start-1 min-h-0 flex flex-row">
             {/* Main panel — when doc is expanded to full width, collapse to zero
                 but keep in DOM to avoid unmount/remount thrashing */}
-            <div className={`min-h-0 flex flex-col ${
+            <div className={`min-h-0 grid grid-cols-1 grid-rows-1 ${
               splitDocPath && visibleTab?.type === 'chat' && splitExpanded === 'doc'
                 ? 'w-0 overflow-hidden'
                 : 'flex-1 min-w-0'
             }`}>
+              <div className="row-start-1 col-start-1 min-h-0 flex flex-col">
               {/* Split expand button — only when split is active */}
               {splitDocPath && visibleTab?.type === 'chat' && splitExpanded !== 'doc' && (
                 <div className="flex items-center justify-end px-3 py-1.5 shrink-0">
@@ -1263,6 +1264,32 @@ export function App() {
                     />
                   )}
                 </Suspense>
+              )}
+              </div>
+              {/* InputBar inside chat column when split view is active */}
+              {splitDocPath && isVisibleChat && (
+                <div className="row-start-1 col-start-1 self-end z-10" style={{ touchAction: 'none' }}>
+                  <InputBar
+                    onSend={handleSend}
+                    onAbort={handleAbort}
+                    onSendNow={handleSendNow}
+                    isStreaming={visibleThreadStreaming}
+                    onRecordingChange={handleRecordingChange}
+                    onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
+                    onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
+                    threadId={visiblePanel !== 'home' ? visiblePanel : null}
+                    draftKey={visiblePanel}
+                    onRetry={visiblePanel !== 'home' ? () => {
+                      const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
+                      const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
+                      if (lastUser) handleSend(lastUser.content, lastUser.images)
+                    } : undefined}
+                    talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening, interrupt: talkMode.interrupt }}
+                    editingMessage={editingMessage?.threadId === visiblePanel ? editingMessage : null}
+                    onEditSubmit={handleSubmitEditMessage}
+                    onEditCancel={handleCancelEditMessage}
+                  />
+                </div>
               )}
             </div>
             {/* Split document panel (desktop only) */}
@@ -1409,8 +1436,8 @@ export function App() {
         </div>
         )}
 
-        {/* InputBar floating over content with glass effect */}
-        {isVisibleChat && (
+        {/* InputBar floating over content with glass effect (skip when split view has its own) */}
+        {isVisibleChat && !(isDesktop && splitDocPath) && (
           <div className="row-start-1 col-start-1 self-end z-10" style={{ touchAction: 'none' }}>
             <InputBar
               onSend={handleSend}
