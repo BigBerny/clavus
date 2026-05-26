@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -329,15 +329,27 @@ interface Props {
   isStreaming?: boolean
 }
 
+// Stable `components` object for the GFM-only variant. Hoisted to module scope
+// so the same reference is reused across every render.
+const GFM_ONLY_COMPONENTS = { table: TableBlock }
+
 export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId, isStreaming }: Props) {
+  // Memoize the `components` object so react-markdown does not unmount/remount
+  // every <a> on every render. Without this, FileLinkCard's mount-time
+  // `addLinkedDoc` useEffect would fire on every render, creating an infinite
+  // store-update -> re-render loop that froze the entire app.
+  const components = useMemo(
+    () => ({ code: CodeBlock, a: ExternalLink(threadId, isStreaming), table: TableBlock }),
+    [threadId, isStreaming],
+  )
   if (remarkPluginsGfmOnly) {
-    return <Markdown remarkPlugins={[remarkGfm]} components={{ table: TableBlock }}>{content}</Markdown>
+    return <Markdown remarkPlugins={[remarkGfm]} components={GFM_ONLY_COMPONENTS}>{content}</Markdown>
   }
   return (
     <Markdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeHighlight]}
-      components={{ code: CodeBlock, a: ExternalLink(threadId, isStreaming), table: TableBlock }}
+      components={components}
     >
       {content}
     </Markdown>

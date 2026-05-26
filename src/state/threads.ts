@@ -437,14 +437,20 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
   },
 
   addLinkedDoc: (threadId, doc) => {
-    set((state) => {
-      const threads = state.threads.map((t) => {
-        if (t.id !== threadId) return t
-        const existing = t.linkedDocs ?? []
-        // Dedupe by path
-        if (existing.some((d) => d.path === doc.path)) return t
-        return { ...t, linkedDocs: [...existing, doc] }
-      })
+    // Pre-check OUTSIDE of `set` so a no-op early-returns without producing a
+    // new state reference. The previous implementation always returned a new
+    // `threads` array (via `.map()`), which woke every subscriber on every
+    // call — and with FileLinkCard's mount-time useEffect this caused an
+    // infinite render loop when a chat contained a workspace-file link.
+    const cur = get().threads
+    const target = cur.find((t) => t.id === threadId)
+    if (!target) return
+    const existing = target.linkedDocs ?? []
+    if (existing.some((d) => d.path === doc.path)) return // already linked
+    set(() => {
+      const threads = cur.map((t) =>
+        t.id !== threadId ? t : { ...t, linkedDocs: [...existing, doc] },
+      )
       saveThreads(threads)
       return { threads }
     })
