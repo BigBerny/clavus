@@ -173,6 +173,12 @@ async function transcribe(blob: Blob) {
     const data = await res.json()
     const rawText: string | undefined = data.text?.trim()
     const text = rawText ? cleanTranscription(rawText) : ''
+    if (!text) {
+      lastFailedBlob = blob
+      useRecordingStore.setState({ hasFailedAudio: true })
+      setErrorWithAutoDismiss('Transcription returned empty. Tap to retry.')
+      return
+    }
     if (text) {
       const target = useRecordingStore.getState().targetThreadId
       const useHandler = handlers && handlers.threadId === target
@@ -243,7 +249,10 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
       let recorder: MediaRecorder
       const mimeType = getSupportedMimeType()
       try {
-        const recorderOptions: MediaRecorderOptions = mimeType ? { mimeType } : {}
+        const recorderOptions: MediaRecorderOptions = {
+          ...(mimeType ? { mimeType } : {}),
+          audioBitsPerSecond: 64000, // 64 kbps — plenty for voice, keeps files small
+        }
         recorder = new MediaRecorder(s, recorderOptions)
       } catch {
         recorder = new MediaRecorder(s)
