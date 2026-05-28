@@ -79,6 +79,8 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
 function CopyableBlock({ children }: { children: string }) {
   const [copied, setCopied] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const touchedRef = useRef(false)
 
   const handleCopy = useCallback(async () => {
     if (!contentRef.current) return
@@ -97,14 +99,50 @@ function CopyableBlock({ children }: { children: string }) {
     setCopied(true)
     haptic.tap()
     setTimeout(() => setCopied(false), 2000)
+  }, [children])
+
+  // Long-press to copy on mobile
+  const handleTouchStart = useCallback(() => {
+    touchedRef.current = true
+    longPressTimer.current = setTimeout(() => {
+      handleCopy()
+    }, 500)
+  }, [handleCopy])
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
   }, [])
 
+  // Click to copy on desktop (skip if text is selected or on touch device)
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    // Skip if this was a touch interaction (longpress handles mobile)
+    if (touchedRef.current) {
+      touchedRef.current = false
+      return
+    }
+    // Don't copy if user is selecting text
+    if (window.getSelection()?.toString()) return
+    // Don't copy if clicking the header copy button
+    if ((e.target as HTMLElement).closest('button')) return
+    handleCopy()
+  }, [handleCopy])
+
   return (
-    <div className="!my-1.5 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden relative group/copy">
+    <div
+      className="!my-1.5 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 overflow-hidden relative group/copy cursor-pointer"
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
+      onClick={handleClick}
+    >
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-accent/10">
-        <span className="text-[11px] font-medium text-accent/60 uppercase tracking-wider">Output</span>
+        <span className="text-[11px] font-medium text-accent/60 uppercase tracking-wider">{copied ? 'Copied!' : 'Output'}</span>
         <button
-          onClick={handleCopy}
+          onClick={(e) => { e.stopPropagation(); handleCopy() }}
           className={`inline-btn flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[12px] font-medium transition-all ${
             copied
               ? 'text-emerald-500 bg-emerald-500/10'
