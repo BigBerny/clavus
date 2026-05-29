@@ -140,7 +140,7 @@ async function transcribe(blob: Blob) {
     formData.append('no_verbatim', 'true')
     formData.append('num_speakers', '1')
     const keyterms = [
-      'Janis', 'Janis Berneker', 'Nadine', 'Yuna',
+      'Janis', 'Janis Berneker', 'Yuna',
       'Typewise', 'David Eberle',
       'Jane', 'Clavus', 'Hermes', 'Marksense',
       'OpenClaw', 'Markdown', 'Cloudflare',
