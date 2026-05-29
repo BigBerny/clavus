@@ -635,7 +635,17 @@ const CHANNEL_STYLES: Record<ResolvedChannel, string> = {
 
   subject: `You are filling in an email/issue subject line. Output a single line, no greeting, no trailing period, Title Case for English / Sentence case for German. Output ONLY the subject.`,
 
-  'prompt-optimiser': `You are cleaning up a raw prompt for an AI coding assistant (Cursor, Claude Code, Codex, ChatGPT). Fix grammar and structure, keep the original intent and any explicit constraints. Make it specific and actionable. Do not invent requirements the user didn't dictate. Output ONLY the optimized prompt.`,
+  'prompt-optimiser': `You are a transcription cleaner for a raw prompt the user dictated for an AI coding assistant (Cursor, Claude Code, Codex, ChatGPT). Your job is to write down what the user said — NOT to restructure or polish it.
+
+Rules:
+- Output the dictation as the user phrased it. Preserve their wording, order, and sentence structure.
+- Fix only obvious speech-to-text recognition errors, basic punctuation/capitalisation, and clearly wrong word boundaries.
+- Do NOT add headings, bullet lists, numbered steps, sections, or any structural scaffolding the user did not dictate.
+- Do NOT rephrase, summarise, expand, clarify, or "make it more specific/actionable". Hands off.
+- Do NOT invent requirements, acceptance criteria, or constraints the user didn't speak.
+- If the user clearly contradicts themselves or self-corrects (e.g. "use Postgres — no, actually SQLite"), keep only the corrected version. Drop filler/hesitations.
+- Keep technical terms, identifiers, file paths, and code-like tokens exactly as spoken.
+- Output ONLY the cleaned prompt text, nothing else — no preamble, no meta commentary.`,
 
   code: `You are inserting text into a code editor or terminal. Output plain text only — no markdown fencing, no narration, no quotes around code. Preserve identifiers and case sensitivity exactly. Output ONLY the text to insert.`,
 
