@@ -15,8 +15,24 @@ interface Props {
   onBranch?: (messageId: string) => void
 }
 
-// Cache scroll positions per thread
+// Cache scroll positions per thread (in-memory + sessionStorage for reload survival)
 const scrollPositionCache = new Map<string, number>()
+const SCROLL_STORAGE_PREFIX = 'clavus-scroll-'
+
+function persistScrollPosition(threadId: string, scrollTop: number) {
+  scrollPositionCache.set(threadId, scrollTop)
+  try { sessionStorage.setItem(SCROLL_STORAGE_PREFIX + threadId, String(scrollTop)) } catch { /* full */ }
+}
+
+function getScrollPosition(threadId: string): number | undefined {
+  const mem = scrollPositionCache.get(threadId)
+  if (mem !== undefined) return mem
+  try {
+    const stored = sessionStorage.getItem(SCROLL_STORAGE_PREFIX + threadId)
+    if (stored !== null) return Number(stored)
+  } catch { /* unavailable */ }
+  return undefined
+}
 
 export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit, editingMessageId, onBranch }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -28,7 +44,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
   useEffect(() => {
     return () => {
       if (containerRef.current && threadId) {
-        scrollPositionCache.set(threadId, containerRef.current.scrollTop)
+        persistScrollPosition(threadId, containerRef.current.scrollTop)
       }
     }
   }, [threadId])
@@ -37,7 +53,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const savedPos = scrollPositionCache.get(threadId)
+    const savedPos = getScrollPosition(threadId)
     if (savedPos !== undefined) {
       container.scrollTop = savedPos
       setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 50)
@@ -123,12 +139,20 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
   }
   const unseenCount = unseenCountRef.current
 
+  const scrollSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
     setAutoScroll(atBottom)
-  }, [])
+    // Debounced persist to sessionStorage (survives WKWebView process termination)
+    if (scrollSaveTimer.current) clearTimeout(scrollSaveTimer.current)
+    scrollSaveTimer.current = setTimeout(() => {
+      if (containerRef.current && threadId) {
+        persistScrollPosition(threadId, containerRef.current.scrollTop)
+      }
+    }, 300)
+  }, [threadId])
 
   // Keep autoScroll readable inside the ResizeObserver without re-subscribing
   const autoScrollRef = useRef(autoScroll)
