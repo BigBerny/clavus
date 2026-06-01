@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Message } from './chat'
 import { useTabsStore } from './tabs'
 import { useModelStore } from './preset'
+import { useChatSettingsStore, type ReasoningLevel } from './chatSettings'
 
 export interface LinkedDoc {
   path: string
@@ -20,6 +21,10 @@ export interface Thread {
   linkedDocs?: LinkedDoc[]
   /** Per-thread model preference (restored when switching to this thread). */
   modelId?: string
+  /** Per-thread reasoning level (restored when switching to this thread). */
+  reasoningLevel?: ReasoningLevel
+  /** Whether this thread is pinned as a favorite (shown at top, never auto-archived). */
+  favorite?: boolean
 }
 
 interface ThreadsState {
@@ -34,6 +39,8 @@ interface ThreadsState {
   archiveThread: (id: string) => void
   unarchiveThread: (id: string) => void
   updateThreadModel: (id: string, modelId: string) => void
+  updateThreadReasoning: (id: string, level: ReasoningLevel | null) => void
+  toggleFavorite: (id: string) => void
   addLinkedDoc: (threadId: string, doc: LinkedDoc) => void
   getActiveThread: () => Thread | undefined
 }
@@ -163,7 +170,7 @@ export function archiveStaleThreads(): number {
   const current = useThreadsStore.getState().threads
   let count = 0
   const next = current.map((t) => {
-    if (!t.archived && t.updatedAt < cutoff) {
+    if (!t.archived && !t.favorite && t.updatedAt < cutoff) {
       count++
       return { ...t, archived: true }
     }
@@ -233,7 +240,7 @@ export async function syncFromServer(): Promise<boolean> {
     let archiveDirty = false
     for (let i = 0; i < mergedThreads.length; i++) {
       const t = mergedThreads[i]
-      if (!t.archived && t.updatedAt < archiveCutoff) {
+      if (!t.archived && !t.favorite && t.updatedAt < archiveCutoff) {
         mergedThreads[i] = { ...t, archived: true }
         archiveDirty = true
       }
@@ -378,10 +385,10 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     if (!thread) return
     saveActiveThreadId(id)
     set({ activeThreadId: id })
-    // Restore the per-thread model selection.
-    if (thread.modelId) {
-      useModelStore.getState().setSelectedModelId(thread.modelId)
-    }
+    // Restore the per-thread model selection (default to auto if none saved).
+    useModelStore.getState().setSelectedModelId(thread.modelId || 'auto')
+    // Restore the per-thread reasoning level.
+    useChatSettingsStore.getState().setGlobalReasoning(thread.reasoningLevel ?? null)
   },
 
   updateThreadTitle: (id, title) => {
@@ -400,6 +407,16 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     set((state) => {
       const threads = state.threads.map((t) =>
         t.id === id ? { ...t, modelId } : t,
+      )
+      saveThreads(threads)
+      return { threads }
+    })
+  },
+
+  updateThreadReasoning: (id, level) => {
+    set((state) => {
+      const threads = state.threads.map((t) =>
+        t.id === id ? { ...t, reasoningLevel: level ?? undefined } : t,
       )
       saveThreads(threads)
       return { threads }
@@ -430,6 +447,16 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     set((state) => {
       const threads = state.threads.map((t) =>
         t.id === id ? { ...t, archived: false, updatedAt: Date.now() } : t,
+      )
+      saveThreads(threads)
+      return { threads }
+    })
+  },
+
+  toggleFavorite: (id) => {
+    set((state) => {
+      const threads = state.threads.map((t) =>
+        t.id === id ? { ...t, favorite: !t.favorite, updatedAt: Date.now() } : t,
       )
       saveThreads(threads)
       return { threads }

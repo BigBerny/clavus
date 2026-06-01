@@ -75,7 +75,9 @@ function ToolCallDetail({ toolCall }: { toolCall: ToolCall }) {
   const { icon, label, detail } = getToolDisplay(toolCall.name, toolCall.args)
   const isRunning = toolCall.status === 'running'
   const isError = toolCall.status === 'error'
-  const hasDetails = (toolCall.args && Object.keys(toolCall.args).length > 0) || toolCall.result !== undefined
+  const hasArgs = toolCall.args && Object.keys(toolCall.args).length > 0
+  const hasResult = toolCall.result !== undefined
+  const hasDetails = hasArgs || hasResult || toolCall.status === 'completed' || toolCall.status === 'error'
 
   return (
     <div className={`rounded-md overflow-hidden transition-colors ${
@@ -107,7 +109,7 @@ function ToolCallDetail({ toolCall }: { toolCall: ToolCall }) {
       </button>
       {expanded && (
         <div className="px-2 pb-1.5 space-y-1 text-[11px]">
-          {toolCall.args && Object.keys(toolCall.args).length > 0 && (
+          {hasArgs && (
             <div>
               <span className="text-[9px] uppercase tracking-wider text-text-light-muted/35 dark:text-text-dark-muted/35">Args</span>
               <pre className="text-[10px] text-text-light-muted/60 dark:text-text-dark-muted/60 whitespace-pre-wrap break-all mt-0.5 max-h-24 overflow-y-auto">
@@ -115,12 +117,17 @@ function ToolCallDetail({ toolCall }: { toolCall: ToolCall }) {
               </pre>
             </div>
           )}
-          {toolCall.result !== undefined && (
+          {hasResult && (
             <div>
               <span className="text-[9px] uppercase tracking-wider text-text-light-muted/35 dark:text-text-dark-muted/35">Result</span>
               <pre className="text-[10px] text-text-light-muted/60 dark:text-text-dark-muted/60 whitespace-pre-wrap break-all mt-0.5 max-h-32 overflow-y-auto">
                 {typeof toolCall.result === 'string' ? toolCall.result : JSON.stringify(toolCall.result, null, 2)}
               </pre>
+            </div>
+          )}
+          {!hasArgs && !hasResult && (
+            <div className="text-[10px] text-text-light-muted/40 dark:text-text-dark-muted/40 italic">
+              {isError ? 'Failed — no details available' : 'Completed — no details available'}
             </div>
           )}
         </div>
@@ -133,7 +140,7 @@ export const ToolCallCard = memo(function ToolCallCard({ toolCall }: { toolCall:
   return <ToolCallDetail toolCall={toolCall} />
 })
 
-export function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCall[]; isStreaming?: boolean }) {
+export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls: ToolCall[]; isStreaming?: boolean; className?: string }) {
   const [expanded, setExpanded] = useState(!!isStreaming)
   if (!toolCalls.length) return null
 
@@ -158,7 +165,7 @@ export function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCall[
   if (!expanded) {
     // Collapsed: show last action + count badge (if multiple)
     return (
-      <div className="mb-1.5">
+      <div className={className}>
         <button
           onClick={() => setExpanded(true)}
           className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
@@ -179,7 +186,7 @@ export function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCall[
   // Expanded: show all tool calls
   if (toolCalls.length === 1) {
     return (
-      <div className="mb-1.5">
+      <div className={className}>
         <button
           onClick={() => setExpanded(false)}
           className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors mb-0.5"
@@ -202,7 +209,7 @@ export function ToolCallCards({ toolCalls, isStreaming }: { toolCalls: ToolCall[
   }
 
   return (
-    <div className="mb-1.5">
+    <div className={className}>
       <button
         onClick={() => setExpanded(false)}
         className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors mb-0.5"

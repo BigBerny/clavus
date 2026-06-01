@@ -118,7 +118,7 @@ function getWordRangeAtPos(state: EditorState, pos: number): { from: number; to:
     // Match words including contractions (e.g. didn't, can't, it's).
     // \w+ followed by zero or more (apostrophe + \w+) groups so that
     // apostrophes between letters are treated as word-internal.
-    const wordRegex = /\w+(?:['\u2019]\w+)*/g
+    const wordRegex = /[\p{L}\p{N}_]+(?:['\u2019][\p{L}\p{N}_]+)*/gu
     let match
     while ((match = wordRegex.exec(blockText)) !== null) {
       const start = match.index

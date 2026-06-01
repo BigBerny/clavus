@@ -348,7 +348,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
   const runSlash = useCallback(async (input: string): Promise<boolean> => {
     const result = await tryRunSlashCommand(input, {
       threadId: threadId ?? null,
-      setReasoningOverride: (tid, level) => useChatSettingsStore.getState().setReasoningOverride(tid, level),
+      setReasoningOverride: (tid, level) => { useChatSettingsStore.getState().setReasoningOverride(tid, level); useThreadsStore.getState().updateThreadReasoning(tid, level) },
       getReasoningOverride: (tid) => useChatSettingsStore.getState().getReasoningOverride(tid),
       setModelId: (id) => { useModelStore.getState().setSelectedModelId(id); if (threadId) useThreadsStore.getState().updateThreadModel(threadId, id) },
       getModelId: () => useModelStore.getState().selectedModelId,
@@ -899,7 +899,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
             conversation from that point and re-sends with the new content. */}
         {editingMessage && (
           <div
-            className="mb-2 px-3 py-2 rounded-[var(--glass-radius)] glass-heavy flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
+            className="mb-2 px-3 py-2 rounded-3xl glass-heavy flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
             role="status"
             aria-label="Editing message"
           >
@@ -927,7 +927,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
             streams and the user has submitted another message. */}
         {queuedMessage && (
           <div
-            className="mb-2 px-3 py-2 rounded-[var(--glass-radius)] glass-heavy flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
+            className="mb-2 px-3 py-2 rounded-3xl glass-heavy flex items-center gap-2.5 animate-[fadeSlideIn_0.2s_ease-out]"
             role="status"
             aria-label="Queued message"
           >
@@ -1559,11 +1559,17 @@ function ReasoningPill({ threadId }: { threadId: string | null }) {
     if (isAutoLocked) return
     const store = useChatSettingsStore.getState()
     if (level === 'auto') {
-      if (threadId) store.setReasoningOverride(threadId, null)
+      if (threadId) {
+        store.setReasoningOverride(threadId, null)
+        useThreadsStore.getState().updateThreadReasoning(threadId, null)
+      }
       else store.setGlobalReasoning(null)
     } else {
       const typedLevel = level as import('../../state/chatSettings').ReasoningLevel
-      if (threadId) store.setReasoningOverride(threadId, typedLevel)
+      if (threadId) {
+        store.setReasoningOverride(threadId, typedLevel)
+        useThreadsStore.getState().updateThreadReasoning(threadId, typedLevel)
+      }
       else store.setGlobalReasoning(typedLevel)
     }
     setOpen(false)

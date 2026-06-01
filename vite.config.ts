@@ -110,7 +110,7 @@ const phoneServerOptions = {
     cert: './mac-mini-von-janis.taild2ad59.ts.net.crt',
     key: './mac-mini-von-janis.taild2ad59.ts.net.key',
   },
-  allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost', 'openclaw.random-hamster.win'],
+  allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost', 'openclaw.random-hamster.win', 'clavus.random-hamster.win'],
   proxy: {
     '/v1': {
       target: CHAT_API_TARGET,
@@ -1486,7 +1486,7 @@ function composeApiPlugin() {
             'X-Title': 'Clavus Dictation',
           },
           body: JSON.stringify(openrouterBody),
-          signal: AbortSignal.timeout(30000),
+          signal: AbortSignal.timeout(60000),
         })
         const responseText = await openrouterRes.text()
         let parsed: any = null

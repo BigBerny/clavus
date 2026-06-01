@@ -16,6 +16,8 @@ import { useResponseRecovery } from './hooks/useResponseRecovery.ts'
 import { DesktopSidebar } from './components/layout/DesktopSidebar.tsx'
 import { CanvasPanel } from './components/canvas/CanvasPanel.tsx'
 import { consumePendingThread } from './lib/pendingThread.ts'
+import { useModelStore } from './state/preset.ts'
+import { useChatSettingsStore } from './state/chatSettings.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
 import { FloatingRecordingPill } from './components/voice/FloatingRecordingPill.tsx'
@@ -109,10 +111,17 @@ export function App() {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Track which panel is visible (tab id or 'home')
   const [visiblePanel, _setVisiblePanel] = useState<string>('home')
+  const visiblePanelRef = useRef(visiblePanel)
+  visiblePanelRef.current = visiblePanel
   const setVisiblePanel = useCallback((next: string) => {
     _setVisiblePanel(prev => {
       if (next !== prev) {
         console.log('[CLAVUS-PANEL]', prev, '→', next, new Error().stack?.split('\n').slice(1, 4).join(' | '))
+        // Reset model & reasoning to Auto when navigating to home
+        if (next === 'home') {
+          useModelStore.getState().setSelectedModelId('auto')
+          useChatSettingsStore.getState().setGlobalReasoning(null)
+        }
         // Reflect the visible panel in the URL hash so it can be deep-linked.
         const tabs = useTabsStore.getState().tabs
         const tab = tabs.find(t => t.id === next)
@@ -205,6 +214,24 @@ export function App() {
     const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches)
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // Pre-warm the Marksense editor bundle (Tiptap + ~25 extensions + CodeMirror)
+  // while the user is reading chat. Without this, opening a markdown for the
+  // first time waits 5+ seconds for two sequential dynamic imports.
+  useEffect(() => {
+    const idle: (cb: () => void) => number =
+      'requestIdleCallback' in window
+        ? (cb) => (window as any).requestIdleCallback(cb, { timeout: 2000 })
+        : (cb) => window.setTimeout(cb, 800)
+    const handle = idle(() => {
+      void import('./components/marksense/MarksensePanel.tsx')
+      void import('./marksense')
+    })
+    return () => {
+      if ('cancelIdleCallback' in window) (window as any).cancelIdleCallback(handle)
+      else window.clearTimeout(handle)
+    }
   }, [])
 
   // Canvas state
@@ -509,6 +536,18 @@ export function App() {
     const handleOpenFile = (e: Event) => {
       const detail = (e as CustomEvent).detail as { path?: string; title?: string }
       if (!detail?.path) return
+      // On desktop, if a chat tab is active and this is a .md file, open in split view
+      if (isDesktop && detail.path.endsWith('.md')) {
+        const currentPanel = visiblePanelRef.current
+        const tabs = useTabsStore.getState().tabs
+        const currentTab = tabs.find(t => t.id === currentPanel)
+        if (currentPanel === 'home' || currentTab?.type === 'chat') {
+          setSplitDocPath(detail.path)
+          setSplitDocTitle(detail.title || detail.path.split('/').pop() || 'Document')
+          setSplitExpanded(null)
+          return
+        }
+      }
       const tabId = applyRoute({ kind: 'file', path: detail.path, title: detail.title })
       if (tabId) {
         setVisiblePanel(tabId)
@@ -794,9 +833,24 @@ export function App() {
   // Handle sending from any panel — thread-scoped
   const handleSend = useCallback((text: string, images?: string[], files?: import('./state/chat').PendingFile[]) => {
     if (isHomeVisible()) {
+      // Capture the model/reasoning the user selected on the home screen
+      // BEFORE creating the thread (which triggers switchThread and resets state).
+      const homeModelId = useModelStore.getState().selectedModelId
+      const homeReasoning = useChatSettingsStore.getState().globalReasoning
+
       // Create a NEW thread, send to it directly
       const createThread = useThreadsStore.getState().createThread
       const newThreadId = createThread()
+
+      // Persist the home-screen model/reasoning onto the new thread
+      useThreadsStore.getState().updateThreadModel(newThreadId, homeModelId)
+      if (homeReasoning) {
+        useThreadsStore.getState().updateThreadReasoning(newThreadId, homeReasoning)
+      }
+      // Restore model/reasoning so switchThread doesn't clobber them
+      useModelStore.getState().setSelectedModelId(homeModelId)
+      useChatSettingsStore.getState().setGlobalReasoning(homeReasoning)
+
       switchThread(newThreadId)
 
       // Ensure a tab exists for the new thread

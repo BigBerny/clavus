@@ -101,6 +101,10 @@ const SearchIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
 )
 
+const StarIcon = ({ filled }: { filled?: boolean }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+)
+
 export const DesktopSidebar = memo(function DesktopSidebar({
   tabs,
   activeTabId,
@@ -126,6 +130,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   const isDocExpanded = splitExpanded === 'doc'
   const archiveThread = useThreadsStore((s) => s.archiveThread)
   const unarchiveThread = useThreadsStore((s) => s.unarchiveThread)
+  const toggleFavorite = useThreadsStore((s) => s.toggleFavorite)
   const { results: searchResults, loading: searchLoading } = useThreadSearch(searchQuery)
   const isSearching = searchQuery.trim().length >= 2
 
@@ -200,9 +205,10 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     return paths
   }, [threads])
 
-  const { openGroups, archivedTabs, archivedThreadsWithoutTabs } = useMemo(() => {
+  const { favoriteTabs, openGroups, archivedTabs, archivedThreadsWithoutTabs } = useMemo(() => {
     const now = Date.now()
     const sorted = [...tabs].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt))
+    const favs: Tab[] = []
     const open: Record<GroupKey, Tab[]> = { today: [], older: [] }
     const arch: Tab[] = []
     const tabThreadIds = new Set<string>()
@@ -211,7 +217,9 @@ export const DesktopSidebar = memo(function DesktopSidebar({
       if (tab.type === 'marksense' && linkedDocPaths.has((tab as MarksenseTab).path)) continue
       const thread = tab.type === 'chat' ? threads.find((t) => t.id === (tab as ChatTab).threadId) : undefined
       if (tab.type === 'chat') tabThreadIds.add((tab as ChatTab).threadId)
-      if (thread?.archived) {
+      if (thread?.favorite) {
+        favs.push(tab)
+      } else if (thread?.archived) {
         arch.push(tab)
       } else {
         const group = groupFor(tab.updatedAt, now)
@@ -226,7 +234,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     const orphanArchived = threads
       .filter((t) => t.archived && !tabThreadIds.has(t.id))
       .sort((a, b) => b.updatedAt - a.updatedAt)
-    return { openGroups: open, archivedTabs: arch, archivedThreadsWithoutTabs: orphanArchived }
+    return { favoriteTabs: favs, openGroups: open, archivedTabs: arch, archivedThreadsWithoutTabs: orphanArchived }
   }, [tabs, threads, linkedDocPaths])
 
   const totalArchived = archivedTabs.length + archivedThreadsWithoutTabs.length
@@ -278,6 +286,21 @@ export const DesktopSidebar = memo(function DesktopSidebar({
           </button>
           {isHovered && tab.type === 'chat' && (
             <div className="absolute top-1/2 -translate-y-1/2 right-3.5 flex items-center gap-0.5">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleFavorite((tab as ChatTab).threadId)
+                }}
+                className={`inline-btn w-5 h-5 flex items-center justify-center rounded-md transition-colors ${
+                  thread?.favorite
+                    ? 'text-amber-500 hover:text-amber-600'
+                    : 'text-muted-foreground hover:text-amber-500 hover:bg-foreground/[0.06]'
+                }`}
+                aria-label={thread?.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                title={thread?.favorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                <StarIcon filled={!!thread?.favorite} />
+              </button>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -369,6 +392,17 @@ export const DesktopSidebar = memo(function DesktopSidebar({
           </div>
         ) : (
           <>
+            {/* Favorites — pinned at top */}
+            {favoriteTabs.length > 0 && (
+              <div className="pb-0.5">
+                <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none flex items-center gap-1">
+                  <StarIcon filled />
+                  Favorites
+                </div>
+                {favoriteTabs.map((tab) => renderTabRow(tab))}
+              </div>
+            )}
+
             {/* Today (last 24h) — always expanded */}
             {openGroups.today.length > 0 && (
               <div className="pb-0.5">

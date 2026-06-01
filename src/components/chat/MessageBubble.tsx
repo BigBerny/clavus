@@ -1,7 +1,7 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
 import type { Message, MessageUsage } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
-import { ButtonGroup, SelectBlock, ConfirmBlock, parseButtonsLine, parseSelectLine, type ButtonAction, type SelectOption } from './InteractiveBlock.tsx'
+import { ButtonGroup, SelectBlock, ConfirmBlock, FormBlock, parseButtonsLine, parseSelectLine, parseFormBlock, type ButtonAction, type SelectOption, type FormBlockData } from './InteractiveBlock.tsx'
 import { haptic } from '../../lib/native'
 
 const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(m => ({ default: m.RichMessageRenderer })))
@@ -62,7 +62,7 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
           </div>
           {hasToolCalls && (
             <div className="mt-2">
-              <ToolCallCards toolCalls={toolCalls} isStreaming={!!isStreamingMsg} />
+              <ToolCallCards toolCalls={toolCalls} isStreaming={!!isStreamingMsg} className="mb-1.5" />
             </div>
           )}
         </div>
@@ -228,6 +228,7 @@ type ContentBlock =
   | { type: 'buttons'; buttons: ButtonAction[] }
   | { type: 'select'; prompt: string; options: SelectOption[] }
   | { type: 'confirm'; message: string; confirmLabel?: string; cancelLabel?: string }
+  | { type: 'form'; data: FormBlockData }
 
 // Parse custom blocks from markdown content
 function splitContentBlocks(content: string): ContentBlock[] {
@@ -240,9 +241,26 @@ function splitContentBlocks(content: string): ContentBlock[] {
   let inConfirm = false
   let confirmContent = ''
 
+  let inForm = false
+  let formLines: string[] = []
+
   for (const line of lines) {
+    // :::form block
+    if (line.trim() === ':::form' && !inCopy && !inConfirm && !inForm) {
+      if (current.trim()) parts.push({ type: 'text', content: current })
+      current = ''
+      inForm = true
+      formLines = []
+    } else if (line.trim() === ':::' && inForm) {
+      const formData = parseFormBlock(formLines)
+      if (formData) parts.push({ type: 'form', data: formData })
+      formLines = []
+      inForm = false
+    } else if (inForm) {
+      formLines.push(line)
+    }
     // :::confirm block
-    if (line.trim() === ':::confirm' && !inCopy && !inConfirm) {
+    else if (line.trim() === ':::confirm' && !inCopy && !inConfirm) {
       if (current.trim()) parts.push({ type: 'text', content: current })
       current = ''
       inConfirm = true
@@ -626,7 +644,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             )}
             {/* Standalone tool call cards — only when no thinking block */}
             {!message.thinking && message.toolCalls && message.toolCalls.length > 0 && (
-              <ToolCallCards toolCalls={message.toolCalls} isStreaming={!!message.streaming} />
+              <ToolCallCards toolCalls={message.toolCalls} isStreaming={!!message.streaming} className={message.content?.trim() ? 'mb-1.5' : undefined} />
             )}
             {/* Reply quote block */}
             {replyQuote?.quote && (
@@ -641,6 +659,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                     if (part.type === 'buttons') return <ButtonGroup key={i} buttons={part.buttons} />
                     if (part.type === 'select') return <SelectBlock key={i} prompt={part.prompt} options={part.options} />
                     if (part.type === 'confirm') return <ConfirmBlock key={i} message={part.message} confirmLabel={part.confirmLabel} cancelLabel={part.cancelLabel} />
+                    if (part.type === 'form') return <FormBlock key={i} data={part.data} />
                     return <RichMessageRenderer key={i} content={part.content} threadId={threadId} isStreaming={message.streaming} />
                   })
                 ) : (

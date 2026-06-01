@@ -377,13 +377,19 @@
     }
 
     .toc-sidebar-popover {
-      background-color: var(--tt-toc-sidebar-popover-bg);
+      background-color: rgba(255, 255, 255, 0.72);
       border: 1px solid var(--tt-toc-sidebar-popover-border);
       border-radius: 0.75rem;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
       padding: 0.5rem;
       max-height: 24rem;
       overflow: auto;
+
+      .dark & {
+        background-color: rgba(30, 30, 30, 0.72);
+      }
     }
 
     .toc-sidebar-actions {

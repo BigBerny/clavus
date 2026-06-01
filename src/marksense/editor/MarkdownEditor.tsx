@@ -463,7 +463,11 @@ function MarkdownEditorInner() {
   const sentToHostBufferRef = useRef(new Set<string>())
 
   const editor = useEditor({
-    immediatelyRender: true,
+    // false: defer initial render past useEditor's render call. Avoids tripping
+    // React's "setState during render" warning when TableOfContents.onUpdate
+    // fires synchronously while the parent TocProvider hasn't committed yet
+    // (especially under StrictMode's double-mount).
+    immediatelyRender: false,
     editorProps: {
       attributes: {
         class: "notion-like-editor",

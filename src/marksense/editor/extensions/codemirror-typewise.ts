@@ -347,7 +347,7 @@ function getWordRangeAtPos(state: EditorState, pos: number): { from: number; to:
   const lineText = line.text
   const posInLine = pos - line.from
 
-  const wordRegex = /\w+(?:['\u2019]\w+)*/g
+  const wordRegex = /[\p{L}\p{N}_]+(?:['\u2019][\p{L}\p{N}_]+)*/gu
   let match
   while ((match = wordRegex.exec(lineText)) !== null) {
     const start = match.index

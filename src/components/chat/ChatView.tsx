@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
 import { useTTS } from '../../hooks/useTTS'
 import type { Message } from '../../state/chat'
+import { useThreadsStore } from '../../state/threads'
 
 interface Props {
   messages: Message[]
@@ -32,6 +33,22 @@ function getScrollPosition(threadId: string): number | undefined {
     if (stored !== null) return Number(stored)
   } catch { /* unavailable */ }
   return undefined
+}
+
+function FavoriteButton({ threadId }: { threadId: string }) {
+  const isFavorite = useThreadsStore((s) => s.threads.find((t) => t.id === threadId)?.favorite)
+  const toggleFavorite = useThreadsStore((s) => s.toggleFavorite)
+  return (
+    <button
+      onClick={() => toggleFavorite(threadId)}
+      className={`inline-btn shrink-0 w-5 h-5 flex items-center justify-center rounded-full transition-colors ${
+        isFavorite ? 'text-amber-500' : 'text-foreground/30 hover:text-amber-500'
+      }`}
+      aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    </button>
+  )
 }
 
 export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit, editingMessageId, onBranch }: Props) {
@@ -273,8 +290,9 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
       {/* Floating title pill (mobile-only) */}
       {title && (
         <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none md:hidden" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
-          <div className="px-3.5 py-1.5 rounded-full glass">
-            <span className="text-[12px] font-medium text-text-light dark:text-text-dark truncate max-w-[250px] block">{title}</span>
+          <div className="px-3.5 py-1.5 rounded-full glass flex items-center gap-1.5 pointer-events-auto">
+            <span className="text-[12px] font-medium text-text-light dark:text-text-dark truncate max-w-[220px] block">{title}</span>
+            <FavoriteButton threadId={threadId} />
           </div>
         </div>
       )}

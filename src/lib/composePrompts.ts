@@ -470,6 +470,9 @@ Frog / Bitte: \`Chasch du d Aline froge, bitte?\` / \`Sölli no öbbis mitbringe
 //                                                (never Mundart in email)
 //   - Slack:                                     mixed             → en
 //   - Browsers / Notion / editors / unknowns:    mostly English    → en
+//   - Prompt optimiser:                          match dictation   → de/en
+//                                                (prompts are easier to read
+//                                                 in the language Janis spoke)
 
 /**
  * Pick the *default* output language for a (transcript, context) pair. The
@@ -498,10 +501,56 @@ export function inferOutputLanguage(
     (ctx.bundleId && FORMAL_BUNDLES.has(ctx.bundleId)) || ctx.appHint === 'email'
   if (isMail) return 'de'
 
-  // Slack, Notion, browsers, editors, prompt-optimisers — default English.
+  // Slack, Notion, browsers, editors — default English.
   // The model picks the actual output language at runtime from the dictation
   // and the [recent-messages-from-conversation] block (if present).
   return 'en'
+}
+
+/**
+ * Lightweight language hint for prompt optimiser.
+ *
+ * The normal channel defaults intentionally avoid client-side language
+ * detection, but prompt optimiser is different: Janis expects "Auto" to keep
+ * a dictated coding prompt in the language he spoke. If we leave the default
+ * at English, the system prompt asks the model to translate German prompts,
+ * which makes them harder to read.
+ *
+ * Keep this conservative. It only distinguishes Standard German-ish dictation
+ * from English-ish dictation and falls back to the caller's default when the
+ * signal is weak. Swiss German still gets demoted to Standard German later,
+ * because prompt optimiser targets coding-assistant prompts rather than chat.
+ */
+function inferPromptOptimiserLanguage(transcript: string, fallback: OutputLanguage): OutputLanguage {
+  const text = ` ${transcript.toLowerCase()} `
+  const tokens = text.match(/[a-zäöüß]+/g) ?? []
+  if (tokens.length === 0) return fallback
+
+  const germanMarkers = new Set([
+    'aber', 'auch', 'auf', 'aus', 'bei', 'bin', 'bisschen', 'bitte', 'da', 'dann',
+    'das', 'dass', 'dem', 'den', 'der', 'des', 'die', 'du', 'ein', 'eine', 'einen',
+    'einer', 'einmal', 'es', 'für', 'gerne', 'habe', 'haben', 'hat', 'ich',
+    'irgendwie', 'ist', 'kann', 'kannst', 'könnte', 'machen', 'mal', 'man', 'mit',
+    'muss', 'nicht', 'noch', 'oder', 'plan', 'recherche', 'schau', 'und', 'vielleicht',
+    'wir', 'zu', 'zum', 'zur', 'über',
+  ])
+  const englishMarkers = new Set([
+    'a', 'about', 'and', 'are', 'as', 'can', 'could', 'do', 'does', 'for', 'from',
+    'have', 'how', 'i', 'in', 'is', 'it', 'make', 'maybe', 'me', 'not', 'of', 'on',
+    'plan', 'please', 'research', 'that', 'the', 'this', 'to', 'use', 'we', 'with',
+    'would', 'you',
+  ])
+
+  let germanScore = /[äöüß]/.test(text) ? 2 : 0
+  let englishScore = 0
+  for (const token of tokens) {
+    if (germanMarkers.has(token)) germanScore += 1
+    if (englishMarkers.has(token)) englishScore += 1
+  }
+
+  if (germanScore >= 2 && germanScore >= englishScore + 1) return 'de'
+  if (englishScore >= 2 && englishScore >= germanScore + 1) return 'en'
+  return fallback
 }
 
 // ---------------------------------------------------------------------------
@@ -604,6 +653,9 @@ const NO_STYLE_MIMICRY_RULE =
 const NEVER_TRANSLATE_RULE =
   "Write in the chosen output language exactly. If the [dictation] is in a different language than the output, translate it; otherwise preserve the dictation's wording as much as the channel allows."
 
+const PROMPT_OPTIMISER_LANGUAGE_RULE =
+  "Prompt optimiser language rule: when language selection is Auto, preserve the dictation language. Do not translate German prompts into English just because the target app is a coding assistant. Translate only if the user explicitly requested another language or manually selected one."
+
 /**
  * The pivotal rule: the model must pick one of two modes on every call.
  *
@@ -638,7 +690,8 @@ const CHANNEL_STYLES: Record<ResolvedChannel, string> = {
   'prompt-optimiser': `You are a light transcription cleaner for a raw prompt the user dictated for an AI coding assistant (Cursor, Claude Code, Codex, ChatGPT). Your job is to write down what the user said, with only minimal cleanup so the prompt is easy to read.
 
 Rules:
-- Preserve the user's wording, intent, order, and level of detail. The output should still feel like the user's prompt, not a rewritten specification.
+- Preserve the user's wording, intent, order, language, and level of detail. The output should still feel like the user's prompt, not a rewritten specification.
+- For Auto language selection, keep the prompt in the same language as the dictation. German dictation should stay German; English dictation should stay English. Only translate when the user explicitly requested another language or manually selected one.
 - Fix obvious speech-to-text recognition errors, basic punctuation/capitalisation, and clearly wrong word boundaries.
 - You MAY add light formatting such as line breaks or a short bullet list when it naturally matches what the user dictated or makes a longer prompt easier to scan.
 - Do NOT over-structure: do not turn one or two spoken sentences into many sections, headings, acceptance criteria, or a full implementation plan.
@@ -736,7 +789,7 @@ ${langLine}
 ${TWO_MODE_RULE}
 ${SELF_CORRECTION_RULE}
 ${NO_STYLE_MIMICRY_RULE}
-${NEVER_TRANSLATE_RULE}
+${channel === 'prompt-optimiser' ? PROMPT_OPTIMISER_LANGUAGE_RULE : NEVER_TRANSLATE_RULE}
 </output>`
 }
 
@@ -750,6 +803,9 @@ export function resolveCompose(
 ): ResolvedComposeContext {
   const channel = resolveChannel(ctx)
   let language = inferOutputLanguage(transcript, ctx, opts)
+  if (channel === 'prompt-optimiser') {
+    language = inferPromptOptimiserLanguage(transcript, language)
+  }
   let languageDemoted = false
 
   // Mundart only makes sense for chat-ish surfaces. Force DE on formal /
