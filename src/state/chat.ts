@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { useThreadsStore, loadThreadMessages, saveThreadMessages } from './threads'
+import { useThreadsStore, loadThreadMessages, saveThreadMessages, getMessagesKey } from './threads'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 
 export interface ToolCall {
@@ -521,3 +521,78 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return queued
   },
 }))
+
+/**
+ * Surgically merge a server-side messages array into the chat store for a
+ * thread. Designed for SSE live-refresh from other devices.
+ *
+ *  - If the thread is actively streaming, skip entirely to avoid clobbering
+ *    the in-flight assistant message.
+ *  - Otherwise: keep existing message object references for any id we already
+ *    have (so React skips re-rendering existing bubbles and the scroll
+ *    container does not jump), append new ids in server order at the end, and
+ *    drop nothing.
+ */
+export function mergeMessagesFromServer(threadId: string, serverMessages: Message[]): boolean {
+  if (!Array.isArray(serverMessages)) return false
+  const chat = useChatStore.getState()
+  const ts = chat.threadStates[threadId]
+
+  // Thread not currently loaded into the store — just persist; lazy load picks it up.
+  if (!ts) {
+    try {
+      localStorage.setItem(getMessagesKey(threadId), JSON.stringify(serverMessages.slice(-100)))
+    } catch { /* ignore */ }
+    return false
+  }
+
+  // Mid-stream: never replace the array. Persistence happens on finalize anyway.
+  if (ts.isStreaming) return false
+
+  const localById = new Map(ts.messages.map(m => [m.id, m]))
+  const localIds = new Set(localById.keys())
+  const serverIds = new Set(serverMessages.map(m => m.id))
+
+  // Detect new ids from the server side. If none, bail without churn.
+  let hasNew = false
+  for (const id of serverIds) {
+    if (!localIds.has(id)) { hasNew = true; break }
+  }
+  if (!hasNew) return false
+
+  // Build merged array in server's order, reusing local refs where possible.
+  const merged: Message[] = serverMessages.map(s => {
+    const existing = localById.get(s.id)
+    return existing ?? { ...s, streaming: false }
+  })
+
+  // Preserve any local-only messages (e.g. just-sent that haven't reached the
+  // server yet) by appending them at the end.
+  for (const local of ts.messages) {
+    if (!serverIds.has(local.id)) merged.push(local)
+  }
+
+  try {
+    localStorage.setItem(getMessagesKey(threadId), JSON.stringify(merged.slice(-100)))
+  } catch { /* ignore */ }
+
+  useChatStore.setState((state) => ({
+    threadStates: {
+      ...state.threadStates,
+      [threadId]: { ...ts, messages: merged },
+    },
+  }))
+  return true
+}
+
+/** Fetch + merge the messages of a single thread (used by SSE handler). */
+export async function refreshThreadMessages(threadId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/threads/messages/${encodeURIComponent(threadId)}`)
+    if (!res.ok) return false
+    const data = await res.json() as Message[]
+    return mergeMessagesFromServer(threadId, data)
+  } catch {
+    return false
+  }
+}

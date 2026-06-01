@@ -4,8 +4,9 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
-import { useThreadsStore, syncFromServer, archiveStaleThreads } from './state/threads.ts'
-import { useChatStore } from './state/chat.ts'
+import { useThreadsStore, syncFromServer, archiveStaleThreads, refreshThreadsMetadata } from './state/threads.ts'
+import { useChatStore, refreshThreadMessages } from './state/chat.ts'
+import { startThreadsSync } from './state/sync.ts'
 import { useTabsStore, ensureChatTab, openOrFocusFinderTab, type ChatTab, type FileTab, type MarksenseTab, type FinderTab } from './state/tabs.ts'
 import { applyRoute, getCurrentRoute, onRouteChange, pushHash, type Route } from './state/router.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
@@ -506,6 +507,10 @@ export function App() {
     if (needsToken) return
     syncFromServer().then(() => checkPendingNavigation())
 
+    // Live cross-device sync. Opens a single EventSource and pushes deltas
+    // into the threads/chat stores without disturbing the active view.
+    startThreadsSync()
+
     const handleSWMessage = (event: MessageEvent) => {
       if (event.data?.type === 'navigate-thread' && event.data.threadId) {
         navigateToThread(event.data.threadId)
@@ -521,6 +526,11 @@ export function App() {
         // Recover interrupted responses when app becomes visible
         const activeId = useThreadsStore.getState().getActiveThread()?.id
         if (activeId) checkRecovery(activeId)
+        // Belt-and-suspenders cross-device refresh on tab focus. The SSE bus
+        // also reconnects on visibility, but pulling once unconditionally
+        // covers the "EventSource never recovered" case on mobile WebKit.
+        refreshThreadsMetadata()
+        if (activeId) refreshThreadMessages(activeId)
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)

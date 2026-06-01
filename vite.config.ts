@@ -602,11 +602,62 @@ function threadsApiPlugin() {
     return Buffer.concat(chunks).toString('utf-8')
   }
 
+  // Cross-device change broadcaster. Every open EventSource connection registers
+  // itself here; PUTs to threads/messages broadcast a JSON event. The originating
+  // client passes X-Client-Id so it can be excluded from its own broadcast.
+  type ChangeEvent =
+    | { type: 'threads' }
+    | { type: 'messages'; threadId: string }
+    | { type: 'thread-deleted'; threadId: string }
+  const sseClients = new Set<{ res: any; clientId: string }>()
+
+  function broadcast(event: ChangeEvent, originClientId: string | null) {
+    const payload = `data: ${JSON.stringify(event)}\n\n`
+    for (const c of sseClients) {
+      if (originClientId && c.clientId === originClientId) continue
+      try { c.res.write(payload) } catch { /* connection dead; cleaned up by close handler */ }
+    }
+  }
+
   const attach = (server: any) => {
     server.middlewares.use(async (req: any, res: any, next: any) => {
         if (!req.url?.startsWith('/api/threads')) return next()
 
+        // SSE endpoint — set headers before any other content-type default.
+        if (req.url.startsWith('/api/threads/events') && req.method === 'GET') {
+          // Browsers cannot set custom headers on EventSource, so the client
+          // passes its id via query string.
+          let clientId = ''
+          try {
+            const u = new URL(req.url, 'http://localhost')
+            clientId = u.searchParams.get('clientId') || ''
+          } catch { /* ignore */ }
+          res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache, no-transform',
+            Connection: 'keep-alive',
+            'X-Accel-Buffering': 'no',
+          })
+          res.write(`retry: 3000\n\n`)
+          res.write(`: connected ${Date.now()}\n\n`)
+          const entry = { res, clientId }
+          sseClients.add(entry)
+          const heartbeat = setInterval(() => {
+            try { res.write(`: heartbeat\n\n`) } catch { /* dead */ }
+          }, 25000)
+          const cleanup = () => {
+            clearInterval(heartbeat)
+            sseClients.delete(entry)
+          }
+          req.on('close', cleanup)
+          req.on('aborted', cleanup)
+          res.on('close', cleanup)
+          return
+        }
+
         res.setHeader('Content-Type', 'application/json')
+
+        const originClientId = (req.headers['x-client-id'] as string) || null
 
         try {
           if (req.url === '/api/threads' && req.method === 'GET') {
@@ -621,6 +672,7 @@ function threadsApiPlugin() {
             const body = await readBody(req)
             fs.writeFileSync(threadsFile, body, 'utf-8')
             res.end(JSON.stringify({ ok: true }))
+            broadcast({ type: 'threads' }, originClientId)
             return
           }
 
@@ -641,6 +693,7 @@ function threadsApiPlugin() {
             const body = await readBody(req)
             fs.writeFileSync(msgFile, body, 'utf-8')
             res.end(JSON.stringify({ ok: true }))
+            broadcast({ type: 'messages', threadId }, originClientId)
             return
           }
 
@@ -649,6 +702,7 @@ function threadsApiPlugin() {
             const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
             if (fs.existsSync(msgFile)) fs.unlinkSync(msgFile)
             res.end(JSON.stringify({ ok: true }))
+            broadcast({ type: 'thread-deleted', threadId }, originClientId)
             return
           }
 
@@ -691,6 +745,10 @@ function threadsApiPlugin() {
 
             // Send push notification
             sendPushToAll({ title, body: message.slice(0, 200), threadId }).catch(() => {})
+
+            // Live-refresh all open clients
+            broadcast({ type: 'threads' }, null)
+            broadcast({ type: 'messages', threadId }, null)
 
             res.statusCode = 201
             res.end(JSON.stringify({ threadId, thread }))

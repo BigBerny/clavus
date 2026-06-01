@@ -47,9 +47,25 @@ interface ThreadsState {
 
 const THREADS_KEY = 'clavus-threads'
 const ACTIVE_THREAD_KEY = 'clavus-active-thread'
+const CLIENT_ID_KEY = 'clavus-client-id'
 
 /** Threads with no activity in this window are auto-archived on app load / refocus. */
 const ARCHIVE_IDLE_MS = 24 * 60 * 60 * 1000
+
+/** Stable per-device id, sent as X-Client-Id so the server can skip broadcasting
+ *  a change event back to its originator. */
+export function getClientId(): string {
+  try {
+    let id = localStorage.getItem(CLIENT_ID_KEY)
+    if (!id) {
+      id = `client-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+      localStorage.setItem(CLIENT_ID_KEY, id)
+    }
+    return id
+  } catch {
+    return 'client-anon'
+  }
+}
 
 function generateThreadId(): string {
   return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -134,7 +150,7 @@ function syncThreadsToServer(threads: Thread[]) {
     try {
       await fetch('/api/threads', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Client-Id': getClientId() },
         body: JSON.stringify(threads),
       })
     } catch {
@@ -151,7 +167,7 @@ function syncMessagesToServer(threadId: string, messages: Message[]) {
     try {
       await fetch(`/api/threads/messages/${encodeURIComponent(threadId)}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Client-Id': getClientId() },
         body: JSON.stringify(messages),
       })
     } catch {
@@ -301,6 +317,63 @@ export async function syncFromServer(): Promise<boolean> {
     }
 
     return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Surgical thread-list merge. Unlike `syncFromServer`, this:
+ *  - does NOT reset `activeThreadId`
+ *  - does NOT auto-archive idle threads
+ *  - does NOT open new chat tabs
+ *  - preserves per-device local-only fields (modelId, reasoningLevel)
+ *  - keeps unchanged thread object references so React skips re-rendering them
+ *
+ *  Intended for live updates from the SSE bus and focus refreshes.
+ */
+export function mergeThreadsFromServer(serverThreads: Thread[]): boolean {
+  const store = useThreadsStore.getState()
+  const localById = new Map(store.threads.map(t => [t.id, t]))
+  let changed = false
+
+  for (const incoming of serverThreads) {
+    const local = localById.get(incoming.id)
+    if (!local) {
+      localById.set(incoming.id, incoming)
+      changed = true
+      continue
+    }
+    if (incoming.updatedAt > local.updatedAt) {
+      // Preserve per-device local-only prefs (model + reasoning) which the
+      // server copy may not have or may be stale on.
+      const merged: Thread = {
+        ...local,
+        ...incoming,
+        modelId: local.modelId ?? incoming.modelId,
+        reasoningLevel: local.reasoningLevel ?? incoming.reasoningLevel,
+      }
+      localById.set(incoming.id, merged)
+      changed = true
+    }
+  }
+
+  if (!changed) return false
+
+  const next = Array.from(localById.values())
+  try { localStorage.setItem(THREADS_KEY, JSON.stringify(next)) } catch { /* ignore */ }
+  useThreadsStore.setState({ threads: next })
+  return true
+}
+
+/** Fetch + merge the thread list from the server without disturbing the active view. */
+export async function refreshThreadsMetadata(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/threads')
+    if (!res.ok) return false
+    const data = await res.json() as Thread[]
+    if (!Array.isArray(data)) return false
+    return mergeThreadsFromServer(data)
   } catch {
     return false
   }
