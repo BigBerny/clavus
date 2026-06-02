@@ -897,10 +897,17 @@ function workspacePlugin(rootDir = WORKSPACE_ROOT, apiPrefix = '/api/workspace',
       if (e.name.startsWith('.')) continue
       const childRel = nodePath.join(relPath, e.name)
       const childAbs = nodePath.join(absPath, e.name)
-      if (e.isDirectory()) {
-        entries.push({ name: e.name, type: 'dir', path: childRel, children: listDirRecursive(childAbs, childRel) })
-      } else {
-        entries.push({ name: e.name, type: 'file', path: childRel, size: fs.statSync(childAbs).size })
+      try {
+        if (e.isDirectory()) {
+          entries.push({ name: e.name, type: 'dir', path: childRel, children: listDirRecursive(childAbs, childRel) })
+        } else {
+          // Skip broken symlinks: statSync follows them and throws ENOENT.
+          const stat = fs.lstatSync(childAbs)
+          entries.push({ name: e.name, type: 'file', path: childRel, size: stat.isSymbolicLink() ? undefined : stat.size })
+        }
+      } catch {
+        // Skip unreadable entries (broken symlinks, permission errors) so a single
+        // bad child does not blow up the whole listing.
       }
     }
     entries.sort((a, b) => {
