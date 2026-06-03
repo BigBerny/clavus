@@ -207,34 +207,57 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
   const { favoriteTabs, openGroups, archivedTabs, archivedThreadsWithoutTabs } = useMemo(() => {
     const now = Date.now()
-    const sorted = [...tabs].sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt))
+    // Build the chat-tab set from synced thread state, not local `tabs`, so
+    // every device shows the same conversations. We still reuse existing local
+    // ChatTab objects when we have them (preserves openedAt and any future
+    // tab-only fields); otherwise we synthesize a ChatTab from the thread.
+    const tabByThreadId = new Map<string, ChatTab>()
+    for (const tab of tabs) {
+      if (tab.type === 'chat') tabByThreadId.set((tab as ChatTab).threadId, tab as ChatTab)
+    }
+    const chatTabs: ChatTab[] = threads.map((thread) => {
+      const existing = tabByThreadId.get(thread.id)
+      if (existing) {
+        return {
+          ...existing,
+          title: thread.title || existing.title,
+          // Always reflect synced thread activity in the sort order.
+          updatedAt: thread.updatedAt,
+        }
+      }
+      return {
+        id: thread.id,
+        type: 'chat',
+        title: thread.title || 'Untitled',
+        threadId: thread.id,
+        openedAt: thread.updatedAt,
+        updatedAt: thread.updatedAt,
+      }
+    })
+    // Non-chat tabs (Finder, Marksense, File) stay device-local.
+    const nonChatTabs = tabs.filter((t) => t.type !== 'chat')
+    const allTabs: Tab[] = [...chatTabs, ...nonChatTabs]
+    const sorted = allTabs.sort((a, b) => (b.updatedAt - a.updatedAt) || (b.openedAt - a.openedAt))
+
     const favs: Tab[] = []
     const open: Record<GroupKey, Tab[]> = { today: [], older: [] }
     const arch: Tab[] = []
-    const tabThreadIds = new Set<string>()
     for (const tab of sorted) {
       // Skip marksense tabs that already appear as linkedDoc sub-entries
       if (tab.type === 'marksense' && linkedDocPaths.has((tab as MarksenseTab).path)) continue
       const thread = tab.type === 'chat' ? threads.find((t) => t.id === (tab as ChatTab).threadId) : undefined
-      if (tab.type === 'chat') tabThreadIds.add((tab as ChatTab).threadId)
       if (thread?.favorite) {
         favs.push(tab)
       } else if (thread?.archived) {
         arch.push(tab)
       } else {
+        // Only the synced `thread.archived` flag determines Archive membership —
+        // grouping by local tab age makes the sidebar diverge between devices.
         const group = groupFor(tab.updatedAt, now)
-        if (group === 'older') {
-          arch.push(tab)
-        } else {
-          open[group].push(tab)
-        }
+        open[group].push(tab)
       }
     }
-    // Include archived threads that don't have an open tab
-    const orphanArchived = threads
-      .filter((t) => t.archived && !tabThreadIds.has(t.id))
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-    return { favoriteTabs: favs, openGroups: open, archivedTabs: arch, archivedThreadsWithoutTabs: orphanArchived }
+    return { favoriteTabs: favs, openGroups: open, archivedTabs: arch, archivedThreadsWithoutTabs: [] as Thread[] }
   }, [tabs, threads, linkedDocPaths])
 
   const totalArchived = archivedTabs.length + archivedThreadsWithoutTabs.length
@@ -386,7 +409,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
 
       {/* Tab list */}
       <div className="flex-1 overflow-y-auto scrollbar-fine py-1">
-        {tabs.length === 0 ? (
+        {favoriteTabs.length + openGroups.today.length + openGroups.older.length + archivedTabs.length === 0 ? (
           <div className="px-4 py-8 text-center">
             <p className="text-[13px] text-muted-foreground/70">No conversations yet</p>
           </div>
@@ -410,6 +433,19 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                   Today
                 </div>
                 {openGroups.today.map((tab) => renderTabRow(tab))}
+              </div>
+            )}
+
+            {/* Earlier — non-archived threads older than 24h. With the 24h
+                auto-archive policy this is usually empty, but a thread can
+                briefly live here between hitting the cutoff and the next
+                archiveStaleThreads sweep. */}
+            {openGroups.older.length > 0 && (
+              <div className="pb-0.5">
+                <div className="px-4 pt-2 pb-1 text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground select-none">
+                  Earlier
+                </div>
+                {openGroups.older.map((tab) => renderTabRow(tab))}
               </div>
             )}
 

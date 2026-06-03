@@ -1014,17 +1014,26 @@ export function App() {
   const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
   const isVisibleChat = visiblePanel === 'home' || visibleTab?.type === 'chat'
 
-  // Desktop sidebar: select tab by setting visiblePanel directly
+  // Desktop sidebar: select tab by setting visiblePanel directly.
+  // The sidebar synthesizes ChatTab entries from synced thread state, so the
+  // clicked id may not yet have a local tab. Route chat clicks through
+  // applyRoute so the tab is created (and the thread un-archived) if needed.
   const handleDesktopSelectTab = useCallback((tabId: string) => {
-    setVisiblePanel(tabId)
-    const tab = sortedTabs.find(t => t.id === tabId)
-    if (tab?.type === 'chat') {
-      switchThread((tab as ChatTab).threadId)
-    }
-    // Always close split view when switching tabs to avoid stale split state
     setSplitDocPath(null)
     setSplitExpanded(null)
-  }, [sortedTabs, switchThread])
+    const existing = useTabsStore.getState().tabs.find(t => t.id === tabId)
+    const threadsState = useThreadsStore.getState()
+    const thread = threadsState.threads.find(t => t.id === tabId)
+    if (thread) {
+      if (thread.archived) threadsState.unarchiveThread(thread.id)
+      const resolvedId = applyRoute({ kind: 'chat', threadId: thread.id })
+      if (resolvedId) setVisiblePanel(resolvedId)
+      switchThread(thread.id)
+      return
+    }
+    setVisiblePanel(tabId)
+    if (existing?.type === 'chat') switchThread((existing as ChatTab).threadId)
+  }, [switchThread])
 
   const handleDesktopNewChat = useCallback(() => {
     setSplitDocPath(null)
