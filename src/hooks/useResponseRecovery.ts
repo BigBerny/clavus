@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { useChatStore } from '../state/chat.ts'
+import { useChatStore, type Message, type PendingFile } from '../state/chat.ts'
 import { recoverResponse, resumeChatStream } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
+
+type RecoveryResult = 'recovered' | 'no-buffer' | 'skipped'
+
+/** Threads we already auto-resent in this session, to avoid loops if the
+ *  re-send also fails to produce a saved response. */
+const autoRetriedThreads = new Set<string>()
+
+type AutoRetryCallback = (threadId: string, content: string, images?: string[], files?: PendingFile[]) => void
+let autoRetryHandler: AutoRetryCallback | null = null
 
 /**
  * Detects interrupted/missing assistant responses and recovers them from the
@@ -38,7 +47,7 @@ function needsRecovery(threadId: string): boolean {
   return false
 }
 
-async function attemptRecovery(threadId: string): Promise<void> {
+async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   console.log('[Recovery] Attempting recovery for', threadId)
 
   const store = useChatStore.getState()
@@ -47,7 +56,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
   // Re-check: don't interfere with active streams
   if (ts.isStreaming) {
     console.log('[Recovery] Skipping — thread is actively streaming')
-    return
+    return 'skipped'
   }
 
   // 1) Prefer streaming from the Clavus server-side event buffer. This restores
@@ -143,7 +152,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
     await resumeChatStream({ responseId, threadId, fromSeq }, resumeCallbacks)
     if (resumeReceivedEvent) {
       console.log('[Recovery] Resume completed for', threadId)
-      return
+      return 'recovered'
     }
     // Resume returned 200 but emitted no events (unlikely with our buffer) —
     // fall through to legacy recovery.
@@ -160,7 +169,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
     if (createdSlot && assistantId) {
       useChatStore.getState().removeMessage(threadId, assistantId)
     }
-    return
+    return 'no-buffer'
   }
 
   // Dedup: if our assistant slot already references this responseId, do nothing.
@@ -169,7 +178,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
       .find(m => (m.backendResponseId ?? m.hermesResponseId) === recovered.responseId && m.content)
     if (existing) {
       console.log('[Recovery] Already have this response, skipping')
-      return
+      return 'skipped'
     }
   }
 
@@ -208,7 +217,7 @@ async function attemptRecovery(threadId: string): Promise<void> {
     }
 
     console.log('[Recovery] Response recovered via backend store for thread', threadId, recovered.responseId)
-    return
+    return 'recovered'
   }
 
   // Recovered but neither completed nor with text — drop any eager slot.
@@ -216,6 +225,26 @@ async function attemptRecovery(threadId: string): Promise<void> {
     useChatStore.getState().removeMessage(threadId, assistantId)
   }
   console.log('[Recovery] Cannot recover — status:', recovered.status, 'text:', recovered.text?.length || 0)
+  return 'no-buffer'
+}
+
+/** Last user message in the thread, or null if the last message isn't from the user.
+ *  Used to drive auto-resend after recovery comes up empty. */
+function pendingUserMessage(threadId: string): Message | null {
+  const ts = useChatStore.getState().getThreadState(threadId)
+  const last = ts.messages[ts.messages.length - 1]
+  return last && last.role === 'user' ? last : null
+}
+
+function maybeAutoRetry(threadId: string, result: RecoveryResult) {
+  if (result !== 'no-buffer') return
+  if (!autoRetryHandler) return
+  if (autoRetriedThreads.has(threadId)) return
+  const pending = pendingUserMessage(threadId)
+  if (!pending) return
+  autoRetriedThreads.add(threadId)
+  console.log('[Recovery] Auto-resending unanswered user message for', threadId)
+  autoRetryHandler(threadId, pending.content, pending.images, pending.attachments)
 }
 
 /** Check threads that might need recovery (e.g., on startup).
@@ -232,7 +261,9 @@ export function checkAllThreadsRecovery() {
     if (i >= candidates.length) return
     const thread = candidates[i++]
     console.log('[Recovery] Thread needs recovery:', thread.id)
-    attemptRecovery(thread.id).finally(() => {
+    attemptRecovery(thread.id).then((result) => {
+      maybeAutoRetry(thread.id, result)
+    }).finally(() => {
       // Stagger recovery attempts to avoid main-thread congestion
       setTimeout(processNext, 300)
     })
@@ -240,8 +271,17 @@ export function checkAllThreadsRecovery() {
   processNext()
 }
 
-export function useResponseRecovery() {
+export function useResponseRecovery(options: { onAutoRetry?: AutoRetryCallback } = {}) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Stash the callback at module scope so the module-level attemptRecovery
+  // path (called from startup `checkAllThreadsRecovery`) can reach it.
+  useEffect(() => {
+    autoRetryHandler = options.onAutoRetry ?? null
+    return () => {
+      if (autoRetryHandler === options.onAutoRetry) autoRetryHandler = null
+    }
+  }, [options.onAutoRetry])
 
   const checkRecovery = useCallback((threadId: string) => {
     if (!threadId) return
@@ -249,7 +289,9 @@ export function useResponseRecovery() {
     debounceRef.current = setTimeout(() => {
       if (needsRecovery(threadId)) {
         console.log('[Recovery] Thread needs recovery:', threadId)
-        attemptRecovery(threadId)
+        attemptRecovery(threadId).then((result) => {
+          maybeAutoRetry(threadId, result)
+        })
       }
     }, 500)
   }, [])

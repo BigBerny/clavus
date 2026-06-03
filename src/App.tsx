@@ -95,7 +95,14 @@ function waitForScrollSettle(container: HTMLElement, onSettled: () => void): () 
 export function App() {
   useVisualViewport()
   const { send, abort, sendNow, regenerate, editAndResend } = useChat()
-  const { checkRecovery } = useResponseRecovery()
+  const { checkRecovery } = useResponseRecovery({
+    // Auto-resend the user's last message when recovery confirms the assistant
+    // never produced anything (e.g. stream killed before any persist). Pass
+    // retryCount=1 so `send` doesn't re-add the user message we're resending.
+    onAutoRetry: (threadId, content, images, files) => {
+      send(threadId, content, images, files, 1)
+    },
+  })
   const { state: pushState, requestPermission } = usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
