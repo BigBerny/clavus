@@ -209,17 +209,33 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
     return paths
   }, [threads])
 
-  // Recent: today's tabs, sorted by updatedAt, capped at 6
+  // Recent: derived from synced thread state (consistent with sidebar) plus
+  // device-local non-chat tabs. Otherwise the home and sidebar lists drift
+  // apart across devices.
   const recentTabs = useMemo(() => {
     const dayAgo = Date.now() - 24 * 60 * 60 * 1000
-    return [...tabs]
-      .filter((t) => {
-        // Skip marksense tabs that already render as linkedDoc sub-entries
-        if (t.type === 'marksense' && linkedDocPaths.has((t as MarksenseTab).path)) return false
-        if (t.type !== 'chat') return t.updatedAt > dayAgo
-        const th = threads.find((x) => x.id === (t as ChatTab).threadId)
-        return !th?.archived && t.updatedAt > dayAgo
+    const tabByThreadId = new Map<string, ChatTab>()
+    for (const t of tabs) if (t.type === 'chat') tabByThreadId.set((t as ChatTab).threadId, t as ChatTab)
+    const chatEntries: ChatTab[] = threads
+      .filter((th) => !th.archived && th.updatedAt > dayAgo)
+      .map((th) => {
+        const existing = tabByThreadId.get(th.id)
+        if (existing) return { ...existing, title: th.title || existing.title, updatedAt: th.updatedAt }
+        return {
+          id: th.id,
+          type: 'chat',
+          title: th.title || 'Untitled',
+          threadId: th.id,
+          openedAt: th.updatedAt,
+          updatedAt: th.updatedAt,
+        }
       })
+    const nonChatRecent = tabs.filter((t) => {
+      if (t.type === 'chat') return false
+      if (t.type === 'marksense' && linkedDocPaths.has((t as MarksenseTab).path)) return false
+      return t.updatedAt > dayAgo
+    })
+    return [...chatEntries, ...nonChatRecent]
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, 6)
   }, [tabs, threads, linkedDocPaths])
@@ -307,6 +323,9 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                   ? threads.find((t) => t.id === (tab as ChatTab).threadId)
                   : undefined
                 const accent = accentForTab(tab)
+                // Prefer the synced thread title — `tab.title` is a local
+                // snapshot that goes stale when another device retitles.
+                const displayTitle = (tab.type === 'chat' ? thread?.title : undefined) || tab.title || 'Untitled'
                 const preview = tab.type === 'chat' && thread?.lastMessagePreview
                   ? stripMarkdown(thread.lastMessagePreview)
                   : tab.type === 'marksense' ? 'Document'
@@ -316,7 +335,12 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                 return (
                   <div key={tab.id}>
                     <button
-                      onClick={() => onSelectTab?.(tab.id)}
+                      onClick={() => {
+                        // For chat tabs, route via handleSelectThread so a
+                        // synthesized entry (no local tab yet) opens correctly.
+                        if (tab.type === 'chat') handleSelectThread((tab as ChatTab).threadId)
+                        else onSelectTab?.(tab.id)
+                      }}
                       className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
                     >
                       <span
@@ -324,7 +348,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                         style={{ background: `var(--color-${accent})` }}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13.5px] font-medium truncate text-foreground">{tab.title || 'Untitled'}</div>
+                        <div className="text-[13.5px] font-medium truncate text-foreground">{displayTitle}</div>
                         {preview && (
                           <div className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
                         )}

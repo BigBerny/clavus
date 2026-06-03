@@ -1603,6 +1603,9 @@ function ChatViewPanel({ threadId, onRegenerate, onStartEdit, editingMessageId, 
 
   useEffect(() => {
     useChatStore.getState().ensureThread(threadId)
+    // Pull the latest messages from the server. Without this a thread started
+    // on another device opens empty here until SSE eventually fires.
+    refreshThreadMessages(threadId)
   }, [threadId])
 
   return (

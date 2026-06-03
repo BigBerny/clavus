@@ -21,6 +21,7 @@
 
 import { getFileTypeInfo } from '../lib/fileTypes'
 import { useTabsStore, type FileTab, type MarksenseTab } from './tabs'
+import { useThreadsStore } from './threads'
 
 export type Route =
   | { kind: 'home' }
@@ -129,10 +130,13 @@ export function applyRoute(route: Route): string | null {
     }
     // Create a placeholder chat tab. The thread might not yet exist locally
     // (deep link from another device) — the chat view will lazy-create it.
+    // Prefer the synced thread title over the "Conversation" default so the
+    // sidebar/home don't show a generic title until the next sync.
+    const thread = useThreadsStore.getState().threads.find((t) => t.id === route.threadId)
     store.openTab({
       id: route.threadId,
       type: 'chat',
-      title: 'Conversation',
+      title: thread?.title || 'Conversation',
       threadId: route.threadId,
       openedAt: Date.now(),
       updatedAt: Date.now(),
