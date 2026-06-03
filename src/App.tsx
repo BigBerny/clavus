@@ -1240,6 +1240,10 @@ export function App() {
             }}
             onOpenThread={(threadId) => {
               setSplitDocPath(null); setSplitExpanded(null)
+              // Un-archive first — sortedTabs filters out archived chat tabs, so
+              // without this the new tab would be invisible and we'd render Home.
+              const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
+              if (thread?.archived) useThreadsStore.getState().unarchiveThread(threadId)
               const tabId = applyRoute({ kind: 'chat', threadId })
               if (tabId) setVisiblePanel(tabId)
             }}
