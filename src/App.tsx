@@ -893,7 +893,18 @@ export function App() {
         if (tab?.type === 'chat') {
           switchThread(visiblePanel)
           send(visiblePanel, text, images, files)
+        } else {
+          // Silent-drop guard: should not happen because InputBar only renders
+          // when isVisibleChat is true, but if it does the user sees nothing.
+          console.warn('[Clavus] handleSend dropped — visiblePanel has no chat tab', {
+            visiblePanel,
+            tabFound: !!tab,
+            tabType: tab?.type,
+            tabIds: sortedTabs.map((t) => t.id),
+          })
         }
+      } else {
+        console.warn('[Clavus] handleSend dropped — visiblePanel is home but isHomeVisible() was false')
       }
     }
   }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs])

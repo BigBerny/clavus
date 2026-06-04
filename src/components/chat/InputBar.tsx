@@ -401,6 +401,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     // of dropping or aborting. The single-item queue auto-appends, and the
     // drain in useChat sends it when the current response completes.
     if (isStreaming && threadId) {
+      console.log('[Clavus] InputBar queued submit — isStreaming=true', { threadId })
       useChatStore.getState().enqueueOrAppend(threadId, {
         content: trimmed,
         files: pendingFiles.length > 0 ? pendingFiles : undefined,

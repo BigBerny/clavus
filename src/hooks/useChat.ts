@@ -91,6 +91,14 @@ export function useChat() {
       // will pick this up. `content` is already composed at this point —
       // callers that need editing-friendly raw storage should use
       // `useChatStore.enqueueOrAppend` directly.
+      // Logged because users have reported the UI saying not-streaming (Send
+      // button visible) while this branch still fires — symptom of a desynced
+      // selector vs. live store read, which we want to spot if it happens again.
+      console.log('[Chat] send queued — thread already streaming', {
+        threadId,
+        hasAbort: !!threadState.abortController,
+        messageCount: threadState.messages.length,
+      })
       store.getState().enqueueOrAppend(threadId, { content: content.trim(), images, files })
       return
     }
