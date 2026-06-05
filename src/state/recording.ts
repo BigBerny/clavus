@@ -6,6 +6,9 @@ export type RecordingState = 'idle' | 'recording' | 'transcribing'
 
 const MAX_DURATION_MS = 10 * 60 * 1000 // 10 minutes
 const WARNING_AT_MS = 9 * 60 * 1000 + 45 * 1000 // 9:45
+// Anything shorter than this is treated as accidental — drop without
+// transcribing or surfacing a retry button.
+const MIN_DURATION_MS = 1500
 
 function getSupportedMimeType(): string {
   if (typeof MediaRecorder === 'undefined') return 'audio/mp4'
@@ -270,9 +273,15 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
           set({ state: 'idle' })
           return
         }
+        const elapsed = Date.now() - startTimeMs
         const actualMimeType = recorder.mimeType || mimeType
         const blob = new Blob(chunks, { type: actualMimeType })
         cleanupHardware()
+        if (elapsed < MIN_DURATION_MS) {
+          insertMode = false
+          set({ state: 'idle' })
+          return
+        }
         if (blob.size > 0) {
           void transcribe(blob)
         } else {
