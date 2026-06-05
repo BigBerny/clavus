@@ -165,6 +165,17 @@ export function useChat() {
       config.model = modelOption.model
     }
 
+    // Auto is a Home-level default. Once a thread has sent a message, pin the
+    // resolved concrete model onto the thread so the picker stops showing Auto
+    // and switchThread restores the right model on return.
+    const threadRecord = useThreadsStore.getState().threads.find((t) => t.id === threadId)
+    if (modelOption && (!threadRecord?.modelId || threadRecord.modelId === 'auto')) {
+      useThreadsStore.getState().updateThreadModel(threadId, modelOption.id)
+      if (useModelStore.getState().selectedModelId !== modelOption.id) {
+        useModelStore.getState().setSelectedModelId(modelOption.id)
+      }
+    }
+
     const apiMessages: ChatCompletionMessage[] = store
       .getState()
       .getThreadState(threadId)
