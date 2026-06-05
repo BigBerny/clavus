@@ -37,6 +37,10 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  // Bumped when the server reports an external change to the open file.
+  // Forces a refetch via this effect's deps and a remount of the editor
+  // (which only reads `content` once on mount) via instanceId below.
+  const [revision, setRevision] = useState(0)
 
   // If the path changed under us, drop the stale content immediately so the
   // editor doesn't mount with the wrong file's text.
@@ -74,7 +78,26 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
         setLoading(false)
       })
     return () => controller.abort()
-  }, [path, isVisible])
+  }, [path, isVisible, revision])
+
+  // Subscribe to server-side file-change events. The Vite workspace plugin
+  // suppresses echoes of our own POST writes, so this only fires for external
+  // changes (agent edits, OneDrive sync, another tab, …).
+  useEffect(() => {
+    if (!isVisible || !path) return
+    const es = new EventSource(`${DOCUMENTS_API}/__events`)
+    es.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data)
+        if (data?.path && data.path === path) {
+          setRevision(r => r + 1)
+        }
+      } catch {
+        // Ignore malformed SSE frames.
+      }
+    }
+    return () => es.close()
+  }, [isVisible, path])
 
   // Suppress color-transition flash: start with transitions disabled, enable after first paint.
   const [suppressTransitions, setSuppressTransitions] = useState(true)
@@ -90,7 +113,7 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   // the DOM and can portal into it.
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
 
-  const instanceId = `marksense-tab-${path || 'none'}`
+  const instanceId = `marksense-tab-${path || 'none'}-r${revision}`
 
   const openBrowser = () => {
     if (onOpenFinder) {
