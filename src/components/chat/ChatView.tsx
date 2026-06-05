@@ -66,6 +66,76 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
     }
   }, [threadId])
 
+  // Find the bottom edge of the last message in container scroll coordinates.
+  // Used so "scroll to bottom" lands at the message edge, not in the spacer
+  // area we added below the conversation.
+  const getLastMessageBottom = useCallback((container: HTMLElement): number => {
+    const els = container.querySelectorAll('[data-msg-id]')
+    const lastEl = els[els.length - 1] as HTMLElement | undefined
+    if (!lastEl) return container.scrollHeight - container.clientHeight
+    const containerRect = container.getBoundingClientRect()
+    const elRect = lastEl.getBoundingClientRect()
+    const elBottomInScroll = elRect.bottom - containerRect.top + container.scrollTop
+    // Leave just enough room under the input bar
+    const inputBarPad = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--input-bar-h')) || 72
+    const target = elBottomInScroll - container.clientHeight + inputBarPad + 16
+    return Math.max(0, Math.min(target, container.scrollHeight - container.clientHeight))
+  }, [])
+
+  const animateScrollTo = useCallback((container: HTMLElement, target: number, duration = 300) => {
+    const start = container.scrollTop
+    const distance = target - start
+    if (Math.abs(distance) < 10) {
+      container.scrollTop = target
+      return
+    }
+    const startTime = performance.now()
+    const step = (now: number) => {
+      const elapsed = now - startTime
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      container.scrollTop = start + distance * eased
+      if (progress < 1) requestAnimationFrame(step)
+    }
+    requestAnimationFrame(step)
+  }, [])
+
+  const scrollToBottom = useCallback(() => {
+    const container = containerRef.current
+    if (!container) return
+    animateScrollTo(container, getLastMessageBottom(container))
+    setAutoScroll(true)
+  }, [animateScrollTo, getLastMessageBottom])
+
+  // Scroll the given message so its top sits just below the floating title pill.
+  // This is the "ChatGPT-style" anchor used at the start of every new turn so
+  // the user reads the response from its beginning, not its end.
+  const scrollMessageToTop = useCallback((msgId: string) => {
+    const container = containerRef.current
+    if (!container) return
+    const el = container.querySelector(`[data-msg-id="${msgId}"]`) as HTMLElement | null
+    if (!el) return
+    const containerRect = container.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const elTopInScroll = elRect.top - containerRect.top + container.scrollTop
+    // Headroom for the floating title pill (mobile-only — on desktop a bit of
+    // breathing room is fine too).
+    const headroom = 56
+    const target = Math.max(0, elTopInScroll - headroom)
+    const clamped = Math.min(target, container.scrollHeight - container.clientHeight)
+    animateScrollTo(container, clamped)
+  }, [animateScrollTo])
+
+  const prevMessagesLenRef = useRef(messages.length)
+  const prevLastMessageRef = useRef<string | null>(messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null)
+  // Id of the user message we have most recently anchored to the top. Updated
+  // only when we actually perform the anchor — NOT after every render — so a
+  // fresh user send is still detectable in the follow-up assistant commit.
+  const anchoredUserIdRef = useRef<string | null>(null)
+  // Id of the streaming assistant message we have already anchored for. Used
+  // for regeneration detection (assistant changes but user msg does not).
+  const anchoredAssistantIdRef = useRef<string | null>(null)
+
   // Restore scroll position on mount, or scroll to bottom by default
   useEffect(() => {
     const container = containerRef.current
@@ -75,76 +145,85 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
       container.scrollTop = savedPos
       setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 50)
     } else {
-      // Default: scroll to bottom (latest messages)
+      // Default: scroll to the bottom of the last message (not into the
+      // empty spacer below it).
       requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight
-          setAutoScroll(true)
-        }
+        const c = containerRef.current
+        if (!c) return
+        c.scrollTop = getLastMessageBottom(c)
+        setAutoScroll(true)
       })
     }
+    // Reset turn tracking when switching threads so we don't anchor an
+    // already-streaming message that the user navigated into mid-flight, nor
+    // anchor an old user msg as if it were a fresh send.
+    let mountUserId: string | null = null
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { mountUserId = messages[i].id; break }
+    }
+    anchoredUserIdRef.current = mountUserId
+    const mountLastMsg = messages[messages.length - 1]
+    anchoredAssistantIdRef.current =
+      mountLastMsg?.role === 'assistant' && mountLastMsg.streaming ? mountLastMsg.id : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadId])
 
-  const scrollToBottom = useCallback(() => {
-    const container = containerRef.current
-    if (!container) return
-    const target = container.scrollHeight - container.clientHeight
-    const start = container.scrollTop
-    const distance = target - start
-    if (Math.abs(distance) < 10) {
-      container.scrollTop = target
-      setAutoScroll(true)
-      return
-    }
-    const duration = 300 // ms
-    const startTime = performance.now()
-    const step = (now: number) => {
-      const elapsed = now - startTime
-      const progress = Math.min(elapsed / duration, 1)
-      // ease-out cubic
-      const eased = 1 - Math.pow(1 - progress, 3)
-      container.scrollTop = start + distance * eased
-      if (progress < 1) {
-        requestAnimationFrame(step)
-      }
-    }
-    requestAnimationFrame(step)
-    setAutoScroll(true)
-  }, [])
-
-  const prevMessagesLenRef = useRef(messages.length)
-  const prevLastMessageRef = useRef<string | null>(messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null)
   useEffect(() => {
-    if (!autoScroll) {
-      prevMessagesLenRef.current = messages.length
-      prevLastMessageRef.current = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
+    if (messages.length === 0) return
+    const lastMsg = messages[messages.length - 1]
+
+    // Find the newest user message in the thread.
+    let newestUserMsg: Message | null = null
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { newestUserMsg = messages[i]; break }
+    }
+
+    const userIsFresh =
+      newestUserMsg !== null && newestUserMsg.id !== anchoredUserIdRef.current
+    const isStreamingAssistant =
+      lastMsg.role === 'assistant' && lastMsg.streaming === true
+    const assistantIsFresh =
+      isStreamingAssistant && lastMsg.id !== anchoredAssistantIdRef.current
+
+    // Trigger anchoring in two situations:
+    //  1. A fresh user send (the user just submitted a new message). Fires
+    //     either on the user-msg-add render or the assistant-streaming-add
+    //     render — whichever lands first — and only acts once per user msg.
+    //     We anchor regardless of autoScroll: the user explicitly initiated
+    //     the turn and expects to see the result.
+    //  2. A regeneration (assistant msg is new but no new user msg). We only
+    //     anchor here if the user was already engaged at the bottom so we
+    //     don't yank them mid-read.
+    let anchor = false
+    if (userIsFresh && newestUserMsg !== null) {
+      anchor = true
+    } else if (assistantIsFresh && autoScroll) {
+      anchor = true
+    }
+
+    if (!anchor) {
+      // Still record assistant id so we don't pick it up later.
+      if (isStreamingAssistant) anchoredAssistantIdRef.current = lastMsg.id
       return
     }
-    // Only scroll when messages actually changed (new message or content update)
-    const currentLastId = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
-    const messagesChanged = messages.length !== prevMessagesLenRef.current || currentLastId !== prevLastMessageRef.current
-    const isActivelyStreaming = messages.some(m => m.streaming)
-    if (!messagesChanged && !isActivelyStreaming) {
-      prevMessagesLenRef.current = messages.length
-      prevLastMessageRef.current = currentLastId
-      return
-    }
-    const container = containerRef.current
-    if (container) {
-      // Double rAF ensures DOM is fully laid out (critical for iOS)
+
+    if (newestUserMsg) anchoredUserIdRef.current = newestUserMsg.id
+    if (isStreamingAssistant) anchoredAssistantIdRef.current = lastMsg.id
+    if (userIsFresh) setAutoScroll(true)
+    const anchorId = newestUserMsg?.id ?? lastMsg.id
+    // Double rAF so the just-added bubble (and the spacer) are laid out
+    // before we measure. Critical on iOS.
+    requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          // Scroll only this container — scrollIntoView would propagate
-          // to the horizontal scroll-snap ancestor and cause panel jumps.
-          if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight
-          }
-        })
+        scrollMessageToTop(anchorId)
       })
-    }
+    })
+  }, [messages, autoScroll, scrollMessageToTop])
+
+  useEffect(() => {
     prevMessagesLenRef.current = messages.length
-    prevLastMessageRef.current = currentLastId
-  }, [messages, autoScroll])
+    prevLastMessageRef.current = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
+  }, [messages])
 
   // Track count of unseen messages when scrolled up
   const unseenCountRef = useRef(0)
@@ -160,7 +239,10 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
+    // "At bottom" = the bottom of the last message is in view. The spacer
+    // below intentionally extends past it, so scrollHeight is not the right
+    // reference anymore.
+    const atBottom = el.scrollTop >= getLastMessageBottom(el) - 50
     setAutoScroll(atBottom)
     // Debounced persist to sessionStorage (survives WKWebView process termination)
     if (scrollSaveTimer.current) clearTimeout(scrollSaveTimer.current)
@@ -169,7 +251,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
         persistScrollPosition(threadId, containerRef.current.scrollTop)
       }
     }, 300)
-  }, [threadId])
+  }, [threadId, getLastMessageBottom])
 
   // Keep autoScroll readable inside the ResizeObserver without re-subscribing
   const autoScrollRef = useRef(autoScroll)
@@ -189,15 +271,15 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
     const observer = new ResizeObserver(() => {
       const newHeight = el.clientHeight
       if (newHeight !== prevHeight && autoScrollRef.current && el.scrollTop > 10) {
-        // Pin to bottom whenever the container resizes while user was at
-        // bottom — works for both keyboard open (shrink) and close (grow).
-        el.scrollTop = el.scrollHeight
+        // Pin to the last message's bottom (not the absolute scroll end —
+        // that would jump into the empty spacer below).
+        el.scrollTop = getLastMessageBottom(el)
       }
       prevHeight = newHeight
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [getLastMessageBottom])
 
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
@@ -346,7 +428,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
               const isRoleTransition = prevMsg && prevMsg.role !== msg.role
               const spacing = !prevMsg ? '' : isRoleTransition ? 'mt-2' : 'mt-0.5'
               return (
-                <div key={msg.id} className={spacing}>
+                <div key={msg.id} data-msg-id={msg.id} className={spacing}>
                   <MessageBubble
                     message={msg}
                     showAvatar={showAvatar}
@@ -363,6 +445,15 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
           </>
         )}
         </div>
+        {/* Spacer: gives the latest user message room to scroll up to the
+            top of the viewport at the start of a new turn. Without this, a
+            short response can't be anchored to the top because there's no
+            scrollable area below it. atBottom detection + scrollToBottom +
+            the keyboard ResizeObserver all target the last message's bottom
+            (not the spacer), so users don't naturally end up inside it. */}
+        {!isEmptyChat && (
+          <div aria-hidden style={{ minHeight: '100%' }} />
+        )}
         <div ref={bottomRef} className="h-2" />
       </div>
 
