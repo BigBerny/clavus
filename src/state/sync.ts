@@ -1,5 +1,5 @@
-import { getClientId, refreshThreadsMetadata, useThreadsStore } from './threads'
-import { refreshThreadMessages, useChatStore } from './chat'
+import { getClientId, getMessagesKey, refreshThreadsMetadata, useThreadsStore } from './threads'
+import { refreshThreadMessages, useChatStore, type Message } from './chat'
 
 type ChangeEvent =
   | { type: 'threads' }
@@ -59,12 +59,25 @@ function handleEvent(event: ChangeEvent) {
     return
   }
   if (event.type === 'messages') {
-    // Always refresh the loaded thread state if we have it open in the store —
-    // this covers both the actively-viewed thread and any chat tab that has
-    // been mounted previously. For threads that aren't loaded yet, we leave
-    // localStorage alone; the lazy-loader will fetch fresh on first open.
     const loaded = !!useChatStore.getState().threadStates[event.threadId]
-    if (loaded) refreshThreadMessages(event.threadId)
+    if (loaded) {
+      // Loaded thread: surgical merge into Zustand (preserves scroll + refs).
+      refreshThreadMessages(event.threadId)
+    } else {
+      // Not currently loaded: refresh localStorage so the lazy loader returns
+      // up-to-date messages the moment the user opens this thread. Otherwise
+      // "reload doesn't help" persists because loadThreadMessages reads from a
+      // stale localStorage entry.
+      void fetch(`/api/threads/messages/${encodeURIComponent(event.threadId)}`)
+        .then(r => r.ok ? r.json() as Promise<Message[]> : null)
+        .then((data) => {
+          if (!Array.isArray(data)) return
+          try {
+            localStorage.setItem(getMessagesKey(event.threadId), JSON.stringify(data.slice(-100)))
+          } catch { /* ignore */ }
+        })
+        .catch(() => { /* server unavailable */ })
+    }
     return
   }
   if (event.type === 'thread-deleted') {
