@@ -193,6 +193,12 @@ function textFromOutput(output: unknown): string {
       })
       .join('')
   }
+  // Hermes wraps tool results as `{ content: [{ type: "text", text: "..." }] }`.
+  if (output && typeof output === 'object') {
+    const o = output as Record<string, unknown>
+    if (Array.isArray(o.content)) return textFromOutput(o.content)
+    if (typeof o.text === 'string') return o.text
+  }
   if (output == null) return ''
   return JSON.stringify(output, null, 2)
 }
@@ -307,17 +313,46 @@ function dispatchResponsesEvent(
     if (!item) return false
 
     if (item.type === 'function_call') {
-      const id = String(item.call_id || item.id || crypto.randomUUID())
-      const args = parseJsonMaybe<Record<string, unknown>>(item.arguments, {})
-      const existing = state.toolCalls.get(id)
-      const tc: ToolCallEvent = {
-        id,
-        name: String(item.name || existing?.name || 'tool'),
-        args,
-        status: existing?.status || 'running',
-        result: existing?.result,
+      const eventCallId = String(item.call_id || item.id || crypto.randomUUID())
+      const name = String(item.name || 'tool')
+      const newArgs = parseJsonMaybe<Record<string, unknown>>(item.arguments, {})
+      const hasNewArgs = Object.keys(newArgs).length > 0
+      const hasOutput = item.output !== undefined && item.output !== null
+
+      // Hermes splits one logical tool call into two function_call items
+      // with *different* call_ids: the first carries arguments and no
+      // output, the second carries output and empty arguments. Merge the
+      // output event into the matching running call so the UI doesn't
+      // render a phantom "Reading file" with empty args alongside the real
+      // one.
+      let targetId = eventCallId
+      let existing = state.toolCalls.get(eventCallId)
+      if (!existing && !hasNewArgs && hasOutput) {
+        const entries = Array.from(state.toolCalls.entries())
+        for (let i = entries.length - 1; i >= 0; i--) {
+          const [id, tc] = entries[i]
+          if (tc.name === name && tc.status === 'running' && tc.result === undefined) {
+            targetId = id
+            existing = tc
+            break
+          }
+        }
       }
-      state.toolCalls.set(id, tc)
+
+      const args = hasNewArgs ? newArgs : (existing?.args || {})
+      const result = hasOutput ? textFromOutput(item.output) : existing?.result
+      const isDone = eventName === 'response.output_item.done' || hasOutput
+      const status: ToolCallEvent['status'] = item.status === 'error'
+        ? 'error'
+        : isDone ? 'completed' : (existing?.status || 'running')
+      const tc: ToolCallEvent = {
+        id: targetId,
+        name: existing?.name || name,
+        args,
+        status,
+        result,
+      }
+      state.toolCalls.set(targetId, tc)
       callbacks.onToolCall?.(tc)
     }
 

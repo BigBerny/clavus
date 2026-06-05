@@ -6,12 +6,18 @@ const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
   web_extract: { icon: '🌐', label: 'Reading web page' },
   search: { icon: '🔍', label: 'Searching' },
   search_files: { icon: '🔍', label: 'Searching files' },
+  grep: { icon: '🔍', label: 'Searching files' },
+  glob: { icon: '🔍', label: 'Finding files' },
+  ls: { icon: '📁', label: 'Listing directory' },
   read: { icon: '📄', label: 'Reading file' },
   read_file: { icon: '📄', label: 'Reading file' },
   write: { icon: '✏️', label: 'Writing file' },
   write_file: { icon: '✏️', label: 'Writing file' },
   edit: { icon: '✏️', label: 'Editing file' },
   patch: { icon: '✏️', label: 'Editing file' },
+  exec: { icon: '🖥️', label: 'Running command' },
+  bash: { icon: '🖥️', label: 'Running command' },
+  run: { icon: '🖥️', label: 'Running command' },
   execute: { icon: '🖥️', label: 'Running command' },
   shell: { icon: '🖥️', label: 'Running command' },
   terminal: { icon: '🖥️', label: 'Running command' },
@@ -48,18 +54,34 @@ function getToolDetail(name: string, args: Record<string, unknown>): string | nu
     if (typeof c === 'string' && c) return c.length > 50 ? c.slice(0, 47) + '...' : c
   }
   // File operations → show path
-  if (['read', 'read_file', 'write', 'write_file', 'edit', 'patch', 'search_files'].includes(name)) {
-    const p = args.path || args.file || args.file_path || args.filename
+  if (['read', 'read_file', 'write', 'write_file', 'edit', 'patch', 'search_files', 'ls', 'glob'].includes(name)) {
+    const p = args.path || args.file || args.file_path || args.filename || args.pattern
     if (typeof p === 'string' && p) {
-      // Show just filename or last path segment
       const parts = p.split('/')
       return parts.length > 2 ? '.../' + parts.slice(-2).join('/') : p
+    }
+  }
+  // Grep → show pattern
+  if (name === 'grep') {
+    const q = args.pattern || args.query
+    if (typeof q === 'string' && q) return q.length > 40 ? q.slice(0, 37) + '...' : q
+  }
+  // Shell / exec → show command
+  if (['exec', 'bash', 'run', 'execute', 'shell', 'terminal', 'execute_code'].includes(name)) {
+    const c = args.command || args.cmd || args.script || args.code
+    if (typeof c === 'string' && c) {
+      const oneLine = c.replace(/\s+/g, ' ').trim()
+      return oneLine.length > 60 ? oneLine.slice(0, 57) + '...' : oneLine
     }
   }
   // Delegate → show description
   if (name === 'delegate_task') {
     const d = args.description || args.task || args.prompt
     if (typeof d === 'string' && d) return d.length > 50 ? d.slice(0, 47) + '...' : d
+  }
+  // Fallback: a "label" arg from gateway events (e.g. hermes.tool.progress)
+  if (typeof args.label === 'string' && args.label) {
+    return args.label.length > 60 ? args.label.slice(0, 57) + '...' : args.label
   }
   return null
 }
