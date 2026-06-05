@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { safeJSONStorage } from '../lib/safeStorage'
 import type { ReasoningLevel } from './chatSettings'
 
 export interface AutoClassification {
@@ -51,6 +52,10 @@ export const useAutoClassifyStore = create<AutoClassifyState>()(
     }),
     {
       name: 'clavus-auto-classify',
+      // Writes must never throw: a full localStorage quota here was aborting
+      // useChat.send (setPending → persist → QuotaExceededError) before the
+      // request was sent. See lib/safeStorage.
+      storage: safeJSONStorage as never,
       partialize: (s) => ({
         autoEnabled: s.autoEnabled,
         classifications: s.classifications,

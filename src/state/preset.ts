@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { DEFAULT_MODEL_ID, MODEL_OPTIONS } from '../gateway/presets'
+import { safeSetItem } from '../lib/safeStorage'
 import { useAutoClassifyStore } from './autoClassify'
 
 const STORAGE_KEY = 'clavus-selected-model'
@@ -8,8 +9,8 @@ const AUTO_MIGRATION_KEY = 'clavus-auto-migrated'
 
 function migrateToAuto(): void {
   if (localStorage.getItem(AUTO_MIGRATION_KEY)) return
-  localStorage.setItem(AUTO_MIGRATION_KEY, '1')
-  localStorage.setItem(STORAGE_KEY, 'auto')
+  safeSetItem(AUTO_MIGRATION_KEY, '1')
+  safeSetItem(STORAGE_KEY, 'auto')
 }
 
 function migrateFromPreset(): string | null {
@@ -47,7 +48,7 @@ export const useModelStore = create<ModelState>((set) => ({
     const safeId = id === 'auto' || MODEL_OPTIONS.some((m) => m.id === id) ? id : DEFAULT_MODEL_ID
     const isAuto = safeId === 'auto'
     useAutoClassifyStore.getState().setAutoEnabled(isAuto)
-    localStorage.setItem(STORAGE_KEY, safeId)
+    safeSetItem(STORAGE_KEY, safeId)
     set({ selectedModelId: safeId })
   },
 }))

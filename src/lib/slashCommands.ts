@@ -53,6 +53,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   },
   { command: '/help', description: 'List available commands', local: true },
   { command: '/clear', description: 'Clear chat', local: true },
+  { command: '/clear-cache', description: 'Wipe local message cache (re-hydrates from server)', local: true },
   { command: '/retry', description: 'Regenerate the last response', local: true },
   { command: '/tasks', description: 'Show tasks', local: true },
   { command: '/tasks list', description: 'List all tasks', local: true },
@@ -93,6 +94,8 @@ export async function tryRunSlashCommand(input: string, ctx: SlashContext): Prom
     case 'clear':
       ctx.clearChat()
       return { handled: true }
+    case 'clear-cache':
+      return handleClearCache(ctx)
     case 'help':
       ctx.showHelp()
       return { handled: true }
@@ -190,6 +193,39 @@ async function handleTasks(args: string, ctx: SlashContext): Promise<SlashResult
 
 function handleStatus(ctx: SlashContext): SlashResult {
   ctx.showStatus()
+  return { handled: true }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** Wipe the per-thread message cache from localStorage. Threads re-hydrate from
+ *  the server on next thread open (ChatViewPanel calls refreshThreadMessages),
+ *  so the only thing lost is the local snapshot. Useful when WKWebView/Tauri
+ *  hits its localStorage quota and writes start throwing QuotaExceededError. */
+function handleClearCache(ctx: SlashContext): SlashResult {
+  let freedBytes = 0
+  let removedKeys = 0
+  const victims: string[] = []
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i)
+    if (!key) continue
+    if (key.startsWith('clavus-messages-')) victims.push(key)
+  }
+  for (const key of victims) {
+    const value = localStorage.getItem(key)
+    if (value !== null) freedBytes += key.length + value.length
+    try {
+      localStorage.removeItem(key)
+      removedKeys += 1
+    } catch { /* ignore */ }
+  }
+  ctx.toast(removedKeys === 0
+    ? 'No cached messages to clear'
+    : `Cleared ${removedKeys} thread${removedKeys === 1 ? '' : 's'} (~${formatBytes(freedBytes)})`)
   return { handled: true }
 }
 

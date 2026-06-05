@@ -98,7 +98,15 @@ function getActiveThreadId(): string {
 }
 
 function saveActiveThreadId(id: string) {
-  localStorage.setItem(ACTIVE_THREAD_KEY, id)
+  try {
+    localStorage.setItem(ACTIVE_THREAD_KEY, id)
+  } catch {
+    // localStorage full or unavailable. We can't persist the active thread
+    // pointer, but a thrown QuotaExceededError out of `set(...)` cascades up
+    // through createThread()/switchThread() into the home-submit handler and
+    // silently kills the send. Swallow here — the active thread is re-derived
+    // from in-memory state on next load anyway.
+  }
 }
 
 function shouldDiscoverHermesConversations(): boolean {
