@@ -237,8 +237,9 @@ export function App() {
       void import('./marksense')
     })
     return () => {
-      if ('cancelIdleCallback' in window) (window as any).cancelIdleCallback(handle)
-      else window.clearTimeout(handle)
+      const cancelIdle = (window as Window & { cancelIdleCallback?: (handle: number) => void }).cancelIdleCallback
+      if (cancelIdle) cancelIdle(handle)
+      else globalThis.clearTimeout(handle)
     }
   }, [])
 
@@ -261,22 +262,49 @@ export function App() {
     originalContent: string
   } | null>(null)
 
-  // Threads pulled from store for filtering archived chat tabs (below).
+  // Threads pulled from store for filtering and ordering chat tabs (below).
   const allThreadsForTabFilter = useThreadsStore((s) => s.threads)
 
   // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home).
-  // CRITICAL: filter out chat tabs whose thread is archived — otherwise the
-  // mobile horizontal scroll-snap renders one ChatViewPanel per tab, and with
-  // hundreds of accumulated tabs (e.g. from the migrateFromThreads cleanup),
-  // WKWebView in Capacitor runs out of memory and the renderer process is
-  // killed (looks like a reload). Non-chat tabs (marksense/file/finder) have
-  // no archive concept so they always render.
+  // Chat panels mirror the synced thread list and use thread.updatedAt, which
+  // means "last real conversation activity". Linked markdown docs are hidden
+  // from the top-level panel strip because Home/Sidebar show them nested below
+  // their parent conversation. Without the same suppression here, stale
+  // Marksense tabs can remain swipe columns even though they are not top-level
+  // entries on Home. Non-linked non-chat tabs stay device-local.
   const sortedTabs = useMemo(() => {
-    const archivedIds = new Set(
-      allThreadsForTabFilter.filter((t) => t.archived).map((t) => t.id)
-    )
-    return [...tabs]
-      .filter((t) => !(t.type === 'chat' && archivedIds.has((t as ChatTab).threadId)))
+    const linkedDocPaths = new Set<string>()
+    const tabByThreadId = new Map<string, ChatTab>()
+    for (const thread of allThreadsForTabFilter) {
+      for (const doc of thread.linkedDocs || []) linkedDocPaths.add(doc.path)
+    }
+    for (const tab of tabs) {
+      if (tab.type === 'chat') tabByThreadId.set((tab as ChatTab).threadId, tab as ChatTab)
+    }
+
+    const chatTabs: ChatTab[] = allThreadsForTabFilter
+      .filter((thread) => !thread.archived)
+      .map((thread) => {
+        const existing = tabByThreadId.get(thread.id)
+        return {
+          ...(existing || {
+            id: thread.id,
+            type: 'chat' as const,
+            threadId: thread.id,
+            openedAt: thread.createdAt || thread.updatedAt,
+          }),
+          title: thread.title || existing?.title || 'Untitled',
+          updatedAt: thread.updatedAt,
+        }
+      })
+
+    const nonChatTabs = tabs.filter((t) => {
+      if (t.type === 'chat') return false
+      if (t.type === 'marksense' && linkedDocPaths.has((t as MarksenseTab).path)) return false
+      return true
+    })
+
+    return [...chatTabs, ...nonChatTabs]
       .sort((a, b) => (a.updatedAt - b.updatedAt) || (a.openedAt - b.openedAt))
   }, [tabs, allThreadsForTabFilter])
 

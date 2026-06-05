@@ -118,11 +118,14 @@ export const useTabsStore = create<TabsState>((set, get) => ({
 
   openTab: (tab) => {
     set((state) => {
-      // If tab already exists, bring to front by updating its updatedAt
+      // If tab already exists, keep its activity timestamp stable.
+      // `updatedAt` drives Home/Sidebar/panel ordering, so focusing or routing
+      // to an existing tab must not make old conversations/docs look freshly
+      // updated. Real chat activity updates the Thread.updatedAt separately.
       const existing = state.tabs.find(t => t.id === tab.id)
       if (existing) {
         const tabs = state.tabs.map(t =>
-          t.id === tab.id ? { ...t, updatedAt: Date.now() } : t
+          t.id === tab.id ? { ...t, title: tab.title || t.title } : t
         )
         saveTabs(tabs)
         return { tabs }
