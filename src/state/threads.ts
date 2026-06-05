@@ -35,7 +35,7 @@ interface ThreadsState {
   deleteThread: (id: string) => void
   switchThread: (id: string) => void
   updateThreadTitle: (id: string, title: string) => void
-  updateThreadPreview: (id: string, preview: string) => void
+  updateThreadPreview: (id: string, preview: string, updatedAt?: number) => void
   archiveThread: (id: string) => void
   unarchiveThread: (id: string) => void
   updateThreadModel: (id: string, modelId: string) => void
@@ -504,10 +504,12 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     })
   },
 
-  updateThreadPreview: (id, preview) => {
+  updateThreadPreview: (id, preview, updatedAt) => {
+    if (!preview.trim()) return
     set((state) => {
+      const activityAt = updatedAt ?? Date.now()
       const threads = state.threads.map((t) =>
-        t.id === id ? { ...t, lastMessagePreview: preview.slice(0, 80), updatedAt: Date.now() } : t,
+        t.id === id ? { ...t, lastMessagePreview: preview.slice(0, 80), updatedAt: activityAt } : t,
       )
       saveThreads(threads)
       return { threads }

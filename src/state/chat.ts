@@ -126,10 +126,11 @@ interface ChatState {
 function saveMessages(threadId: string, messages: Message[]) {
   saveThreadMessages(threadId, messages)
 
-  // Update thread preview with last non-system message
-  const lastMsg = [...messages].reverse().find((m) => m.role !== 'system')
+  // Update thread preview with the last meaningful non-system message. Empty
+  // assistant placeholders must not make old threads look active again.
+  const lastMsg = [...messages].reverse().find((m) => m.role !== 'system' && m.content.trim().length > 0)
   if (lastMsg) {
-    useThreadsStore.getState().updateThreadPreview(threadId, lastMsg.content)
+    useThreadsStore.getState().updateThreadPreview(threadId, lastMsg.content, lastMsg.timestamp)
   }
 }
 
