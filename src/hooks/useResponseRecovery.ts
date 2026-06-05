@@ -39,8 +39,13 @@ function needsRecovery(threadId: string): boolean {
     return true
   }
 
-  // Last user message with no assistant response after it
+  // Last user message with no assistant response after it. Skip if it's only
+  // seconds old — useChat.send hasn't reached its assistant slot yet (the
+  // auto-classify await can take up to 3s) and treating an in-flight send as
+  // needing recovery races the user's own stream and produces a duplicate run.
   if (last.role === 'user') {
+    const age = Date.now() - last.timestamp
+    if (age < 15_000) return false
     return true
   }
 

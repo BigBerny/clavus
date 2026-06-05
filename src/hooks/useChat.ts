@@ -115,6 +115,10 @@ export function useChat() {
 
     if (retryCount === 0) {
       addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files })
+      // Claim the streaming slot before any awaits so a concurrent recovery sweep
+      // (or a second submit) doesn't see "last message is user, isStreaming=false"
+      // and kick off a duplicate run. Auto-classify below can await up to 3s.
+      setStreaming(threadId, true)
       // Fire title generation immediately (async, non-blocking)
       generateTitleIfNeeded(threadId)
       // Reactivate thread if it was auto-archived
