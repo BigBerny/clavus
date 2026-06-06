@@ -1,6 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
-import { useTTS } from '../../hooks/useTTS'
 import type { Message } from '../../state/chat'
 import { useThreadsStore } from '../../state/threads'
 
@@ -35,6 +34,47 @@ function getScrollPosition(threadId: string): number | undefined {
   return undefined
 }
 
+function getLatestUserMessageId(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === 'user') return messages[i].id
+  }
+  return null
+}
+
+function getLatestStreamingAssistantId(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'assistant' && msg.streaming) return msg.id
+  }
+  return null
+}
+
+function findMessageElement(container: HTMLElement, messageId: string): HTMLElement | null {
+  const els = container.querySelectorAll<HTMLElement>('[data-msg-id]')
+  for (const el of els) {
+    if (el.dataset.msgId === messageId) return el
+  }
+  return null
+}
+
+function getElementTopInScroll(container: HTMLElement, el: HTMLElement): number {
+  const containerRect = container.getBoundingClientRect()
+  const elRect = el.getBoundingClientRect()
+  return elRect.top - containerRect.top + container.scrollTop
+}
+
+function getTopLockOffset(container: HTMLElement): number {
+  const title = container.parentElement?.querySelector<HTMLElement>('[data-chat-title-pill]')
+  if (!title) return 0
+  const style = window.getComputedStyle(title)
+  if (style.display === 'none' || style.visibility === 'hidden') return 0
+
+  const containerRect = container.getBoundingClientRect()
+  const titleRect = title.getBoundingClientRect()
+  const titleBottom = titleRect.bottom - containerRect.top
+  return titleBottom > 0 ? Math.ceil(titleBottom + 8) : 0
+}
+
 function FavoriteButton({ threadId }: { threadId: string }) {
   const isFavorite = useThreadsStore((s) => s.threads.find((t) => t.id === threadId)?.favorite)
   const toggleFavorite = useThreadsStore((s) => s.toggleFavorite)
@@ -55,13 +95,31 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
-  const tts = useTTS()
+  const latestUserIdRef = useRef<string | null>(getLatestUserMessageId(messages))
+  const streamingAssistantIdRef = useRef<string | null>(getLatestStreamingAssistantId(messages))
+  const manualBottomStreamingIdRef = useRef<string | null>(null)
+  const programmaticScrollRef = useRef(false)
+  const programmaticScrollMarkRef = useRef(0)
+  const forceAutoScrollRef = useRef(false)
+  const latestMessagesRef = useRef(messages)
+
+  useEffect(() => {
+    latestMessagesRef.current = messages
+  }, [messages])
+
+  useEffect(() => {
+    const currentMessages = latestMessagesRef.current
+    latestUserIdRef.current = getLatestUserMessageId(currentMessages)
+    streamingAssistantIdRef.current = getLatestStreamingAssistantId(currentMessages)
+    manualBottomStreamingIdRef.current = null
+  }, [threadId])
 
   // Save scroll position on unmount
   useEffect(() => {
+    const container = containerRef.current
     return () => {
-      if (containerRef.current && threadId) {
-        persistScrollPosition(threadId, containerRef.current.scrollTop)
+      if (container && threadId) {
+        persistScrollPosition(threadId, container.scrollTop)
       }
     }
   }, [threadId])
@@ -85,14 +143,44 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
     }
   }, [threadId])
 
+  const getAutoScrollTarget = useCallback((container: HTMLElement, streamingAssistantId: string | null) => {
+    const maxTarget = Math.max(0, container.scrollHeight - container.clientHeight)
+    if (!streamingAssistantId || manualBottomStreamingIdRef.current === streamingAssistantId) {
+      return { target: maxTarget, capped: false }
+    }
+
+    const assistantEl = findMessageElement(container, streamingAssistantId)
+    if (!assistantEl) return { target: maxTarget, capped: false }
+
+    const cap = Math.max(0, getElementTopInScroll(container, assistantEl) - getTopLockOffset(container))
+    const capped = maxTarget > cap + 1
+    return { target: capped ? cap : maxTarget, capped }
+  }, [])
+
+  const setProgrammaticScrollTop = useCallback((container: HTMLElement, scrollTop: number) => {
+    const mark = programmaticScrollMarkRef.current + 1
+    programmaticScrollMarkRef.current = mark
+    programmaticScrollRef.current = true
+    container.scrollTop = scrollTop
+    window.setTimeout(() => {
+      if (programmaticScrollMarkRef.current === mark) {
+        programmaticScrollRef.current = false
+      }
+    }, 120)
+  }, [])
+
   const scrollToBottom = useCallback(() => {
     const container = containerRef.current
     if (!container) return
+    const streamingAssistantId = getLatestStreamingAssistantId(messages)
+    if (streamingAssistantId) {
+      manualBottomStreamingIdRef.current = streamingAssistantId
+    }
     const target = container.scrollHeight - container.clientHeight
     const start = container.scrollTop
     const distance = target - start
     if (Math.abs(distance) < 10) {
-      container.scrollTop = target
+      setProgrammaticScrollTop(container, target)
       setAutoScroll(true)
       return
     }
@@ -103,19 +191,38 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
       const progress = Math.min(elapsed / duration, 1)
       // ease-out cubic
       const eased = 1 - Math.pow(1 - progress, 3)
-      container.scrollTop = start + distance * eased
+      setProgrammaticScrollTop(container, start + distance * eased)
       if (progress < 1) {
         requestAnimationFrame(step)
       }
     }
     requestAnimationFrame(step)
     setAutoScroll(true)
-  }, [])
+  }, [messages, setProgrammaticScrollTop])
 
+  const activeStreamingAssistantId = getLatestStreamingAssistantId(messages)
   const prevMessagesLenRef = useRef(messages.length)
   const prevLastMessageRef = useRef<string | null>(messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null)
+
   useEffect(() => {
-    if (!autoScroll) {
+    const latestUserId = getLatestUserMessageId(messages)
+    if (latestUserId && latestUserId !== latestUserIdRef.current) {
+      latestUserIdRef.current = latestUserId
+      manualBottomStreamingIdRef.current = null
+      forceAutoScrollRef.current = true
+    }
+  }, [messages])
+
+  useEffect(() => {
+    if (activeStreamingAssistantId !== streamingAssistantIdRef.current) {
+      streamingAssistantIdRef.current = activeStreamingAssistantId
+      manualBottomStreamingIdRef.current = null
+    }
+  }, [activeStreamingAssistantId])
+
+  useEffect(() => {
+    const forceAutoScroll = forceAutoScrollRef.current
+    if (!autoScroll && !forceAutoScroll) {
       prevMessagesLenRef.current = messages.length
       prevLastMessageRef.current = messages.length > 0 ? messages[messages.length - 1]?.id ?? null : null
       return
@@ -134,33 +241,51 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
       // Double rAF ensures DOM is fully laid out (critical for iOS)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          // Scroll only this container — scrollIntoView would propagate
-          // to the horizontal scroll-snap ancestor and cause panel jumps.
-          if (containerRef.current) {
-            containerRef.current.scrollTop = containerRef.current.scrollHeight
+          const c = containerRef.current
+          if (!c) return
+          const { target, capped } = getAutoScrollTarget(c, activeStreamingAssistantId)
+          // Scroll only this container, and only downward, so manual reading
+          // position is never pulled back toward an earlier anchor point.
+          if (target > c.scrollTop + 1) {
+            setProgrammaticScrollTop(c, target)
+          }
+          const shouldStopAtReplyStart = capped && manualBottomStreamingIdRef.current !== activeStreamingAssistantId
+          if (forceAutoScrollRef.current) {
+            forceAutoScrollRef.current = false
+            if (!shouldStopAtReplyStart) {
+              setAutoScroll(true)
+            }
+          }
+          if (shouldStopAtReplyStart) {
+            setAutoScroll(false)
           }
         })
       })
     }
     prevMessagesLenRef.current = messages.length
     prevLastMessageRef.current = currentLastId
-  }, [messages, autoScroll])
+  }, [messages, autoScroll, activeStreamingAssistantId, getAutoScrollTarget, setProgrammaticScrollTop])
 
   // Track count of unseen messages when scrolled up
-  const unseenCountRef = useRef(0)
-  if (!autoScroll && messages.length > prevMessagesLenRef.current) {
-    unseenCountRef.current += messages.length - prevMessagesLenRef.current
-  }
-  if (autoScroll) {
-    unseenCountRef.current = 0
-  }
-  const unseenCount = unseenCountRef.current
+  const [unseenCount, setUnseenCount] = useState(0)
+  const unseenMessagesLenRef = useRef(messages.length)
+  useEffect(() => {
+    if (!autoScroll && messages.length > unseenMessagesLenRef.current) {
+      setUnseenCount((count) => count + messages.length - unseenMessagesLenRef.current)
+    } else if (autoScroll) {
+      setUnseenCount(0)
+    }
+    unseenMessagesLenRef.current = messages.length
+  }, [messages.length, autoScroll])
 
   const scrollSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
+    if (activeStreamingAssistantId && !programmaticScrollRef.current) {
+      manualBottomStreamingIdRef.current = atBottom ? activeStreamingAssistantId : null
+    }
     setAutoScroll(atBottom)
     // Debounced persist to sessionStorage (survives WKWebView process termination)
     if (scrollSaveTimer.current) clearTimeout(scrollSaveTimer.current)
@@ -169,7 +294,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
         persistScrollPosition(threadId, containerRef.current.scrollTop)
       }
     }, 300)
-  }, [threadId])
+  }, [threadId, activeStreamingAssistantId])
 
   // Keep autoScroll readable inside the ResizeObserver without re-subscribing
   const autoScrollRef = useRef(autoScroll)
@@ -191,13 +316,17 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
       if (newHeight !== prevHeight && autoScrollRef.current && el.scrollTop > 10) {
         // Pin to bottom whenever the container resizes while user was at
         // bottom — works for both keyboard open (shrink) and close (grow).
-        el.scrollTop = el.scrollHeight
+        const { target, capped } = getAutoScrollTarget(el, streamingAssistantIdRef.current)
+        setProgrammaticScrollTop(el, target)
+        if (capped && manualBottomStreamingIdRef.current !== streamingAssistantIdRef.current) {
+          setAutoScroll(false)
+        }
       }
       prevHeight = newHeight
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [getAutoScrollTarget, setProgrammaticScrollTop])
 
   // Check if this is an empty/new conversation
   const isEmptyChat = messages.length === 0
@@ -289,7 +418,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
     <div className="flex-1 flex flex-col relative min-h-0 chat-bg">
       {/* Floating title pill (mobile-only) */}
       {title && (
-        <div className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none md:hidden" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
+        <div data-chat-title-pill className="absolute top-0 left-0 right-0 z-10 flex justify-center pointer-events-none md:hidden" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)' }}>
           <div className="px-3.5 py-1.5 rounded-full glass flex items-center gap-1.5 pointer-events-auto">
             <span className="text-[12px] font-medium text-text-light dark:text-text-dark truncate max-w-[220px] block">{title}</span>
             <FavoriteButton threadId={threadId} />
@@ -346,7 +475,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
               const isRoleTransition = prevMsg && prevMsg.role !== msg.role
               const spacing = !prevMsg ? '' : isRoleTransition ? 'mt-2' : 'mt-0.5'
               return (
-                <div key={msg.id} className={spacing}>
+                <div key={msg.id} data-msg-id={msg.id} data-msg-role={msg.role} className={spacing}>
                   <MessageBubble
                     message={msg}
                     showAvatar={showAvatar}
