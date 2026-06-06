@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
 import { ChatView } from './components/chat/ChatView.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
@@ -802,23 +802,16 @@ export function App() {
     }
   }, [logKeyboardScroll, pinVisiblePanelIfNeeded, sortedTabs, switchThread])
 
-  // When tabs load/sync after startup, Home moves further to the right. Keep
-  // the currently selected panel pinned to its DOM position unless the user is
-  // actively swiping. Without this, the viewport can visually land on the last
-  // conversation while state still says `visiblePanel === 'home'`.
-  useEffect(() => {
+  // When tabs load/sync or reorder by activity, the active panel's DOM position
+  // can move while scrollLeft still points at the old column index. Pin in the
+  // layout phase so mobile follows the active conversation before another
+  // conversation can flash into view.
+  useLayoutEffect(() => {
     if (isUserHorizontalGesture.current) return
     // gestureStartPoint is non-null between pointerDown and pointerUp — a swipe
     // may be in progress but hasn't reached the horizontal threshold yet.
     if (gestureStartPoint.current) return
-    const container = scrollContainerRef.current
-    const panel = panelRefs.current.get(visiblePanel)
-    if (!container || !panel) return
-
-    requestAnimationFrame(() => {
-      if (isUserHorizontalGesture.current || gestureStartPoint.current) return
-      pinVisiblePanelIfNeeded('layout-effect')
-    })
+    pinVisiblePanelIfNeeded('layout-effect')
   // eslint-disable-next-line react-hooks/exhaustive-deps -- need to re-pin when tab ORDER changes, not just count
   }, [pinVisiblePanelIfNeeded, sortedTabs.map(t => t.id).join(','), visiblePanel])
 
@@ -1241,7 +1234,7 @@ export function App() {
   }
 
   return (
-    <div className="h-full flex flex-col bg-surface-light dark:bg-surface-dark">
+    <div className="app-shell h-full flex flex-col">
       {/* Tauri: invisible drag region for transparent titlebar */}
       <div className="tauri-drag-region fixed top-0 left-0 right-0 h-8 z-[9999]" data-tauri-drag-region />
 

@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:codex-browser": "CLAVUS_CODEX_BROWSER=1 vite",
+    "browser:check": "node scripts/codex-browser-check.cjs",
+    "browser:check:launch": "CLAVUS_BROWSER_LAUNCH=1 node scripts/codex-browser-check.cjs",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

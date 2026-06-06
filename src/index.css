@@ -77,6 +77,8 @@
 
 /* Dark mode overrides — toggled via .dark class on <html> */
 .dark {
+  --app-bg-gradient: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+
   --color-background: oklch(0.165 0.006 50);
   --color-foreground: oklch(0.95 0.005 80);
   --color-card: oklch(0.21 0.006 50);
@@ -118,7 +120,8 @@
   --glass-inner-glow: oklch(0.95 0.008 50 / 0.06);
 }
 
-:root {
+html {
+  --app-bg-gradient: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
 }
 
 html, body {
@@ -130,7 +133,11 @@ html, body {
   overscroll-behavior: none;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: auto;
-  background-color: var(--color-surface-dark, #1c1c1e);
+  background-color: var(--color-background, #1c1c1e);
+  background-image: var(--app-bg-gradient);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100vw 100dvh;
   /* Force-hide any page-level scrollbar (iOS keyboard can create phantom scrollbars) */
   scrollbar-width: none;
 }
@@ -160,10 +167,29 @@ body {
   height: var(--app-height, 100dvh);
   overflow: hidden;
   overscroll-behavior: none;
-  background-color: var(--color-surface-dark, #1c1c1e);
+  background-color: var(--color-background, #1c1c1e);
   scrollbar-width: none;
+  isolation: isolate;
   /* Limit reflow scope: height changes don't propagate outside #root. */
   contain: layout style paint;
+}
+#root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--app-bg-gradient);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100vw 100dvh;
+}
+#root > * {
+  position: relative;
+  z-index: 1;
+}
+.app-shell {
+  background: transparent;
 }
 
 /* In the Capacitor native shell, --app-height is set instantly to the final
@@ -327,16 +353,16 @@ button.inline-btn {
 }
 
 /* Chat background — same gradient as home screen for consistency.
- * background-attachment: fixed only on desktop (md+) — on iOS Safari it
- * interferes with visualViewport tracking inside scroll-snap containers. */
+ * On mobile, panels let the fixed viewport gradient show through so the
+ * background does not move during horizontal swipe-snap gestures. */
 .chat-bg {
-  background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+  background: var(--app-bg-gradient);
 }
 @media (min-width: 768px) {
   .chat-bg { background-attachment: fixed; }
 }
 html:not(.dark) .chat-bg {
-  background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
+  background: var(--app-bg-gradient);
 }
 
 /* Message fade + slide animation */
@@ -680,17 +706,16 @@ html.theme-ready *::after {
 }
 
 /* Marksense panel background — same gradient as `.home-screen`.
- * `background-attachment: fixed` is only applied on desktop (md+) because on
- * iOS Safari it interferes with visualViewport tracking inside scroll-snap
- * containers, breaking the keyboard-push behavior for sibling panels. */
+ * Mobile uses the fixed viewport layer so the gradient stays stationary while
+ * the swipe column moves. */
 .marksense-bg {
-  background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+  background: var(--app-bg-gradient);
 }
 @media (min-width: 768px) {
   .marksense-bg { background-attachment: fixed; }
 }
 html:not(.dark) .marksense-bg {
-  background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
+  background: var(--app-bg-gradient);
 }
 
 /* Suppress all transitions during initial mount to prevent color flash */
@@ -739,11 +764,22 @@ html:not(.dark) .marksense-bg {
 /* ── Home screen ──────────────────────────────────────────────────────────── */
 
 .home-screen {
-  background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
+  background: var(--app-bg-gradient);
   background-attachment: fixed;
 }
 html:not(.dark) .home-screen {
-  background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
+  background: var(--app-bg-gradient);
+}
+@media (max-width: 767.98px) {
+  .chat-bg,
+  html:not(.dark) .chat-bg,
+  .marksense-bg,
+  html:not(.dark) .marksense-bg,
+  .home-screen,
+  html:not(.dark) .home-screen {
+    background: transparent;
+    background-attachment: scroll;
+  }
 }
 
 /* Grouped card container (iOS Settings style) */

@@ -152,6 +152,30 @@ const phoneServerOptions = {
   },
 }
 
+const codexBrowserPort = Number.parseInt(process.env.CLAVUS_CODEX_BROWSER_PORT || '5183', 10) || 5183
+const codexBrowserServerOptions = (() => {
+  const options: any = { ...phoneServerOptions }
+  delete options.https
+  options.host = '127.0.0.1'
+  options.port = codexBrowserPort
+  options.strictPort = true
+  options.allowedHosts = Array.from(new Set([
+    ...(phoneServerOptions.allowedHosts || []),
+    '127.0.0.1',
+    'localhost',
+  ]))
+  options.hmr = {
+    host: '127.0.0.1',
+    protocol: 'ws',
+    clientPort: codexBrowserPort,
+  }
+  return options
+})()
+
+const serverOptions = process.env.CLAVUS_CODEX_BROWSER === '1'
+  ? codexBrowserServerOptions
+  : phoneServerOptions
+
 function loadPushSubscriptions(): webpush.PushSubscription[] {
   if (!fs.existsSync(PUSH_SUBS_FILE)) return []
   try { return JSON.parse(fs.readFileSync(PUSH_SUBS_FILE, 'utf-8')) } catch { return [] }
@@ -2346,8 +2370,8 @@ export default defineConfig({
       },
     },
   },
-  server: phoneServerOptions,
-  preview: phoneServerOptions,
+  server: serverOptions,
+  preview: serverOptions,
   plugins: [
     responsesProxyPlugin(),
     threadsApiPlugin(),

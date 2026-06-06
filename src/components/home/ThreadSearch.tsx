@@ -5,7 +5,13 @@ import { useThreadSearch } from '../../lib/threadSearch.ts'
  * Inline search row for the All Conversations group.
  * Renders as a `home-group-row` style input, with results appearing below.
  */
-export function ThreadSearch({ onSelectThread }: { onSelectThread: (threadId: string) => void }) {
+export function ThreadSearch({
+  onSelectThread,
+  children,
+}: {
+  onSelectThread: (threadId: string) => void
+  children?: React.ReactNode
+}) {
   const [query, setQuery] = useState('')
   const { results: rawResults, loading } = useThreadSearch(query)
   const isSearching = query.trim().length >= 2
@@ -44,7 +50,7 @@ export function ThreadSearch({ onSelectThread }: { onSelectThread: (threadId: st
       </div>
 
       {/* Search results replace the thread list */}
-      {isSearching && (
+      {isSearching ? (
         <div className="max-h-[300px] overflow-y-auto">
           {loading && results.length === 0 ? (
             <p className="text-center text-[13px] text-muted-foreground/50 py-4">
@@ -78,7 +84,7 @@ export function ThreadSearch({ onSelectThread }: { onSelectThread: (threadId: st
             ))
           )}
         </div>
-      )}
+      ) : children}
     </>
   )
 }

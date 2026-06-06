@@ -126,15 +126,6 @@ const EmailIcon = (
   </svg>
 )
 
-const ArchiveIcon = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <rect width="20" height="5" x="2" y="3" rx="1"/>
-    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/>
-    <path d="M10 12h4"/>
-  </svg>
-)
-
-
 const ChevronRight = (
   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="m9 18 6-6-6-6"/>
@@ -190,11 +181,11 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   const [now] = useState(() => new Date())
   const [allConversationsOpen, setAllConversationsOpen] = useState(false)
 
-  const archivedThreads = useMemo(
-    () => threads.filter((t) => t.archived).sort((a, b) => b.updatedAt - a.updatedAt),
+  const allConversationThreads = useMemo(
+    () => [...threads].sort((a, b) => b.updatedAt - a.updatedAt),
     [threads],
   )
-  const archivedCount = archivedThreads.length
+  const allConversationCount = allConversationThreads.length
 
   // Collect doc paths that appear as linkedDocs under any thread — these will
   // render as sub-entries below their parent conversation and should not also
@@ -310,87 +301,91 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
         </section>
 
         {/* Pick up where you left off */}
-        {recentTabs.length > 0 && (
+        {(recentTabs.length > 0 || allConversationCount > 0) && (
           <section className="mb-6">
-            <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
-              Pick up where you left off
-            </h2>
+            {recentTabs.length > 0 && (
+              <>
+                <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
+                  Pick up where you left off
+                </h2>
 
-            {/* Grouped recent cards */}
-            <div className="home-group">
-              {recentTabs.map((tab, i) => {
-                const thread = tab.type === 'chat'
-                  ? threads.find((t) => t.id === (tab as ChatTab).threadId)
-                  : undefined
-                const accent = accentForTab(tab)
-                // Prefer the synced thread title — `tab.title` is a local
-                // snapshot that goes stale when another device retitles.
-                const displayTitle = (tab.type === 'chat' ? thread?.title : undefined) || tab.title || 'Untitled'
-                const preview = tab.type === 'chat' && thread?.lastMessagePreview
-                  ? stripMarkdown(thread.lastMessagePreview)
-                  : tab.type === 'marksense' ? 'Document'
-                  : tab.type === 'file' ? 'File'
-                  : ''
-                const linkedDocs = thread?.linkedDocs
-                return (
-                  <div key={tab.id}>
-                    <button
-                      onClick={() => {
-                        // For chat tabs, route via handleSelectThread so a
-                        // synthesized entry (no local tab yet) opens correctly.
-                        if (tab.type === 'chat') handleSelectThread((tab as ChatTab).threadId)
-                        else onSelectTab?.(tab.id)
-                      }}
-                      className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
-                    >
-                      <span
-                        className="w-[5px] h-[5px] rounded-full shrink-0"
-                        style={{ background: `var(--color-${accent})` }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[13.5px] font-medium truncate text-foreground">{displayTitle}</div>
-                        {preview && (
-                          <div className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
+                {/* Grouped recent cards */}
+                <div className="home-group">
+                  {recentTabs.map((tab, i) => {
+                    const thread = tab.type === 'chat'
+                      ? threads.find((t) => t.id === (tab as ChatTab).threadId)
+                      : undefined
+                    const accent = accentForTab(tab)
+                    // Prefer the synced thread title — `tab.title` is a local
+                    // snapshot that goes stale when another device retitles.
+                    const displayTitle = (tab.type === 'chat' ? thread?.title : undefined) || tab.title || 'Untitled'
+                    const preview = tab.type === 'chat' && thread?.lastMessagePreview
+                      ? stripMarkdown(thread.lastMessagePreview)
+                      : tab.type === 'marksense' ? 'Document'
+                      : tab.type === 'file' ? 'File'
+                      : ''
+                    const linkedDocs = thread?.linkedDocs
+                    return (
+                      <div key={tab.id}>
+                        <button
+                          onClick={() => {
+                            // For chat tabs, route via handleSelectThread so a
+                            // synthesized entry (no local tab yet) opens correctly.
+                            if (tab.type === 'chat') handleSelectThread((tab as ChatTab).threadId)
+                            else onSelectTab?.(tab.id)
+                          }}
+                          className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
+                        >
+                          <span
+                            className="w-[5px] h-[5px] rounded-full shrink-0"
+                            style={{ background: `var(--color-${accent})` }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[13.5px] font-medium truncate text-foreground">{displayTitle}</div>
+                            {preview && (
+                              <div className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                            {relativeTime(tab.updatedAt)}
+                          </div>
+                        </button>
+                        {/* LinkedDocs sub-entries beneath their parent conversation */}
+                        {linkedDocs && linkedDocs.length > 0 && (
+                          <div className="ml-[24px] mr-3 pl-[7px] -mt-2 mb-1 space-y-px">
+                            {linkedDocs.map((doc) => (
+                              <button
+                                key={doc.path}
+                                onClick={() => {
+                                  const tabId = applyRoute({ kind: 'file', path: doc.path, title: doc.title })
+                                  if (tabId) onSelectTab?.(tabId)
+                                }}
+                                className="inline-btn w-full pl-2 pr-2 py-1.5 rounded-lg flex items-center gap-1.5 text-left text-[12px] text-foreground/70 hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06] transition-colors"
+                              >
+                                <span className="shrink-0" style={{ color: 'var(--color-cat-doc)' }}>{DocFileIcon}</span>
+                                <span className="truncate">{doc.title || doc.path.split('/').filter(Boolean).pop()}</span>
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-                        {relativeTime(tab.updatedAt)}
-                      </div>
-                    </button>
-                    {/* LinkedDocs sub-entries beneath their parent conversation */}
-                    {linkedDocs && linkedDocs.length > 0 && (
-                      <div className="ml-[24px] mr-3 pl-[7px] -mt-2 mb-1 space-y-px">
-                        {linkedDocs.map((doc) => (
-                          <button
-                            key={doc.path}
-                            onClick={() => {
-                              const tabId = applyRoute({ kind: 'file', path: doc.path, title: doc.title })
-                              if (tabId) onSelectTab?.(tabId)
-                            }}
-                            className="inline-btn w-full pl-2 pr-2 py-1.5 rounded-lg flex items-center gap-1.5 text-left text-[12px] text-foreground/70 hover:text-foreground hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06] transition-colors"
-                          >
-                            <span className="shrink-0" style={{ color: 'var(--color-cat-doc)' }}>{DocFileIcon}</span>
-                            <span className="truncate">{doc.title || doc.path.split('/').filter(Boolean).pop()}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
 
             {/* All Conversations */}
-            <div className="home-group mt-2">
+            <div className={`home-group ${recentTabs.length > 0 ? 'mt-2' : ''}`}>
               <button
                 onClick={() => setAllConversationsOpen(!allConversationsOpen)}
                 className="inline-btn home-group-row"
               >
-                <span className="text-muted-foreground">{ArchiveIcon}</span>
+                <span className="text-muted-foreground">{ChatIcon}</span>
                 <span className="flex-1 text-[13px] text-muted-foreground text-left">All Conversations</span>
-                {archivedCount > 0 && (
+                {allConversationCount > 0 && (
                   <span className="text-[11px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-[10px] font-medium">
-                    {archivedCount}
+                    {allConversationCount}
                   </span>
                 )}
                 <span className={`text-muted-foreground transition-transform ${allConversationsOpen ? 'rotate-90' : ''}`}>{ChevronRight}</span>
@@ -400,22 +395,31 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
             {/* Expanded all conversations with inline search */}
             {allConversationsOpen && (
               <div className="home-group mt-2">
-                <ThreadSearch onSelectThread={handleSelectThread} />
-                {archivedThreads.slice(0, 20).map((thread) => (
-                  <button
-                    key={thread.id}
-                    onClick={() => handleSelectThread(thread.id)}
-                    className="inline-btn home-group-row home-group-row-border"
-                  >
-                    <span className="w-[5px] h-[5px] rounded-full shrink-0 bg-muted-foreground/30" />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13.5px] font-medium truncate text-foreground/70">{thread.title || 'Untitled'}</div>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-                      {relativeTime(thread.updatedAt)}
-                    </div>
-                  </button>
-                ))}
+                <ThreadSearch onSelectThread={handleSelectThread}>
+                  {allConversationThreads.map((thread) => {
+                    const preview = thread.lastMessagePreview ? stripMarkdown(thread.lastMessagePreview) : ''
+                    return (
+                      <button
+                        key={thread.id}
+                        onClick={() => handleSelectThread(thread.id)}
+                        className="inline-btn home-group-row home-group-row-border"
+                      >
+                        <span className={`w-[5px] h-[5px] rounded-full shrink-0 ${thread.archived ? 'bg-muted-foreground/30' : 'bg-accent/60'}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-[13.5px] font-medium truncate ${thread.archived ? 'text-foreground/70' : 'text-foreground'}`}>
+                            {thread.title || 'Untitled'}
+                          </div>
+                          {preview && (
+                            <div className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                          {relativeTime(thread.updatedAt)}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </ThreadSearch>
               </div>
             )}
           </section>
