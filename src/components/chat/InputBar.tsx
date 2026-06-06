@@ -28,6 +28,7 @@ import {
 import { InputBarTalkMode, type InputBarTalkModeState } from './InputBarTalkMode'
 import { InputBarAttachments } from './InputBarAttachments'
 import { EditingMessageRow, QueuedMessageRow } from './InputBarStatusRows'
+import { FailedDictationPrompt, TranscribingRow, VoiceErrorRow } from './InputBarVoiceStatus'
 
 interface Props {
   onSend: (message: string, images?: string[], files?: PendingFile[]) => void
@@ -779,50 +780,14 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           </div>
         )}
 
-        {/* Voice error */}
-        {voice.error && (
-          <div className="flex items-center justify-center gap-2 text-red-400 text-xs mb-2 animate-[fadeSlideIn_0.2s_ease-out] px-3 py-1.5 rounded-lg bg-red-500/8" role="alert">
-            <span className="text-center">{voice.error}</span>
-          </div>
-        )}
-
-        {/* Failed dictation retry prompt */}
-        {voice.hasFailedAudio && voice.state === 'idle' && (
-          <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 animate-[fadeSlideIn_0.2s_ease-out]" role="status">
-            <span className="text-xs text-amber-300/90 flex-shrink-0">Last dictation failed</span>
-            <div className="flex items-center gap-1.5 ml-auto">
-              <button
-                onClick={() => voice.retryLastTranscription()}
-                className="inline-btn px-2.5 py-1 rounded-full bg-accent/20 text-accent text-[11px] font-medium active:scale-95 transition-transform"
-                aria-label="Retry transcription of previous audio"
-              >
-                Retry
-              </button>
-              <button
-                onClick={() => voice.clearLastFailedAudio()}
-                className="inline-btn px-2.5 py-1 rounded-full bg-surface-light-3/40 dark:bg-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted text-[11px] font-medium active:scale-95 transition-transform"
-                aria-label="Discard previous audio"
-              >
-                Discard
-              </button>
-              <button
-                onClick={() => { voice.clearLastFailedAudio(); voice.start() }}
-                className="inline-btn px-2.5 py-1 rounded-full bg-surface-light-3/40 dark:bg-surface-dark-3/60 text-text-light-muted dark:text-text-dark-muted text-[11px] font-medium active:scale-95 transition-transform"
-                aria-label="Record new audio"
-              >
-                Record new
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Transcribing state */}
-        {isTranscribing && (
-          <div className="flex items-center justify-center mb-2 gap-2 animate-[fadeSlideIn_0.2s_ease-out]" role="status">
-            <div className="voice-spinner" />
-            <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Transcribing...</span>
-          </div>
-        )}
+        <VoiceErrorRow error={voice.error} />
+        <FailedDictationPrompt
+          visible={voice.hasFailedAudio && voice.state === 'idle'}
+          onRetry={voice.retryLastTranscription}
+          onDiscard={voice.clearLastFailedAudio}
+          onRecordNew={() => { voice.clearLastFailedAudio(); voice.start() }}
+        />
+        <TranscribingRow visible={isTranscribing} />
 
         {editingMessage && <EditingMessageRow onCancel={onEditCancel} />}
 
