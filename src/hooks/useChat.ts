@@ -11,6 +11,7 @@ import { classifyMessage } from '../gateway/classify.ts'
 import { MODEL_OPTIONS } from '../gateway/presets.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
+import { normalizeToolCalls } from '../lib/toolCalls.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
@@ -206,7 +207,7 @@ export function useChat() {
       const updated = idx >= 0
         ? existing.map((t, i) => i === idx ? tc : t)
         : [...existing, tc]
-      store.getState().updateToolCalls(threadId, assistantId, updated)
+      store.getState().updateToolCalls(threadId, assistantId, normalizeToolCalls(updated))
       if (tc.status === 'completed' && tc.result) {
         const media = extractMediaFromToolResult(tc.result)
         if (media.length > 0) {

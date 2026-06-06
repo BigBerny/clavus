@@ -3,6 +3,7 @@ import { useChatStore, type Message, type PendingFile } from '../state/chat.ts'
 import { recoverResponse, resumeChatStream } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
+import { normalizeToolCalls } from '../lib/toolCalls.ts'
 
 type RecoveryResult = 'recovered' | 'no-buffer' | 'skipped'
 
@@ -125,7 +126,7 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
       const next = idx >= 0
         ? existing.map((t, i) => i === idx ? tc : t)
         : [...existing, tc]
-      useChatStore.getState().updateToolCalls(threadId, id, next)
+      useChatStore.getState().updateToolCalls(threadId, id, normalizeToolCalls(next))
     },
     onResponseId: (rid: string) => useChatStore.getState().setBackendResponseId(threadId, ensureSlot(), rid),
     onSeq: (seq: number) => {

@@ -1,5 +1,6 @@
 import { getClientId, getMessagesKey, refreshThreadsMetadata, useThreadsStore } from './threads'
 import { refreshThreadMessages, useChatStore, type Message } from './chat'
+import { normalizeToolCalls } from '../lib/toolCalls'
 
 type ChangeEvent =
   | { type: 'threads' }
@@ -72,8 +73,11 @@ function handleEvent(event: ChangeEvent) {
         .then(r => r.ok ? r.json() as Promise<Message[]> : null)
         .then((data) => {
           if (!Array.isArray(data)) return
+          const messages = data.slice(-100).map((m) => (
+            m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls) } : m
+          ))
           try {
-            localStorage.setItem(getMessagesKey(event.threadId), JSON.stringify(data.slice(-100)))
+            localStorage.setItem(getMessagesKey(event.threadId), JSON.stringify(messages))
           } catch { /* ignore */ }
         })
         .catch(() => { /* server unavailable */ })

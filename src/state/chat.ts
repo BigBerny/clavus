@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { useThreadsStore, loadThreadMessages, saveThreadMessages, getMessagesKey } from './threads'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
+import { normalizeToolCalls } from '../lib/toolCalls.ts'
 
 export interface ToolCall {
   id: string
@@ -158,7 +159,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const state = get().threadStates[threadId]
     if (state) return state
     // Lazy-load from localStorage
-    const messages = loadThreadMessages(threadId)
+    const messages = loadThreadMessages(threadId).map((m) => (
+      m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls) } : m
+    ))
     const newState: ThreadStreamState = { messages, isStreaming: false, abortController: null, queuedMessage: null }
     set((s) => ({
       threadStates: { ...s.threadStates, [threadId]: newState },
@@ -184,7 +187,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
     set((state) => {
       const ts = state.threadStates[threadId] || EMPTY_THREAD_STATE
-      const messages = [...ts.messages, { ...msg, id, timestamp: Date.now() }]
+      const message = {
+        ...msg,
+        ...(msg.toolCalls ? { toolCalls: normalizeToolCalls(msg.toolCalls) } : {}),
+        id,
+        timestamp: Date.now(),
+      }
+      const messages = [...ts.messages, message]
       if (!msg.streaming) saveMessages(threadId, messages)
 
       return {
@@ -321,7 +330,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
           [threadId]: {
             ...ts,
             messages: ts.messages.map((m) =>
-              m.id === id ? { ...m, toolCalls } : m,
+              m.id === id ? { ...m, toolCalls: normalizeToolCalls(toolCalls) } : m,
             ),
           },
         },
@@ -536,13 +545,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
  */
 export function mergeMessagesFromServer(threadId: string, serverMessages: Message[]): boolean {
   if (!Array.isArray(serverMessages)) return false
+  const normalizedServerMessages = serverMessages.map((m) => (
+    m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls), streaming: false } : { ...m, streaming: false }
+  ))
   const chat = useChatStore.getState()
   const ts = chat.threadStates[threadId]
 
   // Thread not currently loaded into the store — just persist; lazy load picks it up.
   if (!ts) {
     try {
-      localStorage.setItem(getMessagesKey(threadId), JSON.stringify(serverMessages.slice(-100)))
+      localStorage.setItem(getMessagesKey(threadId), JSON.stringify(normalizedServerMessages.slice(-100)))
     } catch { /* ignore */ }
     return false
   }
@@ -552,7 +564,7 @@ export function mergeMessagesFromServer(threadId: string, serverMessages: Messag
 
   const localById = new Map(ts.messages.map(m => [m.id, m]))
   const localIds = new Set(localById.keys())
-  const serverIds = new Set(serverMessages.map(m => m.id))
+  const serverIds = new Set(normalizedServerMessages.map(m => m.id))
 
   // Detect new ids from the server side. If none, bail without churn.
   let hasNew = false
@@ -562,9 +574,9 @@ export function mergeMessagesFromServer(threadId: string, serverMessages: Messag
   if (!hasNew) return false
 
   // Build merged array in server's order, reusing local refs where possible.
-  const merged: Message[] = serverMessages.map(s => {
+  const merged: Message[] = normalizedServerMessages.map(s => {
     const existing = localById.get(s.id)
-    return existing ?? { ...s, streaming: false }
+    return existing ?? s
   })
 
   // Preserve any local-only messages (e.g. just-sent that haven't reached the
@@ -574,7 +586,10 @@ export function mergeMessagesFromServer(threadId: string, serverMessages: Messag
   }
 
   try {
-    localStorage.setItem(getMessagesKey(threadId), JSON.stringify(merged.slice(-100)))
+    const toSave = merged.slice(-100).map((m) => (
+      m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls) } : m
+    ))
+    localStorage.setItem(getMessagesKey(threadId), JSON.stringify(toSave))
   } catch { /* ignore */ }
 
   useChatStore.setState((state) => ({

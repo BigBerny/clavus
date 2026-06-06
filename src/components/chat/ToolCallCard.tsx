@@ -1,5 +1,6 @@
-import { memo, useState, useEffect } from 'react'
+import { memo, useState, useEffect, useMemo } from 'react'
 import type { ToolCall } from '../../state/chat.ts'
+import { normalizeToolCalls } from '../../lib/toolCalls.ts'
 
 const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
   web_search: { icon: '🔍', label: 'Searching web' },
@@ -164,7 +165,8 @@ export const ToolCallCard = memo(function ToolCallCard({ toolCall }: { toolCall:
 
 export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls: ToolCall[]; isStreaming?: boolean; className?: string }) {
   const [expanded, setExpanded] = useState(!!isStreaming)
-  if (!toolCalls.length) return null
+  const normalizedToolCalls = useMemo(() => normalizeToolCalls(toolCalls), [toolCalls])
+  if (!normalizedToolCalls.length) return null
 
   // Auto-expand while streaming
   useEffect(() => {
@@ -179,10 +181,10 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
     }
   }, [isStreaming])
 
-  const lastCall = toolCalls[toolCalls.length - 1]
+  const lastCall = normalizedToolCalls[normalizedToolCalls.length - 1]
   const { icon, label } = getToolDisplay(lastCall.name, lastCall.args)
   const isRunning = lastCall.status === 'running'
-  const totalCount = toolCalls.length
+  const totalCount = normalizedToolCalls.length
 
   if (!expanded) {
     // Collapsed: show last action + count badge (if multiple)
@@ -206,7 +208,7 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
   }
 
   // Expanded: show all tool calls
-  if (toolCalls.length === 1) {
+  if (normalizedToolCalls.length === 1) {
     return (
       <div className={className}>
         <button
@@ -242,14 +244,14 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
         >
           <polyline points="9 18 15 12 9 6"/>
         </svg>
-        <span className="leading-none">{toolCalls.length} actions</span>
+        <span className="leading-none">{normalizedToolCalls.length} actions</span>
         {isRunning && (
           <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
         )}
       </button>
       <div className="rounded-lg border border-surface-light-3/15 dark:border-surface-dark-3/15 bg-surface-light-2/30 dark:bg-surface-dark-2/30 overflow-hidden">
         <div className="divide-y divide-surface-light-3/8 dark:divide-surface-dark-3/8">
-          {toolCalls.map(tc => (
+          {normalizedToolCalls.map(tc => (
             <ToolCallDetail key={tc.id} toolCall={tc} />
           ))}
         </div>

@@ -3,6 +3,7 @@ import type { Message, MessageUsage } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
 import { ButtonGroup, SelectBlock, ConfirmBlock, FormBlock, parseButtonsLine, parseSelectLine, parseFormBlock, type ButtonAction, type SelectOption, type FormBlockData } from './InteractiveBlock.tsx'
 import { haptic } from '../../lib/native'
+import { normalizeToolCalls } from '../../lib/toolCalls.ts'
 
 const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(m => ({ default: m.RichMessageRenderer })))
 
@@ -30,7 +31,8 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
     if (isStreaming) setExpanded(true)
   }, [isStreaming])
 
-  const hasToolCalls = toolCalls && toolCalls.length > 0
+  const normalizedToolCalls = useMemo(() => normalizeToolCalls(toolCalls), [toolCalls])
+  const hasToolCalls = normalizedToolCalls.length > 0
 
   return (
     <div className="mb-2">
@@ -49,7 +51,7 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
         ) : (
           <span>
             Reasoning
-            {hasToolCalls && <span className="ml-1.5 text-text-light-muted/40 dark:text-text-dark-muted/40 text-[11px]">+ {toolCalls.length} {toolCalls.length === 1 ? 'action' : 'actions'}</span>}
+            {hasToolCalls && <span className="ml-1.5 text-text-light-muted/40 dark:text-text-dark-muted/40 text-[11px]">+ {normalizedToolCalls.length} {normalizedToolCalls.length === 1 ? 'action' : 'actions'}</span>}
           </span>
         )}
       </button>
@@ -62,7 +64,7 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
           </div>
           {hasToolCalls && (
             <div className="mt-2">
-              <ToolCallCards toolCalls={toolCalls} isStreaming={!!isStreamingMsg} className="mb-1.5" />
+              <ToolCallCards toolCalls={normalizedToolCalls} isStreaming={!!isStreamingMsg} className="mb-1.5" />
             </div>
           )}
         </div>

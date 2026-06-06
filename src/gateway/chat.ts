@@ -357,16 +357,36 @@ function dispatchResponsesEvent(
     }
 
     if (item.type === 'function_call_output') {
-      const id = String(item.call_id || item.id || crypto.randomUUID())
-      const existing = state.toolCalls.get(id)
+      const eventCallId = String(item.call_id || item.id || crypto.randomUUID())
+      const name = String(item.name || 'tool')
+      const newArgs = parseJsonMaybe<Record<string, unknown>>(item.arguments, {})
+      const hasNewArgs = Object.keys(newArgs).length > 0
+
+      let targetId = eventCallId
+      let existing = state.toolCalls.get(eventCallId)
+
+      if (!existing && !hasNewArgs) {
+        for (const [id, tc] of state.toolCalls.entries()) {
+          if (
+            (name === 'tool' || tc.name === name) &&
+            tc.status === 'running' &&
+            tc.result === undefined
+          ) {
+            targetId = id
+            existing = tc
+            break
+          }
+        }
+      }
+
       const tc: ToolCallEvent = {
-        id,
-        name: existing?.name || 'tool',
-        args: existing?.args || {},
+        id: targetId,
+        name: existing?.name || name,
+        args: hasNewArgs ? newArgs : (existing?.args || {}),
         result: textFromOutput(item.output),
         status: item.status === 'error' ? 'error' : 'completed',
       }
-      state.toolCalls.set(id, tc)
+      state.toolCalls.set(targetId, tc)
       callbacks.onToolCall?.(tc)
     }
     return false

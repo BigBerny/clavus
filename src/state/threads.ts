@@ -3,6 +3,7 @@ import type { Message } from './chat'
 import { useTabsStore } from './tabs'
 import { useModelStore } from './preset'
 import { useChatSettingsStore, type ReasoningLevel } from './chatSettings'
+import { normalizeToolCalls } from '../lib/toolCalls'
 
 export interface LinkedDoc {
   path: string
@@ -128,7 +129,12 @@ export function loadThreadMessages(threadId: string): Message[] {
     if (!raw) return []
     const parsed = JSON.parse(raw) as Message[]
     if (!Array.isArray(parsed)) return []
-    return parsed.map((m) => ({ ...m, backendResponseId: m.backendResponseId ?? m.hermesResponseId, streaming: false }))
+    return parsed.map((m) => ({
+      ...m,
+      backendResponseId: m.backendResponseId ?? m.hermesResponseId,
+      streaming: false,
+      ...(m.toolCalls ? { toolCalls: normalizeToolCalls(m.toolCalls) } : {}),
+    }))
   } catch {
     return []
   }
@@ -136,14 +142,16 @@ export function loadThreadMessages(threadId: string): Message[] {
 
 // Save messages for a specific thread
 export function saveThreadMessages(threadId: string, messages: Message[]) {
+  const toSave = messages.slice(-100).map((m) => (
+    m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls) } : m
+  ))
   try {
-    const toSave = messages.slice(-100)
     localStorage.setItem(getMessagesKey(threadId), JSON.stringify(toSave))
   } catch {
     // localStorage full or unavailable
   }
   // Async server sync
-  syncMessagesToServer(threadId, messages.slice(-100))
+  syncMessagesToServer(threadId, toSave)
 }
 
 // === Server Sync ===
@@ -240,8 +248,11 @@ export async function syncFromServer(): Promise<boolean> {
       const localMsgs = loadThreadMessages(threadId)
       // Use whichever has more messages (simple heuristic)
       if (serverMsgs.length >= localMsgs.length) {
+        const normalizedServerMsgs = serverMsgs.map((m) => (
+          m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls) } : m
+        ))
         try {
-          localStorage.setItem(getMessagesKey(threadId), JSON.stringify(serverMsgs))
+          localStorage.setItem(getMessagesKey(threadId), JSON.stringify(normalizedServerMsgs))
         } catch { /* ignore */ }
       }
     }
@@ -403,7 +414,15 @@ if (oldMessages && initialThreads.length === 1) {
   const firstThread = initialThreads[0]
   const existing = localStorage.getItem(getMessagesKey(firstThread.id))
   if (!existing) {
-    localStorage.setItem(getMessagesKey(firstThread.id), oldMessages)
+    try {
+      const msgs = JSON.parse(oldMessages) as Message[]
+      const normalizedOldMessages = Array.isArray(msgs)
+        ? msgs.map((m) => (m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls) } : m))
+        : []
+      localStorage.setItem(getMessagesKey(firstThread.id), JSON.stringify(normalizedOldMessages))
+    } catch {
+      localStorage.setItem(getMessagesKey(firstThread.id), oldMessages)
+    }
     // Try to set a title from the first user message
     try {
       const msgs = JSON.parse(oldMessages) as Message[]
