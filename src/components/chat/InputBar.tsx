@@ -7,7 +7,6 @@ import { useChatStore, type PendingFile } from '../../state/chat'
 import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspaceApi'
 import { useThreadsStore } from '../../state/threads'
 import { useDraftsStore } from '../../state/drafts'
-import { VoiceInputPill } from '../voice/VoiceInputPill'
 import StatusModal from './StatusModal'
 import {
   SLASH_COMMANDS,
@@ -26,6 +25,7 @@ import {
   SendBtn,
   StopMini,
 } from './InputBarControls'
+import { InputBarTalkMode, type InputBarTalkModeState } from './InputBarTalkMode'
 
 interface Props {
   onSend: (message: string, images?: string[], files?: PendingFile[]) => void
@@ -41,7 +41,7 @@ interface Props {
   threadId?: string | null
   /** Resend the last user message in this thread (used by /retry). */
   onRetry?: () => void
-  talkMode?: { active: boolean; phase: string; toggle: () => void; endListening: () => void; interrupt: () => void }
+  talkMode?: InputBarTalkModeState
   /** Stable key for draft persistence — e.g. 'home', a thread id, or a doc path. */
   draftKey?: string
   /** When set, the InputBar is editing this message instead of composing a fresh one. */
@@ -675,63 +675,8 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0 || pendingFiles.length > 0
 
-  // Talk Mode: full-width overlay when active.
-  // Uses the shared VoiceInputPill for visual consistency with GPT Realtime.
   if (talkMode?.active) {
-    const phaseLabels: Record<string, string> = {
-      listening: 'Listening…',
-      transcribing: 'Transcribing…',
-      waiting: 'Jane is thinking…',
-      speaking: 'Jane is speaking…',
-    }
-    // Map Talk Mode phase → VoiceInputPill mode.
-    // - listening      → 'locked'  (active recording, green pill)
-    // - transcribing   → 'locked'  (still processing user audio)
-    // - waiting/speaking → 'idle'  (assistant has the floor, neutral pill)
-    const pillMode = (talkMode.phase === 'listening' || talkMode.phase === 'transcribing')
-      ? 'locked' as const
-      : 'idle' as const
-    return (
-      <div className="bg-surface-light dark:bg-surface-dark border-t border-border-light dark:border-border-dark safe-area-bottom">
-        <div className="max-w-[900px] mx-auto p-3">
-          <div className="flex flex-col items-center gap-3 py-4">
-            <VoiceInputPill
-              size="medium"
-              mode={pillMode}
-              showLockTarget={false}
-              showPauseButton={false}
-            />
-            <span className="text-[13px] text-text-light-muted dark:text-text-dark-muted">
-              {phaseLabels[talkMode.phase] || 'Talk Mode'}
-            </span>
-            <div className="flex gap-2">
-              {talkMode.phase === 'listening' && (
-                <button
-                  onClick={talkMode.endListening}
-                  className="inline-btn px-4 h-9 rounded-md bg-surface-light-2 dark:bg-surface-dark-3 text-[13px] font-medium text-text-light dark:text-text-dark active:scale-95 transition-transform"
-                >
-                  Done speaking
-                </button>
-              )}
-              {talkMode.phase === 'speaking' && (
-                <button
-                  onClick={talkMode.interrupt}
-                  className="inline-btn px-4 h-9 rounded-md bg-surface-light-2 dark:bg-surface-dark-3 text-[13px] font-medium text-text-light dark:text-text-dark active:scale-95 transition-transform"
-                >
-                  Interrupt
-                </button>
-              )}
-              <button
-                onClick={talkMode.toggle}
-                className="inline-btn px-4 h-9 rounded-md bg-red-500/10 text-[13px] font-medium text-red-500 active:scale-95 transition-transform"
-              >
-                End Talk Mode
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
+    return <InputBarTalkMode talkMode={talkMode} />
   }
 
   return (
