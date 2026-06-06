@@ -34,6 +34,10 @@ import {
   type OutputLanguage,
 } from './src/lib/composePrompts.ts'
 import { recipientFallback } from './src/lib/recipientLanguage.ts'
+import { appleAppSiteAssociationPlugin } from './server/vite/plugins/appleAppSiteAssociation.ts'
+import { fileUploadPlugin } from './server/vite/plugins/fileUpload.ts'
+import { openaiRealtimeProxy } from './server/vite/plugins/openaiRealtimeProxy.ts'
+import { pushApiPlugin } from './server/vite/plugins/pushApi.ts'
 import {
   BUILD_TIME,
   CHAT_API_TARGET,
@@ -42,17 +46,12 @@ import {
   ELEVENLABS_KEY,
   GATEWAY_TOKEN,
   GIT_SHA,
-  OPENAI_KEY,
   OPENCLAW_API_TARGET,
   OPENROUTER_KEY,
   THREADS_DATA_DIR,
-  UPLOAD_BASE,
   WORKSPACE_ROOT,
-  loadPushSubscriptions,
-  savePushSubscriptions,
   sendPushToAll,
   serverOptions,
-  vapidKeys,
 } from './server/vite/serverEnv.ts'
 
 /**
@@ -1767,120 +1766,6 @@ function composeApiPlugin() {
   }
 }
 
-/**
- * Apple App Site Association (Universal Links).
- *
- * When the Clavus.app is signed with the `com.apple.developer.associated-domains`
- * entitlement and `applinks:openclaw.random-hamster.win`, macOS will route
- * HTTPS clicks to workspace-file URLs directly into the app instead of the
- * browser — covering links clicked from Slack, Mail, Notes, terminal, etc.
- *
- * Setup:
- *   1. Set CLAVUS_APPLE_TEAM_ID in your shell environment (10-character team
- *      identifier from developer.apple.com).
- *   2. Rebuild + re-sign the app so it picks up the new entitlement.
- *   3. Confirm the file is reachable at
- *      https://openclaw.random-hamster.win/.well-known/apple-app-site-association
- *
- * Until the team ID is configured the endpoint returns 404 (safe — Universal
- * Links remain inactive but every other deep-link path still works).
- */
-function appleAppSiteAssociationPlugin() {
-  const BUNDLE_ID = 'win.random-hamster.clavus'
-  const teamId = process.env.CLAVUS_APPLE_TEAM_ID || ''
-
-  const attach = (server: any) => {
-    server.middlewares.use((req: any, res: any, next: any) => {
-      if (req.url !== '/.well-known/apple-app-site-association' && req.url !== '/apple-app-site-association') {
-        return next()
-      }
-      if (!teamId) {
-        res.statusCode = 404
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ error: 'CLAVUS_APPLE_TEAM_ID not configured' }))
-        return
-      }
-      const aasa = {
-        applinks: {
-          apps: [],
-          details: [
-            {
-              appIDs: [`${teamId}.${BUNDLE_ID}`],
-              // Universal Links must be HTTPS path patterns. The hash route
-              // is part of the URL fragment so we match the prefix that
-              // generates these links in the openclaw-client.
-              components: [
-                { '/': '/*' },
-              ],
-            },
-          ],
-        },
-      }
-      res.statusCode = 200
-      // Per Apple docs, AASA must be served as application/json (no .json
-      // extension, no signing required on macOS 12+).
-      res.setHeader('Content-Type', 'application/json')
-      res.setHeader('Cache-Control', 'no-cache')
-      res.end(JSON.stringify(aasa))
-    })
-  }
-
-  return {
-    name: 'apple-app-site-association',
-    configureServer: attach,
-    configurePreviewServer: attach,
-  }
-}
-
-function openaiRealtimeProxy() {
-  const attach = (server: any) => {
-    server.middlewares.use(async (req: any, res: any, next: any) => {
-      if (req.url !== '/openai-realtime/session' || req.method !== 'POST') return next()
-      if (!OPENAI_KEY) {
-        res.statusCode = 500
-        res.end(JSON.stringify({ error: 'VITE_OPENAI_API_KEY not set' }))
-        return
-      }
-      try {
-        const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(Buffer.from(chunk))
-        const body = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf-8')) : {}
-
-        const resp = await fetch('https://api.openai.com/v1/realtime/client_secrets', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${OPENAI_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            session: {
-              type: 'realtime',
-              model: body.model || 'gpt-realtime-2',
-              audio: {
-                output: { voice: body.voice || 'marin' },
-                input: { transcription: { model: 'whisper-1' } },
-              },
-              instructions: body.instructions || 'You are a helpful voice assistant. The user speaks English and German — respond in whichever language they use. Be concise and conversational. When asked about topics, give direct, practical answers. The user is a software engineer named Janis based in Switzerland.',
-            },
-          }),
-        })
-        res.statusCode = resp.status
-        res.setHeader('Content-Type', 'application/json')
-        const data = await resp.text()
-        res.end(data)
-      } catch (err: any) {
-        res.statusCode = 502
-        res.end(JSON.stringify({ error: err.message }))
-      }
-    })
-  }
-  return {
-    name: 'openai-realtime-proxy',
-    configureServer: attach,
-    configurePreviewServer: attach,
-  }
-}
-
 function hermesResponsesPlugin() {
   const RESPONSE_STORE_DB = nodePath.join(process.env.HOME || '', '.hermes/response_store.db')
   let db: InstanceType<typeof Database> | null = null
@@ -2059,143 +1944,6 @@ function hermesResponsesPlugin() {
 
   return {
     name: 'hermes-responses-api',
-    configureServer: attach,
-    configurePreviewServer: attach,
-  }
-}
-
-function fileUploadPlugin() {
-  if (!fs.existsSync(UPLOAD_BASE)) fs.mkdirSync(UPLOAD_BASE, { recursive: true })
-
-  const attach = (server: any) => {
-    server.middlewares.use((req: any, res: any, next: any) => {
-      const parsed = new URL(req.url!, `http://${req.headers.host}`)
-      if (req.method !== 'POST' || parsed.pathname !== '/api/upload') return next()
-
-      const threadId = parsed.searchParams.get('threadId')
-      const uploadDir = threadId
-        ? nodePath.join(UPLOAD_BASE, threadId)
-        : UPLOAD_BASE
-      if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true })
-
-      const chunks: Buffer[] = []
-      req.on('data', (chunk: Buffer) => chunks.push(chunk))
-      req.on('end', () => {
-        try {
-          const body = Buffer.concat(chunks)
-          const contentType = req.headers['content-type'] || ''
-
-          // Parse multipart boundary
-          const boundaryMatch = contentType.match(/boundary=(.+)/)
-          if (!boundaryMatch) {
-            res.statusCode = 400
-            res.end(JSON.stringify({ error: 'Missing boundary' }))
-            return
-          }
-          const boundary = boundaryMatch[1]
-          const raw = body.toString('binary')
-          const parts = raw.split('--' + boundary).slice(1, -1)
-
-          for (const part of parts) {
-            const headerEnd = part.indexOf('\r\n\r\n')
-            if (headerEnd < 0) continue
-            const headers = part.slice(0, headerEnd)
-            const fileData = part.slice(headerEnd + 4, part.endsWith('\r\n') ? part.length - 2 : part.length)
-
-            const nameMatch = headers.match(/filename="(.+?)"/)
-            if (!nameMatch) continue
-
-            const originalName = nodePath.basename(nameMatch[1])
-            // Deduplicate: report.pdf -> report (1).pdf -> report (2).pdf
-            let targetName = originalName
-            let filePath = nodePath.join(uploadDir, targetName)
-            let counter = 1
-            while (fs.existsSync(filePath)) {
-              const ext = nodePath.extname(originalName)
-              const base = originalName.slice(0, originalName.length - ext.length)
-              targetName = `${base} (${counter})${ext}`
-              filePath = nodePath.join(uploadDir, targetName)
-              counter++
-            }
-            fs.writeFileSync(filePath, fileData, 'binary')
-
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({
-              filename: originalName,
-              path: filePath,
-              size: fs.statSync(filePath).size,
-            }))
-            return
-          }
-
-          res.statusCode = 400
-          res.end(JSON.stringify({ error: 'No file found in upload' }))
-        } catch (err: any) {
-          res.statusCode = 500
-          res.end(JSON.stringify({ error: err.message }))
-        }
-      })
-    })
-  }
-
-  return {
-    name: 'file-upload',
-    configureServer: attach,
-    configurePreviewServer: attach,
-  }
-}
-
-function pushApiPlugin() {
-  async function readBody(req: any): Promise<string> {
-    const chunks: Buffer[] = []
-    for await (const chunk of req) chunks.push(Buffer.from(chunk))
-    return Buffer.concat(chunks).toString('utf-8')
-  }
-
-  const attach = (server: any) => {
-    server.middlewares.use(async (req: any, res: any, next: any) => {
-        if (!req.url?.startsWith('/api/push')) return next()
-
-        res.setHeader('Content-Type', 'application/json')
-
-        try {
-          if (req.url === '/api/push/vapid' && req.method === 'GET') {
-            res.end(JSON.stringify({ publicKey: vapidKeys.publicKey }))
-            return
-          }
-
-          if (req.url === '/api/push/subscribe' && req.method === 'POST') {
-            const body = JSON.parse(await readBody(req))
-            const subs = loadPushSubscriptions()
-            // Deduplicate by endpoint
-            const existing = subs.findIndex((s: any) => s.endpoint === body.endpoint)
-            if (existing >= 0) subs[existing] = body
-            else subs.push(body)
-            savePushSubscriptions(subs)
-            res.end(JSON.stringify({ ok: true }))
-            return
-          }
-
-          if (req.url === '/api/push/subscribe' && req.method === 'DELETE') {
-            const body = JSON.parse(await readBody(req))
-            const subs = loadPushSubscriptions()
-            const filtered = subs.filter((s: any) => s.endpoint !== body.endpoint)
-            savePushSubscriptions(filtered)
-            res.end(JSON.stringify({ ok: true }))
-            return
-          }
-
-          res.statusCode = 404
-          res.end(JSON.stringify({ error: 'Not found' }))
-        } catch (err: any) {
-          res.statusCode = 500
-          res.end(JSON.stringify({ error: err.message }))
-        }
-    })
-  }
-
-  return {
-    name: 'push-api',
     configureServer: attach,
     configurePreviewServer: attach,
   }
