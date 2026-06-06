@@ -8,7 +8,7 @@ import { useModelStore } from '../state/preset.ts'
 import { useChatSettingsStore } from '../state/chatSettings.ts'
 import { useAutoClassifyStore } from '../state/autoClassify.ts'
 import { classifyMessage } from '../gateway/classify.ts'
-import { MODEL_OPTIONS } from '../gateway/presets.ts'
+import { resolveChatRoutingSelection } from '../lib/chatRouting.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
@@ -154,27 +154,33 @@ export function useChat() {
     setConnectionStatus('connected')
 
     const config = getConfig()
-    // Apply selected model (auto-classification overrides manual selection)
+    // Apply selected model/reasoning (auto-classification overrides manual selection).
     const { autoEnabled, getClassification: getAutoClassification } = useAutoClassifyStore.getState()
     const autoClassification = autoEnabled ? getAutoClassification(threadId) : null
-    const selectedModelId = autoClassification
-      ? autoClassification.modelId
-      : useModelStore.getState().selectedModelId
-    const modelOption = MODEL_OPTIONS.find((m) => m.id === selectedModelId)
-      ?? MODEL_OPTIONS[0] // fallback to first model when "auto" has no classification yet
+    const selectedModelId = useModelStore.getState().selectedModelId
+    const settingsStore = useChatSettingsStore.getState()
+    const { modelOption, reasoningEffort, shouldPinAutoReasoning } = resolveChatRoutingSelection({
+      autoClassification,
+      selectedModelId,
+      manualReasoning: settingsStore.getEffectiveReasoning(threadId),
+    })
     if (modelOption) {
       config.model = modelOption.model
     }
 
-    // Auto is a Home-level default. Once a thread has sent a message, pin the
-    // resolved concrete model onto the thread so the picker stops showing Auto
-    // and switchThread restores the right model on return.
+    // Auto is a Home-level default. Once a thread sends a message, pin the
+    // resolved concrete model + reasoning onto the thread so later renders and
+    // thread switches show the actual routing choice that was sent.
     const threadRecord = useThreadsStore.getState().threads.find((t) => t.id === threadId)
     if (modelOption && (!threadRecord?.modelId || threadRecord.modelId === 'auto')) {
       useThreadsStore.getState().updateThreadModel(threadId, modelOption.id)
       if (useModelStore.getState().selectedModelId !== modelOption.id) {
         useModelStore.getState().setSelectedModelId(modelOption.id)
       }
+    }
+    if (shouldPinAutoReasoning && reasoningEffort) {
+      settingsStore.setReasoningOverride(threadId, reasoningEffort)
+      useThreadsStore.getState().updateThreadReasoning(threadId, reasoningEffort)
     }
 
     const apiMessages: ChatCompletionMessage[] = store
@@ -275,9 +281,7 @@ export function useChat() {
         controller.signal,
         {
           conversationId: threadId,
-          reasoningEffort: autoClassification
-            ? autoClassification.reasoning
-            : useChatSettingsStore.getState().getEffectiveReasoning(threadId) ?? undefined,
+          reasoningEffort,
         },
       )
     } catch (error) {
