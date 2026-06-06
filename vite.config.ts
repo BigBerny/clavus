@@ -21,10 +21,81 @@ import {
   serverOptions,
 } from './server/vite/serverEnv.ts'
 
+const marksensePeerPackages = [
+  '@ariakit/react',
+  '@codemirror/autocomplete',
+  '@codemirror/commands',
+  '@codemirror/lang-markdown',
+  '@codemirror/language',
+  '@codemirror/lint',
+  '@codemirror/merge',
+  '@codemirror/search',
+  '@codemirror/state',
+  '@codemirror/view',
+  '@floating-ui/react',
+  '@lezer/highlight',
+  '@radix-ui/react-dropdown-menu',
+  '@radix-ui/react-popover',
+  '@tiptap/core',
+  '@tiptap/extension-collaboration',
+  '@tiptap/extension-collaboration-caret',
+  '@tiptap/extension-color',
+  '@tiptap/extension-drag-handle-react',
+  '@tiptap/extension-emoji',
+  '@tiptap/extension-highlight',
+  '@tiptap/extension-horizontal-rule',
+  '@tiptap/extension-image',
+  '@tiptap/extension-list',
+  '@tiptap/extension-mathematics',
+  '@tiptap/extension-mention',
+  '@tiptap/extension-placeholder',
+  '@tiptap/extension-subscript',
+  '@tiptap/extension-superscript',
+  '@tiptap/extension-table',
+  '@tiptap/extension-table-of-contents',
+  '@tiptap/extension-task-item',
+  '@tiptap/extension-task-list',
+  '@tiptap/extension-text-align',
+  '@tiptap/extension-text-style',
+  '@tiptap/extension-typography',
+  '@tiptap/extension-unique-id',
+  '@tiptap/extensions',
+  '@tiptap/markdown',
+  '@tiptap/pm',
+  '@tiptap/react',
+  '@tiptap/starter-kit',
+  '@tiptap/suggestion',
+  'is-hotkey',
+  'lodash.throttle',
+  'lucide-react',
+  'react',
+  'react-dom',
+  'react-hotkeys-hook',
+  'react-textarea-autosize',
+  'tippy.js',
+  'yjs',
+]
+
+const marksenseCoreSrc = nodePath.resolve(import.meta.dirname, '../marksense-core/src')
+const projectsRoot = nodePath.resolve(import.meta.dirname, '..')
+const devServerOptions = {
+  ...serverOptions,
+  fs: {
+    ...(serverOptions as any).fs,
+    allow: Array.from(new Set([
+      ...((serverOptions as any).fs?.allow ?? []),
+      projectsRoot,
+    ])),
+  },
+}
+
 export default defineConfig({
   resolve: {
+    dedupe: marksensePeerPackages,
+    preserveSymlinks: true,
     alias: {
-      '@/': nodePath.resolve(import.meta.dirname, 'src/marksense/@') + '/',
+      '@clavus/marksense-core': nodePath.join(marksenseCoreSrc, 'index.tsx'),
+      '@/': nodePath.join(marksenseCoreSrc, '@') + '/',
     },
   },
   define: {
@@ -42,14 +113,23 @@ export default defineConfig({
             return 'markdown-vendor'
           }
           // Marksense editor — separate chunk (lazy loaded)
-          if (id.includes('/src/marksense/') || id.includes('node_modules/@tiptap/') || id.includes('node_modules/@codemirror/') || id.includes('node_modules/prosemirror') || id.includes('node_modules/@floating-ui/') || id.includes('node_modules/@radix-ui/') || id.includes('node_modules/tippy.js') || id.includes('node_modules/lucide-react') || id.includes('node_modules/@ariakit/')) {
+          if (id.includes('/node_modules/@clavus/marksense-core/') || id.includes('/marksense-core/src/') || id.includes('node_modules/@tiptap/') || id.includes('node_modules/@codemirror/') || id.includes('node_modules/prosemirror') || id.includes('node_modules/@floating-ui/') || id.includes('node_modules/@radix-ui/') || id.includes('node_modules/tippy.js') || id.includes('node_modules/lucide-react') || id.includes('node_modules/@ariakit/')) {
             return 'marksense-editor'
           }
         },
       },
     },
   },
-  server: serverOptions,
+  optimizeDeps: {
+    include: [
+      '@ariakit/react',
+      '@tiptap/react',
+      'use-sync-external-store/shim/index.js',
+      'use-sync-external-store/shim/with-selector.js',
+      'workbox-precaching',
+    ],
+  },
+  server: devServerOptions,
   preview: serverOptions,
   plugins: [
     responsesProxyPlugin(),

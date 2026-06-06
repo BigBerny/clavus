@@ -17,7 +17,7 @@ class EditorErrorBoundary extends Component<
 }
 
 const MarksenseEditorInstance = lazy(() =>
-  import('../../marksense').then(m => ({ default: m.MarksenseEditorInstance }))
+  import('@clavus/marksense-core').then(m => ({ default: m.MarksenseEditorInstance }))
 )
 
 export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {

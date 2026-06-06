@@ -183,7 +183,7 @@ export function App() {
         : (cb) => window.setTimeout(cb, 800)
     const handle = idle(() => {
       void import('./components/marksense/MarksensePanel.tsx')
-      void import('./marksense')
+      void import('@clavus/marksense-core')
     })
     return () => {
       if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(handle)

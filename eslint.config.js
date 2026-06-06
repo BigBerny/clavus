@@ -8,9 +8,9 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores([
     'dist',
-    // Embedded Marksense editor source. Keep Clavus lint focused on the app
-    // shell and the hand-owned Marksense panel integration.
-    'src/marksense/**',
+    // Marksense core is source-distributed through a local package. Keep Clavus
+    // lint focused on the app shell and the hand-owned panel integration.
+    'node_modules/@clavus/marksense-core/**',
   ]),
   {
     files: ['**/*.{ts,tsx}'],
