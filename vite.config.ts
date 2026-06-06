@@ -38,6 +38,7 @@ import { fileUploadPlugin } from './server/vite/plugins/fileUpload.ts'
 import { hermesResponsesPlugin } from './server/vite/plugins/hermesResponses.ts'
 import { openaiRealtimeProxy } from './server/vite/plugins/openaiRealtimeProxy.ts'
 import { pushApiPlugin } from './server/vite/plugins/pushApi.ts'
+import { desktopDictationPlugin, elevenLabsProxy } from './server/vite/plugins/speech.ts'
 import { threadsApiPlugin } from './server/vite/plugins/threadsApi.ts'
 import { workspacePlugin } from './server/vite/plugins/workspace.ts'
 import {
@@ -45,7 +46,6 @@ import {
   CHAT_API_TARGET,
   CHAT_BACKEND,
   DOCUMENTS_ROOT,
-  ELEVENLABS_KEY,
   GATEWAY_TOKEN,
   GIT_SHA,
   OPENCLAW_API_TARGET,
@@ -463,188 +463,6 @@ function responsesProxyPlugin() {
 
   return {
     name: 'responses-proxy',
-    configureServer: attach,
-    configurePreviewServer: attach,
-  }
-}
-
-function elevenLabsProxy() {
-  const transcriptsFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
-
-  const attach = (server: any) => {
-    server.middlewares.use(async (req: any, res: any, next: any) => {
-      if (!req.url?.startsWith('/elevenlabs/')) return next()
-
-      const targetPath = req.url.replace(/^\/elevenlabs/, '')
-      const targetUrl = `https://api.elevenlabs.io${targetPath}`
-
-      // Speech-to-text responses are small JSON blobs — we buffer them so we
-      // can log the transcript to the unified `desktop-dictations.jsonl`
-      // (used by the Transcripts view). Everything else (TTS streaming, etc.)
-      // is forwarded byte-for-byte.
-      const isSpeechToText = /\/v1\/speech-to-text(\?|$)/.test(targetPath)
-
-      try {
-        const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(Buffer.from(chunk))
-        const body = chunks.length > 0 ? Buffer.concat(chunks) : undefined
-
-        const headers: Record<string, string> = { 'xi-api-key': ELEVENLABS_KEY }
-        if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
-
-        const startedAt = Date.now()
-        const resp = await fetch(targetUrl, {
-          method: req.method || 'POST',
-          headers,
-          body,
-        })
-
-        res.statusCode = resp.status
-        const ct = resp.headers.get('content-type')
-        if (ct) res.setHeader('Content-Type', ct)
-
-        if (isSpeechToText) {
-          // Buffer the response so we can both log it and forward it.
-          const responseText = await resp.text()
-          let parsed: any = null
-          try { parsed = JSON.parse(responseText) } catch {}
-
-          if (parsed?.text && resp.ok) {
-            try {
-              if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
-              fs.appendFileSync(transcriptsFile, JSON.stringify({
-                timestamp: new Date().toISOString(),
-                source: typeof req.headers['x-clavus-source'] === 'string'
-                  ? req.headers['x-clavus-source']
-                  : inferSourceFromUserAgent(req.headers['user-agent']),
-                appName: req.headers['x-clavus-app-name'] || '',
-                bundleId: req.headers['x-clavus-bundle-id'] || '',
-                audioBytes: body?.length ?? 0,
-                status: resp.status,
-                durationMs: Date.now() - startedAt,
-                text: parsed.text,
-                transcriptionId: parsed.transcription_id || '',
-              }) + '\n')
-            } catch {
-              // Logging is best-effort; never fail the response if disk write hiccups.
-            }
-          }
-
-          res.end(responseText)
-          return
-        }
-
-        // Default streaming pass-through (TTS, etc.).
-        if (resp.body) {
-          const reader = resp.body.getReader()
-          const pump = async () => {
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) { res.end(); break }
-              res.write(value)
-            }
-          }
-          await pump()
-        } else {
-          res.end()
-        }
-      } catch (err: any) {
-        res.statusCode = 502
-        res.end(JSON.stringify({ error: err.message }))
-      }
-    })
-  }
-
-  return {
-    name: 'elevenlabs-proxy',
-    configureServer: attach,
-    configurePreviewServer: attach,
-  }
-}
-
-/** Best-guess source label when the client hasn't sent X-Clavus-Source. */
-function inferSourceFromUserAgent(ua: unknown): string {
-  if (typeof ua !== 'string') return 'unknown'
-  if (ua.includes('Clavus/') && ua.includes('Tauri')) return 'clavus-desktop'
-  if (/\bClavusKeyboard\/|CFNetwork.*Darwin/i.test(ua)) return 'clavus-ios-keyboard'
-  if (/Mozilla|AppleWebKit/i.test(ua)) return 'clavus-web'
-  return 'unknown'
-}
-
-function desktopDictationPlugin() {
-  const historyFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
-
-  const attach = (server: any) => {
-    server.middlewares.use(async (req: any, res: any, next: any) => {
-      if (req.url !== '/desktop/dictation/transcribe') return next()
-
-      const origin = req.headers.origin
-      if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin)
-        res.setHeader('Access-Control-Allow-Credentials', 'true')
-        res.setHeader('Vary', 'Origin')
-      }
-
-      if (req.method === 'OPTIONS') {
-        res.statusCode = 204
-        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-        res.setHeader('Access-Control-Allow-Headers', 'content-type')
-        res.end()
-        return
-      }
-
-      if (req.method !== 'POST') {
-        res.statusCode = 405
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ error: 'Method not allowed' }))
-        return
-      }
-
-      try {
-        const chunks: Buffer[] = []
-        for await (const chunk of req) chunks.push(Buffer.from(chunk))
-        const body = Buffer.concat(chunks)
-
-        const headers: Record<string, string> = { 'xi-api-key': ELEVENLABS_KEY }
-        if (req.headers['content-type']) headers['content-type'] = req.headers['content-type']
-
-        const startedAt = Date.now()
-        const resp = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-          method: 'POST',
-          headers,
-          body,
-        })
-
-        const responseText = await resp.text()
-        let parsed: any = null
-        try { parsed = JSON.parse(responseText) } catch {}
-
-        if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
-        fs.appendFileSync(historyFile, JSON.stringify({
-          timestamp: new Date().toISOString(),
-          source: 'clavus-desktop',
-          appName: req.headers['x-clavus-app-name'] || '',
-          bundleId: req.headers['x-clavus-bundle-id'] || '',
-          audioBytes: body.length,
-          status: resp.status,
-          durationMs: Date.now() - startedAt,
-          text: parsed?.text || '',
-          transcriptionId: parsed?.transcription_id || '',
-        }) + '\n')
-
-        res.statusCode = resp.status
-        res.setHeader('Content-Type', resp.headers.get('content-type') || 'application/json')
-        res.end(responseText)
-      } catch (err: any) {
-        res.statusCode = 502
-        res.setHeader('Content-Type', 'application/json')
-        res.end(JSON.stringify({ error: err.message }))
-      }
-    })
-  }
-
-  return {
-    name: 'desktop-dictation-api',
     configureServer: attach,
     configurePreviewServer: attach,
   }
