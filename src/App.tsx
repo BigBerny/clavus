@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo, Suspense } from 'react'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
@@ -22,6 +22,7 @@ import { useModelStore } from './state/preset.ts'
 import { useChatSettingsStore } from './state/chatSettings.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
+import { useSortedTabs } from './hooks/useSortedTabs.ts'
 import { FloatingRecordingPill } from './components/voice/FloatingRecordingPill.tsx'
 import { TokenPrompt } from './components/auth/TokenPrompt.tsx'
 import {
@@ -52,7 +53,6 @@ export function App() {
   const setGatewayToken = useUIStore((s) => s.setGatewayToken)
   const connectionStatus = useUIStore((s) => s.connectionStatus)
   const switchThread = useThreadsStore((s) => s.switchThread)
-  const tabs = useTabsStore((s) => s.tabs)
   const closeTab = useTabsStore((s) => s.closeTab)
   const [needsToken, setNeedsToken] = useState(!hasToken())
   const cancelRecordingRef = useRef<(() => void) | null>(null)
@@ -211,51 +211,7 @@ export function App() {
     originalContent: string
   } | null>(null)
 
-  // Threads pulled from store for filtering and ordering chat tabs (below).
-  const allThreadsForTabFilter = useThreadsStore((s) => s.threads)
-
-  // Sorted tabs: oldest first (leftmost), newest last (rightmost, before home).
-  // Chat panels mirror the synced thread list and use thread.updatedAt, which
-  // means "last real conversation activity". Linked markdown docs are hidden
-  // from the top-level panel strip because Home/Sidebar show them nested below
-  // their parent conversation. Without the same suppression here, stale
-  // Marksense tabs can remain swipe columns even though they are not top-level
-  // entries on Home. Non-linked non-chat tabs stay device-local.
-  const sortedTabs = useMemo(() => {
-    const linkedDocPaths = new Set<string>()
-    const tabByThreadId = new Map<string, ChatTab>()
-    for (const thread of allThreadsForTabFilter) {
-      for (const doc of thread.linkedDocs || []) linkedDocPaths.add(doc.path)
-    }
-    for (const tab of tabs) {
-      if (tab.type === 'chat') tabByThreadId.set((tab as ChatTab).threadId, tab as ChatTab)
-    }
-
-    const chatTabs: ChatTab[] = allThreadsForTabFilter
-      .filter((thread) => !thread.archived)
-      .map((thread) => {
-        const existing = tabByThreadId.get(thread.id)
-        return {
-          ...(existing || {
-            id: thread.id,
-            type: 'chat' as const,
-            threadId: thread.id,
-            openedAt: thread.createdAt || thread.updatedAt,
-          }),
-          title: thread.title || existing?.title || 'Untitled',
-          updatedAt: thread.updatedAt,
-        }
-      })
-
-    const nonChatTabs = tabs.filter((t) => {
-      if (t.type === 'chat') return false
-      if (t.type === 'marksense' && linkedDocPaths.has((t as MarksenseTab).path)) return false
-      return true
-    })
-
-    return [...chatTabs, ...nonChatTabs]
-      .sort((a, b) => (a.updatedAt - b.updatedAt) || (a.openedAt - b.openedAt))
-  }, [tabs, allThreadsForTabFilter])
+  const sortedTabs = useSortedTabs()
 
   const logKeyboardScroll = useCallback((event: string, details: Record<string, unknown> = {}) => {
     const container = scrollContainerRef.current
