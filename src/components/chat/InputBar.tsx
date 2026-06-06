@@ -29,6 +29,7 @@ import { InputBarTalkMode, type InputBarTalkModeState } from './InputBarTalkMode
 import { InputBarAttachments } from './InputBarAttachments'
 import { EditingMessageRow, QueuedMessageRow } from './InputBarStatusRows'
 import { FailedDictationPrompt, TranscribingRow, VoiceErrorRow } from './InputBarVoiceStatus'
+import { AtMentionPalette, SlashCommandPalette, ToastRow } from './InputBarPalettes'
 
 interface Props {
   onSend: (message: string, images?: string[], files?: PendingFile[]) => void
@@ -700,85 +701,20 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       )}
       <div className="max-w-[900px] mx-auto p-3 pointer-events-auto">
 
-        {/* Slash command palette */}
-        {/* Toast (slash command feedback) */}
-        {toast && (
-          <div className="mb-2 flex justify-center animate-[fadeSlideIn_0.2s_ease-out]" role="status" aria-live="polite">
-            <div className="px-3 py-1.5 rounded-full bg-accent/12 text-accent text-xs font-medium">
-              {toast}
-            </div>
-          </div>
-        )}
-        {/* @-mention file picker */}
-        {atQuery !== null && (
-          <div className="mb-2 rounded-[var(--glass-radius)] glass-heavy overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox" aria-label="Mention a file">
-            <div className="px-3 py-1.5 text-[10.5px] uppercase tracking-wider text-muted-foreground font-medium border-b border-border flex items-center gap-1.5">
-              <span>@ Attach file</span>
-              {atQuery && <span className="opacity-70 normal-case tracking-normal">— "{atQuery}"</span>}
-              <span className="ml-auto normal-case tracking-normal text-[10px] opacity-70">↑↓ · ↵ select · esc</span>
-            </div>
-            {atMatches.length === 0 ? (
-              <div className="px-3 py-3 text-[12.5px] text-muted-foreground text-center">
-                {workspaceFiles.length === 0 ? 'Loading workspace…' : `No files match "${atQuery}"`}
-              </div>
-            ) : (
-              <div className="max-h-[260px] overflow-y-auto scrollbar-fine">
-                {atMatches.map((f, i) => (
-                  <button
-                    key={f.path}
-                    role="option"
-                    aria-selected={i === atIndex}
-                    onMouseEnter={() => setAtIndex(i)}
-                    onClick={() => insertAtMention(f.path)}
-                    className={`inline-btn w-full text-left px-3 py-2 flex items-start gap-2.5 text-[13px] transition-colors border-b border-border/40 last:border-0 ${
-                      i === atIndex ? 'bg-accent-soft' : 'hover:bg-accent-soft/60'
-                    }`}
-                  >
-                    <div
-                      className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-px"
-                      style={{ background: 'color-mix(in oklch, var(--color-cat-doc) 16%, transparent)' }}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-cat-doc)' }}>
-                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium truncate text-foreground">{f.title}</div>
-                      <div className="text-[11.5px] text-muted-foreground/80 truncate">{f.folder} · {f.path}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        {showSlashPalette && filteredCommands.length > 0 && (
-          <div className="mb-2 rounded-[var(--glass-radius)] glass-heavy overflow-hidden animate-[fadeSlideIn_0.2s_ease-out]" role="listbox">
-            {filteredCommands.map((cmd, i) => (
-              <button
-                key={cmd.command}
-                role="option"
-                aria-selected={i === slashIndex}
-                onClick={() => selectSlashCommand(cmd)}
-                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${
-                  i === slashIndex
-                    ? 'bg-accent/10 text-accent'
-                    : 'text-text-light dark:text-text-dark hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50'
-                }`}
-              >
-                <span className="text-sm font-mono font-medium">{cmd.command}</span>
-                <span className="text-xs text-text-light-muted dark:text-text-dark-muted truncate">{cmd.description}</span>
-                {cmd.arg && (
-                  <span className="text-[10px] font-mono text-text-light-muted/60 dark:text-text-dark-muted/60 truncate">{cmd.arg}</span>
-                )}
-                {cmd.local && (
-                  <span className="ml-auto text-[10px] text-text-light-muted/50 dark:text-text-dark-muted/50 uppercase tracking-wide">local</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
+        <ToastRow message={toast} />
+        <AtMentionPalette
+          query={atQuery}
+          matches={atMatches}
+          selectedIndex={atIndex}
+          workspaceFileCount={workspaceFiles.length}
+          onHover={setAtIndex}
+          onSelect={insertAtMention}
+        />
+        <SlashCommandPalette
+          commands={filteredCommands}
+          selectedIndex={slashIndex}
+          onSelect={selectSlashCommand}
+        />
 
         <VoiceErrorRow error={voice.error} />
         <FailedDictationPrompt
