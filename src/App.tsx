@@ -122,35 +122,37 @@ export function App() {
   const visiblePanelRef = useRef(visiblePanel)
   visiblePanelRef.current = visiblePanel
   const setVisiblePanel = useCallback((next: string) => {
-    _setVisiblePanel(prev => {
-      if (next !== prev) {
-        console.log('[CLAVUS-PANEL]', prev, '→', next, new Error().stack?.split('\n').slice(1, 4).join(' | '))
-        // Reset model & reasoning to Auto when navigating to home
-        if (next === 'home') {
-          useModelStore.getState().setSelectedModelId('auto')
-          useChatSettingsStore.getState().setGlobalReasoning(null)
-        }
-        // Reflect the visible panel in the URL hash so it can be deep-linked.
-        const tabs = useTabsStore.getState().tabs
-        const tab = tabs.find(t => t.id === next)
-        let route: Route
-        if (next === 'home' || !tab) {
-          route = { kind: 'home' }
-        } else if (tab.type === 'chat') {
-          route = { kind: 'chat', threadId: (tab as ChatTab).threadId }
-        } else if (tab.type === 'marksense') {
-          route = { kind: 'file', path: (tab as MarksenseTab).path }
-        } else if (tab.type === 'finder') {
-          // Finder tab doesn't have its own URL — fall back to home for the
-          // hash so deep-links don't try to recreate ephemeral preview state.
-          route = { kind: 'home' }
-        } else {
-          route = { kind: 'file', path: (tab as FileTab).path }
-        }
-        pushHash(route, true)
-      }
-      return next
-    })
+    const prev = visiblePanelRef.current
+    if (next === prev) return
+
+    console.log('[CLAVUS-PANEL]', prev, '→', next, new Error().stack?.split('\n').slice(1, 4).join(' | '))
+    visiblePanelRef.current = next
+
+    // Reset model & reasoning to Auto when navigating to home
+    if (next === 'home') {
+      useModelStore.getState().setSelectedModelId('auto')
+      useChatSettingsStore.getState().setGlobalReasoning(null)
+    }
+
+    // Reflect the visible panel in the URL hash so it can be deep-linked.
+    const tabs = useTabsStore.getState().tabs
+    const tab = tabs.find(t => t.id === next)
+    let route: Route
+    if (next === 'home' || !tab) {
+      route = { kind: 'home' }
+    } else if (tab.type === 'chat') {
+      route = { kind: 'chat', threadId: (tab as ChatTab).threadId }
+    } else if (tab.type === 'marksense') {
+      route = { kind: 'file', path: (tab as MarksenseTab).path }
+    } else if (tab.type === 'finder') {
+      // Finder tab doesn't have its own URL — fall back to home for the
+      // hash so deep-links don't try to recreate ephemeral preview state.
+      route = { kind: 'home' }
+    } else {
+      route = { kind: 'file', path: (tab as FileTab).path }
+    }
+    pushHash(route, true)
+    _setVisiblePanel(next)
   }, [])
   // Refs for each panel element
   const panelRefs = useRef<Map<string, HTMLDivElement>>(new Map())
@@ -183,7 +185,6 @@ export function App() {
   const [talkModeThreadId, setTalkModeThreadId] = useState('')
   // Keep talk mode thread in sync with visible panel (unless talk mode is active)
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (visiblePanel !== 'home') setTalkModeThreadId(visiblePanel)
   }, [visiblePanel])
   const talkMode = useTalkMode(talkModeThreadId, send)
@@ -206,7 +207,7 @@ export function App() {
     } else {
       talkMode.toggle()
     }
-  }, [talkMode, talkModeThreadId, visiblePanel, switchThread])
+  }, [talkMode, talkModeThreadId, visiblePanel, switchThread, setVisiblePanel])
 
   // Check for interrupted responses when switching to a chat thread
   useEffect(() => {
@@ -228,17 +229,21 @@ export function App() {
   // while the user is reading chat. Without this, opening a markdown for the
   // first time waits 5+ seconds for two sequential dynamic imports.
   useEffect(() => {
+    type IdleWindow = Window & {
+      requestIdleCallback?: (cb: () => void, options?: { timeout?: number }) => number
+      cancelIdleCallback?: (handle: number) => void
+    }
+    const idleWindow = window as IdleWindow
     const idle: (cb: () => void) => number =
-      'requestIdleCallback' in window
-        ? (cb) => (window as any).requestIdleCallback(cb, { timeout: 2000 })
+      idleWindow.requestIdleCallback
+        ? (cb) => idleWindow.requestIdleCallback?.(cb, { timeout: 2000 }) ?? window.setTimeout(cb, 800)
         : (cb) => window.setTimeout(cb, 800)
     const handle = idle(() => {
       void import('./components/marksense/MarksensePanel.tsx')
       void import('./marksense')
     })
     return () => {
-      const cancelIdle = (window as Window & { cancelIdleCallback?: (handle: number) => void }).cancelIdleCallback
-      if (cancelIdle) cancelIdle(handle)
+      if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(handle)
       else globalThis.clearTimeout(handle)
     }
   }, [])
@@ -246,7 +251,7 @@ export function App() {
   // Canvas state
   const [canvasOpen, setCanvasOpen] = useState(false)
   const [canvasContent, setCanvasContent] = useState('')
-  const [canvasTitle, setCanvasTitle] = useState('')
+  const canvasTitle = ''
 
   // Split view state (desktop only)
   const [splitDocPath, setSplitDocPath] = useState<string | null>(null)
@@ -616,7 +621,7 @@ export function App() {
       window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop])
+  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop, checkRecovery, setVisiblePanel])
 
   // Initial scroll. If the app was opened via a deep link, land directly
   // on that file/chat panel. Otherwise keep the old behavior: Home is the
@@ -800,7 +805,7 @@ export function App() {
       container.removeEventListener('scroll', handleScroll)
       if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [logKeyboardScroll, pinVisiblePanelIfNeeded, sortedTabs, switchThread])
+  }, [logKeyboardScroll, pinVisiblePanelIfNeeded, sortedTabs, switchThread, setVisiblePanel])
 
   // When tabs load/sync or reorder by activity, the active panel's DOM position
   // can move while scrollLeft still points at the old column index. Pin in the
@@ -847,7 +852,7 @@ export function App() {
         isProgrammaticScroll.current = false
       }, 350)
     })
-  }, [switchThread, sortedTabs])
+  }, [switchThread, sortedTabs, setVisiblePanel])
 
   // Wire up ref so navigateToThread can use scrollToTab
   useEffect(() => {
@@ -928,7 +933,7 @@ export function App() {
         console.warn('[Clavus] handleSend dropped — visiblePanel is home but isHomeVisible() was false')
       }
     }
-  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs])
+  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs, setVisiblePanel])
 
   useEffect(() => {
     const handleInteractiveSend = (event: Event) => {
@@ -1033,7 +1038,7 @@ export function App() {
         })
       }
     }
-  }, [closeTab, scrollToTab, sortedTabs])
+  }, [closeTab, scrollToTab, sortedTabs, setVisiblePanel])
 
   // Close a non-chat tab (e.g. Finder) and navigate to a neighbor or home.
   const handleCloseTab = useCallback((tabId: string) => {
@@ -1072,17 +1077,7 @@ export function App() {
     }
     setVisiblePanel(tabId)
     if (existing?.type === 'chat') switchThread((existing as ChatTab).threadId)
-  }, [switchThread])
-
-  const handleDesktopNewChat = useCallback(() => {
-    setSplitDocPath(null)
-    setSplitExpanded(null)
-    const createThread = useThreadsStore.getState().createThread
-    const newThreadId = createThread()
-    switchThread(newThreadId)
-    ensureChatTab(newThreadId, 'New conversation')
-    setVisiblePanel(newThreadId)
-  }, [switchThread])
+  }, [switchThread, setVisiblePanel])
 
   const handleOpenFinder = useCallback(() => {
     const id = openOrFocusFinderTab()
@@ -1174,7 +1169,7 @@ export function App() {
       startY: event.clientY,
       wasSwipeInProgress,
     })
-  }, [logKeyboardScroll, sortedTabs, switchThread])
+  }, [logKeyboardScroll, sortedTabs, switchThread, setVisiblePanel])
 
   const markHorizontalGestureMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const start = gestureStartPoint.current
@@ -1273,7 +1268,6 @@ export function App() {
             tabs={[...sortedTabs].reverse()}
             activeTabId={visiblePanel}
             onSelectTab={handleDesktopSelectTab}
-            onNewChat={handleDesktopNewChat}
             onGoHome={() => { setVisiblePanel('home'); setSplitDocPath(null); setSplitExpanded(null) }}
             onOpenDoc={(path, title) => {
               // On desktop, if a chat tab is active, open the doc in split view

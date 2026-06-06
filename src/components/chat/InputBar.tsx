@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder'
-import { haptic, isNative } from '../../lib/native'
+import { haptic } from '../../lib/native'
 import { useModelStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
 import { useAutoClassifyStore } from '../../state/autoClassify'
@@ -139,7 +139,6 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
   const [slashIndex, setSlashIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
-  const [menuState, setMenuState] = useState<'closed' | 'open' | 'closing'>('closed')
   // @-mention palette state
   const [atQuery, setAtQuery] = useState<string | null>(null) // null = closed
   const [atIndex, setAtIndex] = useState(0)
@@ -196,16 +195,6 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       ta.setSelectionRange(pos, pos)
     })
   }, [value, threadId])
-  const menuRef = useRef<HTMLDivElement>(null)
-  const menuBtnRef = useRef<HTMLButtonElement>(null)
-
-  const toggleMenu = useCallback(() => {
-    setMenuState((s) => s === 'open' ? 'closing' : 'open')
-  }, [])
-
-  const closeMenu = useCallback(() => {
-    setMenuState('closing')
-  }, [])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
@@ -454,6 +443,8 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       setTimeout(() => textareaRef.current?.focus(), 50)
     },
   })
+  const voiceState = voice.state
+  const cancelVoiceRecording = voice.cancel
 
   // Report recording state changes to parent (for header recording bar)
   useEffect(() => {
@@ -462,17 +453,17 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
 
   // Global Escape key listener to cancel active recordings regardless of focus
   useEffect(() => {
-    if (voice.state !== 'recording') return
+    if (voiceState !== 'recording') return
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
         e.stopPropagation()
-        voice.cancel()
+        cancelVoiceRecording()
       }
     }
     document.addEventListener('keydown', onKeyDown, true)
     return () => document.removeEventListener('keydown', onKeyDown, true)
-  }, [voice.state, voice.cancel])
+  }, [voiceState, cancelVoiceRecording])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -641,10 +632,6 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     setGlobalModelId(id)
     if (threadId) useThreadsStore.getState().updateThreadModel(threadId, id)
   }, [setGlobalModelId, threadId])
-  const currentModel = MODEL_OPTIONS.find((m) => m.id === selectedModelId) || MODEL_OPTIONS[0]
-  const autoEnabled = useAutoClassifyStore((s) => s.autoEnabled)
-  const autoClassification = useAutoClassifyStore((s) => threadId ? s.classifications[threadId] ?? null : null)
-  const autoPending = useAutoClassifyStore((s) => threadId ? s.pending[threadId] ?? false : false)
 
   // Queued message for this thread (set when the user submits while streaming).
   const queuedMessage = useChatStore((s) =>
@@ -676,19 +663,6 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     haptic.tap()
     onSendNow?.()
   }, [onSendNow, queuedMessage])
-
-  const menuVisible = menuState !== 'closed'
-
-  // Close menu on outside click
-  useEffect(() => {
-    if (menuState !== 'open') return
-    const handler = (e: MouseEvent) => {
-      const t = e.target as Node
-      if (menuRef.current && !menuRef.current.contains(t) && !menuBtnRef.current?.contains(t)) closeMenu()
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [menuState, closeMenu])
 
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0 || pendingFiles.length > 0
@@ -1237,95 +1211,6 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
   )
 }
 
-function PaperclipIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-    </svg>
-  )
-}
-
-function MicIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="22"/>
-    </svg>
-  )
-}
-
-function ArrowUpIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 19V5"/>
-      <path d="m5 12 7-7 7 7"/>
-    </svg>
-  )
-}
-
-const REASONING_LEVELS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
-
-function ReasoningPicker({ threadId, onChange }: { threadId: string; onChange?: () => void }) {
-  // Subscribe to the override for this thread so the active state stays in sync.
-  const current = useChatSettingsStore((s) => s.reasoningOverride[threadId] ?? null)
-  return (
-    <div className="flex items-center gap-2 px-2 pb-2 -mt-1">
-      <span className="text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground pl-1 pr-2 shrink-0">
-        Reasoning
-      </span>
-      <div className="flex-1 flex items-center gap-1">
-        {REASONING_LEVELS.map((level) => {
-          const isActive = current === level
-          return (
-            <button
-              key={level}
-              onPointerDown={(e) => e.preventDefault()}
-              onClick={() => {
-                useChatSettingsStore.getState().setReasoningOverride(threadId, level)
-                onChange?.()
-              }}
-              className={`flex-1 px-1 py-1.5 rounded-md text-[11px] font-medium text-center transition-all ${
-                isActive
-                  ? 'bg-primary/15 text-primary'
-                  : 'text-muted-foreground hover:bg-accent-soft'
-              }`}
-            >
-              {level === 'xhigh' ? 'x-high' : level}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function StopIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <rect x="6" y="6" width="12" height="12" rx="2"/>
-    </svg>
-  )
-}
-
-function CloseIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-    </svg>
-  )
-}
-
-function MenuIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none"/>
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
-      <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none"/>
-    </svg>
-  )
-}
-
 // ── Small toolbar primitives (mockup-style) ────────────────────────────────
 
 function PaperclipMini() {
@@ -1360,14 +1245,6 @@ function StopMini() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
       <rect x="6" y="6" width="12" height="12" rx="2"/>
-    </svg>
-  )
-}
-
-function SparklesMini() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/>
     </svg>
   )
 }

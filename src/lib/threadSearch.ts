@@ -26,8 +26,8 @@ export async function searchThreadsServer(
     if (!res.ok) return []
     const data = await res.json()
     return Array.isArray(data) ? data : []
-  } catch (err: any) {
-    if (err?.name === 'AbortError') return []
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') return []
     return []
   }
 }

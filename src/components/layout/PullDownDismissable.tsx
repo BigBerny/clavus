@@ -9,6 +9,7 @@ interface PullDownDismissableProps {
 }
 
 type Phase = 'idle' | 'undecided' | 'pulling-down' | 'horizontal' | 'vertical-scroll'
+type PullDownWindow = Window & { __pullDownActive?: boolean }
 
 const THRESHOLD = 8       // px before committing to a direction
 const DISMISS_THRESHOLD = 200 // raw px of finger pull to trigger dismiss
@@ -21,6 +22,7 @@ function rubberBand(distance: number): number {
 }
 
 export function PullDownDismissable({ children, tabId, onDismiss, enabled = true }: PullDownDismissableProps) {
+  const pullDownWindow = window as PullDownWindow
   const containerRef = useRef<HTMLDivElement>(null)
   const phaseRef = useRef<Phase>('idle')
   const startYRef = useRef(0)
@@ -86,7 +88,7 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
           }
           phaseRef.current = 'pulling-down'
           // Signal to global pull-to-refresh handler
-          ;(window as any).__pullDownActive = true
+          pullDownWindow.__pullDownActive = true
         } else {
           phaseRef.current = 'vertical-scroll'
           return
@@ -122,11 +124,9 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
     }
 
     const onTouchEnd = () => {
-      ;(window as any).__pullDownActive = false
+      pullDownWindow.__pullDownActive = false
 
       if (phaseRef.current === 'pulling-down') {
-        const translated = currentTranslateRef.current
-
         if (rawDyRef.current > DISMISS_THRESHOLD) {
           // Dismiss animation
           container.style.transition = 'transform 0.3s ease-in, opacity 0.3s ease-in'
@@ -179,9 +179,9 @@ export function PullDownDismissable({ children, tabId, onDismiss, enabled = true
       container.removeEventListener('touchend', onTouchEnd)
       container.removeEventListener('touchcancel', onTouchEnd)
       cancelAnimationFrame(animFrameRef.current)
-      ;(window as any).__pullDownActive = false
+      pullDownWindow.__pullDownActive = false
     }
-  }, [enabled, tabId, onDismiss, findScrollableAncestor])
+  }, [enabled, tabId, onDismiss, findScrollableAncestor, pullDownWindow])
 
   return (
     <div className="h-full flex flex-col min-h-0 relative">

@@ -125,10 +125,6 @@ export function useTTS() {
       // Stop any current playback
       stop()
 
-      const config = getConfig()
-      
-      
-
       const clean = cleanForSpeech(text)
       if (!clean) return
 

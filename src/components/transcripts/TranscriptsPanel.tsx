@@ -70,8 +70,8 @@ export function TranscriptsPanel({ onClose }: { onClose: () => void }) {
       } else {
         setState({ kind: 'ok', transcripts: data.transcripts })
       }
-    } catch (err: any) {
-      setState({ kind: 'error', message: err?.message || 'Failed to load transcripts' })
+    } catch (err) {
+      setState({ kind: 'error', message: err instanceof Error ? err.message : 'Failed to load transcripts' })
     }
   }, [])
 

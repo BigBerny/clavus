@@ -222,13 +222,20 @@ async function sendPushToAll(payload: { title: string; body: string; threadId: s
  * Keeps the upstream backend connection alive even when no client is attached.
  */
 function responsesProxyPlugin() {
-  initEventBuffer()
+  let runtimeInitialized = false
 
-  // Initialize the server-side gateway WS connection for OpenClaw agent RPC
-  if (CHAT_BACKEND === 'openclaw' && GATEWAY_TOKEN) {
-    const gwUrl = OPENCLAW_API_TARGET.replace(/^http/, 'ws')
-    console.log(`[responses-proxy] Connecting to gateway WS at ${gwUrl}`)
-    initGatewayWs(gwUrl, GATEWAY_TOKEN)
+  function ensureRuntimeInitialized() {
+    if (runtimeInitialized) return
+    runtimeInitialized = true
+    initEventBuffer()
+
+    // Initialize the server-side gateway WS connection for OpenClaw agent RPC.
+    // Keep this out of build-time plugin creation so `vite build` can exit.
+    if (CHAT_BACKEND === 'openclaw' && GATEWAY_TOKEN) {
+      const gwUrl = OPENCLAW_API_TARGET.replace(/^http/, 'ws')
+      console.log(`[responses-proxy] Connecting to gateway WS at ${gwUrl}`)
+      initGatewayWs(gwUrl, GATEWAY_TOKEN)
+    }
   }
 
   function writeSseHeaders(res: any) {
@@ -573,6 +580,8 @@ function responsesProxyPlugin() {
   }
 
   const attach = (server: any) => {
+    ensureRuntimeInitialized()
+
     server.middlewares.use(async (req: any, res: any, next: any) => {
       const url: string = req.url || ''
 

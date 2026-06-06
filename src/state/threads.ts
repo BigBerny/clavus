@@ -157,7 +157,7 @@ export function saveThreadMessages(threadId: string, messages: Message[]) {
 // === Server Sync ===
 
 let syncThreadsTimer: ReturnType<typeof setTimeout> | null = null
-let syncMessagesTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+const syncMessagesTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
 
 function syncThreadsToServer(threads: Thread[]) {
   // Debounce to avoid flooding

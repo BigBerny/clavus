@@ -28,10 +28,10 @@ export function useFileExplorer(initialPath = '/', apiBase = DOCUMENTS_API) {
         entries: data.entries,
         loading: false,
       }))
-    } catch (err: any) {
-      setState(prev => ({ ...prev, loading: false, error: err.message }))
+    } catch (err) {
+      setState(prev => ({ ...prev, loading: false, error: err instanceof Error ? err.message : 'Failed to load directory' }))
     }
-  }, [])
+  }, [apiBase])
 
   const toggleDir = useCallback((path: string) => {
     setState(prev => {

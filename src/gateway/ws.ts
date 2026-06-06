@@ -1,7 +1,7 @@
 // OpenClaw Gateway WebSocket Client
 // Handles connection, authentication, RPC, and event dispatch
 
-import { getDeviceIdentity, signChallenge, type DeviceIdentity } from './auth.ts'
+import { signChallenge, type DeviceIdentity } from './auth.ts'
 
 // --- Types ---
 

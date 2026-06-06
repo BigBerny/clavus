@@ -166,7 +166,6 @@ export const ToolCallCard = memo(function ToolCallCard({ toolCall }: { toolCall:
 export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls: ToolCall[]; isStreaming?: boolean; className?: string }) {
   const [expanded, setExpanded] = useState(!!isStreaming)
   const normalizedToolCalls = useMemo(() => normalizeToolCalls(toolCalls), [toolCalls])
-  if (!normalizedToolCalls.length) return null
 
   // Auto-expand while streaming
   useEffect(() => {
@@ -179,7 +178,9 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
       const timer = setTimeout(() => setExpanded(false), 300)
       return () => clearTimeout(timer)
     }
-  }, [isStreaming])
+  }, [isStreaming, expanded])
+
+  if (!normalizedToolCalls.length) return null
 
   const lastCall = normalizedToolCalls[normalizedToolCalls.length - 1]
   const { icon, label } = getToolDisplay(lastCall.name, lastCall.args)

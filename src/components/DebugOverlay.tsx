@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 
 function getScrollInfo() {
-  const root = document.getElementById('root')
   const vv = window.visualViewport
 
   // Find horizontal scroll-snap container
@@ -73,7 +72,7 @@ function getScrollInfo() {
 
 export function DebugOverlay() {
   const enabled = useMemo(() => new URLSearchParams(window.location.search).get('debug') === '1', [])
-  const [info, setInfo] = useState<any>(() => (enabled ? getScrollInfo() : null))
+  const [info, setInfo] = useState<ReturnType<typeof getScrollInfo> | null>(() => (enabled ? getScrollInfo() : null))
 
   useEffect(() => {
     if (!enabled) return

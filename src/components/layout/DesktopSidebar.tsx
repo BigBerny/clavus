@@ -8,7 +8,6 @@ interface Props {
   tabs: Tab[]
   activeTabId: string
   onSelectTab: (tabId: string) => void
-  onNewChat: () => void
   onGoHome: () => void
   /**
    * Called when the user clicks a linked-doc row under a conversation.
@@ -109,7 +108,6 @@ export const DesktopSidebar = memo(function DesktopSidebar({
   tabs,
   activeTabId,
   onSelectTab,
-  onNewChat,
   onGoHome,
   onOpenDoc,
   onOpenThread,

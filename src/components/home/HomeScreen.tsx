@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
 import { useThreadsStore } from '../../state/threads'
-import { useChatStore } from '../../state/chat.ts'
 import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab, type MarksenseTab } from '../../state/tabs'
 import { ThreadSearch } from './ThreadSearch.tsx'
 import { applyRoute } from '../../state/router.ts'
@@ -439,18 +438,4 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
       </div>
     </div>
   )
-}
-
-// Cleanup: side-effect free helper kept for chat store guard (was used in the
-// old swipe-to-delete tab item; preserved for callers that import it).
-export function _cleanupChatStoreForTabDeletion(tabId: string) {
-  const tab = useTabsStore.getState().tabs.find((t) => t.id === tabId)
-  if (tab?.type === 'chat') {
-    const threadId = (tab as ChatTab).threadId
-    const ts = useChatStore.getState().threadStates[threadId]
-    if (ts?.isStreaming) ts.abortController?.abort()
-    const rest = { ...useChatStore.getState().threadStates }
-    delete rest[threadId]
-    useChatStore.setState({ threadStates: rest })
-  }
 }

@@ -24,7 +24,7 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
       const timer = setTimeout(() => setExpanded(false), 300)
       return () => clearTimeout(timer)
     }
-  }, [isStreaming])
+  }, [isStreaming, expanded])
 
   // Auto-expand when streaming starts
   useEffect(() => {
@@ -423,33 +423,11 @@ interface Props {
   threadId?: string
 }
 
-function relativeTime(timestamp: number): string {
-  const diff = Math.floor((Date.now() - timestamp) / 1000)
-  if (diff < 10) return 'just now'
-  if (diff < 60) return `${diff}s ago`
-  const mins = Math.floor(diff / 60)
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
-}
-
-function fullDateTime(timestamp: number): string {
-  return new Date(timestamp).toLocaleString(undefined, {
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
-  })
-}
-
 export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, ttsLoading, onSpeak, onRegenerate, onStartEdit, isBeingEdited, onBranch, showAvatar = true, isLastInGroup = true, threadId }: Props) {
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
 
-  // Hide empty assistant messages (no content, not streaming)
-  if (isAssistant && !message.content?.trim() && !message.streaming && !message.thinking) {
-    return null
-  }
   const contentParts = useMemo(() =>
     isAssistant ? splitContentBlocks(message.content) : [],
     [isAssistant, message.content]
@@ -460,17 +438,9 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   )
   const isError = isSystem && message.content.startsWith('Error:')
   const [copied, setCopied] = useState(false)
-  const [showFullTime, setShowFullTime] = useState(false)
-  const [relTime, setRelTime] = useState(() => relativeTime(message.timestamp))
   const [infoUnlocked, setInfoUnlocked] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Update relative time periodically
-  useEffect(() => {
-    const interval = setInterval(() => setRelTime(relativeTime(message.timestamp)), 30000)
-    return () => clearInterval(interval)
-  }, [message.timestamp])
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
@@ -505,6 +475,11 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const handleSpeak = useCallback(() => {
     onSpeak?.(message.id, message.content)
   }, [onSpeak, message.id, message.content])
+
+  // Hide empty assistant messages (no content, not streaming)
+  if (isAssistant && !message.content?.trim() && !message.streaming && !message.thinking) {
+    return null
+  }
 
   // System/error messages
   if (isSystem) {

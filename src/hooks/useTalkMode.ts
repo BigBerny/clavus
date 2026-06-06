@@ -147,45 +147,48 @@ export function useTalkMode(
 
   // Record audio
   const record = useCallback((signal: AbortSignal): Promise<Blob | null> => {
-    return new Promise(async (resolve) => {
+    return new Promise((resolve) => {
       if (signal.aborted) { resolve(null); return }
 
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        })
-        streamRef.current = stream
+      const startRecording = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          })
+          streamRef.current = stream
 
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
-        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
-        mediaRecorderRef.current = recorder
-        chunksRef.current = []
+          const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus'
+            : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''
+          const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
+          mediaRecorderRef.current = recorder
+          chunksRef.current = []
 
-        recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-        recorder.onstop = () => {
-          stream.getTracks().forEach(t => t.stop())
-          streamRef.current = null
-          const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType })
-          resolve(blob.size > 0 ? blob : null)
+          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+          recorder.onstop = () => {
+            stream.getTracks().forEach(t => t.stop())
+            streamRef.current = null
+            const blob = new Blob(chunksRef.current, { type: recorder.mimeType || mimeType })
+            resolve(blob.size > 0 ? blob : null)
+          }
+
+          const onAbort = () => {
+            if (recorder.state === 'recording') recorder.stop()
+            else { stream.getTracks().forEach(t => t.stop()); resolve(null) }
+          }
+          signal.addEventListener('abort', onAbort, { once: true })
+
+          recorder.start(200)
+
+          // Auto-stop after silence detection or max 30s
+          setTimeout(() => {
+            if (recorder.state === 'recording') recorder.stop()
+          }, 30000)
+        } catch {
+          resolve(null)
         }
-
-        const onAbort = () => {
-          if (recorder.state === 'recording') recorder.stop()
-          else { stream.getTracks().forEach(t => t.stop()); resolve(null) }
-        }
-        signal.addEventListener('abort', onAbort, { once: true })
-
-        recorder.start(200)
-
-        // Auto-stop after silence detection or max 30s
-        setTimeout(() => {
-          if (recorder.state === 'recording') recorder.stop()
-        }, 30000)
-      } catch {
-        resolve(null)
       }
+      void startRecording()
     })
   }, [])
 

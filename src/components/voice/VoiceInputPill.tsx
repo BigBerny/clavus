@@ -149,8 +149,8 @@ export const VoiceInputPill = forwardRef<HTMLDivElement, Props>(function VoiceIn
         height: `${s.bodyH}px`,
         borderRadius: `${s.bodyH / 2}px`,
         // Custom property used by knob position class
-        ['--knob-inset' as any]: `${s.knobInset}px`,
-      }}
+        '--knob-inset': `${s.knobInset}px`,
+      } as CSSProperties & { '--knob-inset': string }}
       aria-label={ariaLabel}
     >
       {/* Pause button — center-left when locked */}

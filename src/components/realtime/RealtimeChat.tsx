@@ -9,6 +9,15 @@ interface Message {
 }
 
 type RecordingMode = 'idle' | 'holding' | 'locked'
+type RealtimeApiEvent = {
+  type?: string
+  item?: { id?: string; role?: string; type?: string }
+  item_id?: string
+  response_id?: string
+  transcript?: string
+  delta?: string
+  error?: { message?: string }
+}
 
 const LOCK_DISTANCE = LOCK_DISTANCE_FULL // shared with VoiceInputPill
 
@@ -138,19 +147,19 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
         const answerSdp = await sdpResp.text()
         await pc.setRemoteDescription({ type: 'answer', sdp: answerSdp })
 
-      } catch (err: any) {
+      } catch (err) {
         if (!cancelled) {
           setStatus('error')
-          setError(err.message || 'Connection failed')
+          setError(err instanceof Error ? err.message : 'Connection failed')
         }
       }
     }
 
-    function handleEvent(event: any) {
+    function handleEvent(event: RealtimeApiEvent) {
       switch (event.type) {
         case 'conversation.item.created': {
           const item = event.item
-          if (item?.role === 'user' && item?.type === 'message') {
+          if (item?.role === 'user' && item?.type === 'message' && item.id) {
             const placeholderId = `user-${item.id}`
             pendingUserItemsRef.current.set(item.id, placeholderId)
             setMessages(prev => [...prev, {
@@ -165,8 +174,8 @@ export function RealtimeChat({ onClose }: { onClose: () => void }) {
 
         case 'conversation.item.input_audio_transcription.completed': {
           const text = event.transcript?.trim()
-          const itemId = event.item_id
-          const placeholderId = pendingUserItemsRef.current.get(itemId)
+          const itemId = event.item_id || ''
+          const placeholderId = itemId ? pendingUserItemsRef.current.get(itemId) : undefined
 
           if (placeholderId && text) {
             pendingUserItemsRef.current.delete(itemId)

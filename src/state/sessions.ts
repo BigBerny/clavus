@@ -20,6 +20,14 @@ interface SessionsState {
   setLoading: (loading: boolean) => void
 }
 
+type GatewaySession = {
+  key?: string
+  name?: string
+  createdAt?: number
+  updatedAt?: number
+  messageCount?: number
+}
+
 const ACTIVE_SESSION_KEY = 'clavus-active-session'
 
 export const useSessionsStore = create<SessionsState>((set) => ({
@@ -39,13 +47,17 @@ export const useSessionsStore = create<SessionsState>((set) => ({
 export async function fetchSessions(): Promise<Session[]> {
   try {
     const result = await gateway.rpc('sessions.list') as Record<string, unknown>
-    const sessions: Session[] = Object.values(result).map((s: any) => ({
-      key: s.key,
-      name: s.name || s.key.split(':').pop() || 'Session',
-      createdAt: s.createdAt || Date.now(),
-      updatedAt: s.updatedAt || Date.now(),
-      messageCount: s.messageCount || 0,
-    }))
+    const sessions: Session[] = Object.values(result).map((raw) => {
+      const s = raw as GatewaySession
+      const key = s.key || ''
+      return {
+        key,
+        name: s.name || key.split(':').pop() || 'Session',
+        createdAt: s.createdAt || Date.now(),
+        updatedAt: s.updatedAt || Date.now(),
+        messageCount: s.messageCount || 0,
+      }
+    })
 
     sessions.sort((a, b) => b.updatedAt - a.updatedAt)
     useSessionsStore.getState().setSessions(sessions)
