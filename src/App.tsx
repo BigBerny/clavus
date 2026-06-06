@@ -16,7 +16,6 @@ import { useResponseRecovery } from './hooks/useResponseRecovery.ts'
 import { DesktopSidebar } from './components/layout/DesktopSidebar.tsx'
 import { ConnectionBanner } from './components/layout/ConnectionBanner.tsx'
 import { PanelLoading } from './components/layout/PanelLoading.tsx'
-import { CanvasPanel } from './components/canvas/CanvasPanel.tsx'
 import { consumePendingThread } from './lib/pendingThread.ts'
 import { useModelStore } from './state/preset.ts'
 import { useChatSettingsStore } from './state/chatSettings.ts'
@@ -191,11 +190,6 @@ export function App() {
       else globalThis.clearTimeout(handle)
     }
   }, [])
-
-  // Canvas state
-  const [canvasOpen, setCanvasOpen] = useState(false)
-  const [canvasContent, setCanvasContent] = useState('')
-  const canvasTitle = ''
 
   // Split view state (desktop only)
   const [splitDocPath, setSplitDocPath] = useState<string | null>(null)
@@ -1327,17 +1321,6 @@ export function App() {
                     />
                   </Suspense>
                 </div>
-              </div>
-            )}
-            {/* Canvas side panel (desktop only) */}
-            {canvasOpen && !splitDocPath && (
-              <div className="w-[400px] xl:w-[480px] shrink-0 border-l border-surface-light-3/20 dark:border-surface-dark-3/20">
-                <CanvasPanel
-                  content={canvasContent}
-                  title={canvasTitle}
-                  onSave={(content) => setCanvasContent(content)}
-                  onClose={() => setCanvasOpen(false)}
-                />
               </div>
             )}
           </div>
