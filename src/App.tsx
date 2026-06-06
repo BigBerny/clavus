@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo, lazy, Suspense } from 'react'
-import { ChatView } from './components/chat/ChatView.tsx'
+import { useEffect, useLayoutEffect, useState, useCallback, useRef, useMemo, Suspense } from 'react'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
@@ -22,75 +21,18 @@ import { useChatSettingsStore } from './state/chatSettings.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
 import { FloatingRecordingPill } from './components/voice/FloatingRecordingPill.tsx'
-
-// Lazy-loaded components (code splitting)
-const DebugOverlay = lazy(() => import('./components/DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
-const MarksensePanel = lazy(() => import('./components/marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
-const FileViewerPanel = lazy(() => import('./components/files/FileViewerPanel.tsx').then(m => ({ default: m.FileViewerPanel })))
-const FinderPanel = lazy(() => import('./components/files/FinderPanel.tsx').then(m => ({ default: m.FinderPanel })))
-const ComposeFlow = lazy(() => import('./components/compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
-const RealtimeChat = lazy(() => import('./components/realtime/RealtimeChat.tsx').then(m => ({ default: m.RealtimeChat })))
-const TranscriptsPanel = lazy(() => import('./components/transcripts/TranscriptsPanel.tsx').then(m => ({ default: m.TranscriptsPanel })))
-
-function TokenPrompt({ onSave }: { onSave: (token: string) => void }) {
-  const [token, setToken] = useState('')
-
-  return (
-    <div className="h-full flex items-center justify-center chat-bg p-6">
-      <div className="w-full max-w-sm space-y-6 glass-heavy rounded-[var(--glass-radius-lg)] p-8">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-[var(--glass-radius)] glass flex items-center justify-center">
-            <span className="text-3xl font-bold text-accent">C</span>
-          </div>
-          <h1 className="text-xl font-semibold text-foreground mb-1">Welcome to Clavus</h1>
-          <p className="text-sm text-muted-foreground">
-            Enter your backend API token to get started.
-          </p>
-        </div>
-        <div className="space-y-3">
-          <input
-            type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && token.trim() && onSave(token.trim())}
-            placeholder="Backend API token..."
-            autoFocus
-            aria-label="Backend API token"
-            className="w-full px-4 py-3 text-sm rounded-[var(--glass-radius)] glass text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-accent/50"
-          />
-          <button
-            onClick={() => token.trim() && onSave(token.trim())}
-            disabled={!token.trim()}
-            className="w-full py-3 text-sm font-medium rounded-[var(--glass-radius)] bg-accent text-white hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Connect
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** Wait for scroll-snap to settle: 3 consecutive frames with stable scrollLeft,
- *  or 500ms timeout as a safety net. Returns a cancel function. */
-function waitForScrollSettle(container: HTMLElement, onSettled: () => void): () => void {
-  let cancelled = false
-  let stableFrames = 0
-  let lastLeft = container.scrollLeft
-  const started = Date.now()
-  const check = () => {
-    if (cancelled) return
-    if (Date.now() - started > 500) { onSettled(); return }
-    const currentLeft = container.scrollLeft
-    if (Math.abs(currentLeft - lastLeft) < 1) stableFrames++
-    else stableFrames = 0
-    lastLeft = currentLeft
-    if (stableFrames < 3) requestAnimationFrame(check)
-    else onSettled()
-  }
-  requestAnimationFrame(check)
-  return () => { cancelled = true }
-}
+import { TokenPrompt } from './components/auth/TokenPrompt.tsx'
+import {
+  ComposeFlow,
+  DebugOverlay,
+  FileViewerPanel,
+  FinderPanel,
+  MarksensePanel,
+  RealtimeChat,
+  TranscriptsPanel,
+} from './components/AppLazyPanels.ts'
+import { ChatViewPanel } from './components/chat/ChatViewPanel.tsx'
+import { waitForScrollSettle } from './lib/scrollSettle.ts'
 
 export function App() {
   useVisualViewport()
@@ -1611,45 +1553,5 @@ export function App() {
         </Suspense>
       )}
     </div>
-  )
-}
-
-/**
- * Wrapper for ChatView that subscribes to its thread's messages from the store.
- */
-// Stable empty-messages reference so the selector below does not return a
-// fresh array on every read (which throws React into a getSnapshot infinite
-// loop when the thread state hasn't been hydrated yet).
-const EMPTY_MESSAGES: ReturnType<typeof useChatStore.getState>['threadStates'][string]['messages'] = []
-function ChatViewPanel({ threadId, onRegenerate, onStartEdit, editingMessageId, onBranch }: {
-  threadId: string
-  onRegenerate?: (threadId: string, assistantMessageId: string) => void
-  onStartEdit?: (threadId: string, messageId: string, content: string) => void
-  /** When set and equal to a message's id, that message is being edited in the InputBar. */
-  editingMessageId?: string | null
-  onBranch?: (threadId: string, messageId: string) => void
-}) {
-  const threads = useThreadsStore((s) => s.threads)
-  const thread = threads.find(t => t.id === threadId)
-
-  const messages = useChatStore((s) => s.threadStates[threadId]?.messages ?? EMPTY_MESSAGES)
-
-  useEffect(() => {
-    useChatStore.getState().ensureThread(threadId)
-    // Pull the latest messages from the server. Without this a thread started
-    // on another device opens empty here until SSE eventually fires.
-    refreshThreadMessages(threadId)
-  }, [threadId])
-
-  return (
-    <ChatView
-      messages={messages}
-      title={thread?.title}
-      threadId={threadId}
-      onRegenerate={onRegenerate ? (msgId) => onRegenerate(threadId, msgId) : undefined}
-      onStartEdit={onStartEdit ? (msgId, content) => onStartEdit(threadId, msgId, content) : undefined}
-      editingMessageId={editingMessageId ?? null}
-      onBranch={onBranch ? (msgId) => onBranch(threadId, msgId) : undefined}
-    />
   )
 }
