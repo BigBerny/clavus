@@ -14,6 +14,8 @@ import { getConfig, hasToken } from './gateway/config.ts'
 import { useTalkMode } from './hooks/useTalkMode.ts'
 import { useResponseRecovery } from './hooks/useResponseRecovery.ts'
 import { DesktopSidebar } from './components/layout/DesktopSidebar.tsx'
+import { ConnectionBanner } from './components/layout/ConnectionBanner.tsx'
+import { PanelLoading } from './components/layout/PanelLoading.tsx'
 import { CanvasPanel } from './components/canvas/CanvasPanel.tsx'
 import { consumePendingThread } from './lib/pendingThread.ts'
 import { useModelStore } from './state/preset.ts'
@@ -354,6 +356,13 @@ export function App() {
     setGatewayToken(token)
     setNeedsToken(false)
   }, [setGatewayToken])
+
+  const handleRetryConnection = useCallback(async () => {
+    setConnectionStatus('reconnecting')
+    const config = getConfig()
+    const ok = await checkGateway(config)
+    setConnectionStatus(ok ? 'connected' : 'disconnected')
+  }, [setConnectionStatus])
 
   // Check gateway connectivity + periodic retry when disconnected
   useEffect(() => {
@@ -1176,29 +1185,7 @@ export function App() {
       <div className="tauri-drag-region fixed top-0 left-0 right-0 h-8 z-[9999]" data-tauri-drag-region />
 
       {/* Connection status banners */}
-      {connectionStatus === 'disconnected' && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15">
-          <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80" />
-          <span className="text-[12px] text-amber-600 dark:text-amber-400/90">Connection lost.</span>
-          <button
-            onClick={async () => {
-              setConnectionStatus('reconnecting')
-              const config = getConfig()
-              const ok = await checkGateway(config)
-              setConnectionStatus(ok ? 'connected' : 'disconnected')
-            }}
-            className="inline-btn text-[12px] text-amber-600 dark:text-amber-400 font-medium underline underline-offset-2 hover:text-amber-700 dark:hover:text-amber-300 transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      )}
-      {connectionStatus === 'reconnecting' && (
-        <div className="flex items-center justify-center gap-2 px-4 py-1.5 bg-amber-500/8 border-b border-amber-500/15">
-          <div className="w-1.5 h-1.5 rounded-full bg-amber-500/80 animate-pulse" />
-          <span className="text-[12px] text-amber-600 dark:text-amber-400/90">Reconnecting...</span>
-        </div>
-      )}
+      <ConnectionBanner status={connectionStatus} onRetry={handleRetryConnection} />
 
       {/* Main content */}
       <div className={`flex-1 min-h-0 flex flex-row ${isDesktop ? 'home-screen' : ''}`}>
@@ -1282,7 +1269,7 @@ export function App() {
                   }}
                 />
               ) : (
-                <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+                <Suspense fallback={<PanelLoading />}>
                   {visibleTab?.type === 'chat' && (
                     <ChatViewPanel
                       threadId={(visibleTab as ChatTab).threadId}
@@ -1375,7 +1362,7 @@ export function App() {
                   </button>
                 </div>
                 <div className="flex-1 min-h-0">
-                  <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+                  <Suspense fallback={<PanelLoading />}>
                     <MarksensePanel
                       path={splitDocPath}
                       title={splitDocTitle}
@@ -1428,7 +1415,7 @@ export function App() {
                   {...(!isActive ? { inert: true } : {})}
                 >
                   <PullDownDismissable tabId={tab.id} onDismiss={handleArchiveTab}>
-                    <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="voice-spinner" /></div>}>
+                    <Suspense fallback={<PanelLoading />}>
                       {tab.type === 'chat' && (
                         <ChatViewPanel
                           threadId={(tab as ChatTab).threadId}
