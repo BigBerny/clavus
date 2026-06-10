@@ -160,8 +160,10 @@ export default defineConfig({
         name: 'Clavus',
         short_name: 'Clavus',
         description: 'Mobile-first chat client',
-        theme_color: '#111318',
-        background_color: '#111318',
+        // Matches --color-background dark (oklch(0.165 0.006 50)) so the PWA
+        // launch frame / status bar doesn't flash a mismatched color.
+        theme_color: '#110e0c',
+        background_color: '#110e0c',
         display: 'standalone',
         icons: [
           { src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },

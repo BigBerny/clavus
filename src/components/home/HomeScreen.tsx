@@ -256,15 +256,16 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
           {resolvedTheme === 'dark' ? SunIcon : MoonIcon}
         </button>
 
-        {/* Greeting — frosted-glass hero with coral spark, lifted directly
-            from the Clavus Desktop design. The text-glow class makes the
-            hero readable when floating over a wallpaper-tinted matte. */}
-        <header className="mb-8">
-          <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted-foreground/85 mb-2.5 text-glow">
+        {/* Greeting — coral spark eyebrow + hero. Mobile keeps the original
+            compact 28px hero (per user feedback: the desktop-mockup 46px
+            extrabold felt too loud on a phone); the big frosted-matte hero
+            from the Clavus Desktop design applies on md+ only. */}
+        <header className="mb-6 md:mb-8">
+          <div className="inline-flex items-center gap-1.5 text-[11px] md:text-[12px] font-medium md:font-semibold uppercase tracking-wider md:tracking-[0.04em] text-muted-foreground mb-2 md:mb-2.5 text-glow">
             <span style={{ color: 'var(--accent)' }}>{SparkleIcon}</span>
             {formatDateLabel(now)}
           </div>
-          <h1 className="font-display text-[40px] md:text-[46px] leading-none font-extrabold tracking-[-0.035em] text-foreground text-glow">
+          <h1 className="font-display text-[28px] md:text-[46px] leading-tight md:leading-none font-semibold md:font-extrabold tracking-tight md:tracking-[-0.035em] text-foreground text-glow">
             {greeting(now)}.
           </h1>
         </header>

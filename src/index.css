@@ -721,8 +721,10 @@ html.theme-ready *::after {
      iOS 26 / macOS 26 liquid glass: a faint light film over a darkened blur,
      with the legibility coming from a bright rim, inner highlight, and a
      subtle specular sheen at the top edge — NOT from a dark fill. */
+  /* NOTE: no `position` here — these utilities combine with Tailwind's
+     `absolute`/`fixed` classes, and a `position: relative` in the same layer
+     would override them (it broke the home-screen theme toggle's `right-6`). */
   .glass {
-    position: relative;
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
@@ -733,7 +735,6 @@ html.theme-ready *::after {
       inset 0 1px 0 var(--glass-inner-strong);
   }
   .glass-heavy {
-    position: relative;
     background: var(--glass-bg-heavy);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));

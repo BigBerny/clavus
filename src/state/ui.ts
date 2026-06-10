@@ -35,12 +35,21 @@ function getInitialThemeChoice(): ThemeChoice {
   return 'dark'
 }
 
+// Status-bar / overscroll colors MUST match the real app backgrounds
+// (--color-background: oklch(0.165 0.006 50) dark, oklch(0.985 0.008 80)
+// light). The old values (#0f172a slate / #ffffff) came from a previous
+// palette — after a theme switch iOS painted a mismatched strip behind the
+// notch and in the rubber-band overscroll area.
+const THEME_COLOR_DARK = '#110e0c'
+const THEME_COLOR_LIGHT = '#fdfaf4'
+
 function applyTheme(resolved: ResolvedTheme) {
   document.documentElement.classList.toggle('dark', resolved === 'dark')
+  const color = resolved === 'dark' ? THEME_COLOR_DARK : THEME_COLOR_LIGHT
   const metaDark = document.querySelector('meta[name="theme-color"][media*="dark"]')
   const metaLight = document.querySelector('meta[name="theme-color"][media*="light"]')
-  if (metaDark) metaDark.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#ffffff')
-  if (metaLight) metaLight.setAttribute('content', resolved === 'dark' ? '#0f172a' : '#ffffff')
+  if (metaDark) metaDark.setAttribute('content', color)
+  if (metaLight) metaLight.setAttribute('content', color)
 }
 
 const initialChoice = getInitialThemeChoice()
