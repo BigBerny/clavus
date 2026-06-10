@@ -5,10 +5,37 @@ import './index.css'
 import { App } from './App.tsx'
 import { isNative, nativePlatform, setupNativeShell } from './lib/native'
 
+// ── Stale-module self-heal ──────────────────────────────────────────────────
+// When the dev server restarts (every deploy), pages that are already open
+// hold the old module graph; the next lazy-loaded chunk then 404s/504s and
+// the import throws ("Importing a module script failed" on iOS WebKit,
+// "Failed to fetch dynamically imported module" on Chromium). A reload always
+// fixes it, so do that automatically — at most once per 15s to avoid a loop
+// if the server is genuinely down.
+function isStaleModuleError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  return /Importing a module script failed|Failed to fetch dynamically imported module|error loading dynamically imported module|Outdated Optimize Dep/i.test(msg)
+}
+
+function reloadForStaleModules(): boolean {
+  const KEY = 'clavus:stale-module-reload'
+  try {
+    const last = Number(sessionStorage.getItem(KEY) || 0)
+    if (Date.now() - last < 15_000) return false
+    sessionStorage.setItem(KEY, String(Date.now()))
+  } catch { /* private mode — reload anyway */ }
+  console.warn('[Clavus] Stale module graph detected — reloading')
+  location.reload()
+  return true
+}
+
 // Global error handler — show errors visibly instead of white screen
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null }
   static getDerivedStateFromError(error: Error) { return { error } }
+  componentDidCatch(error: Error) {
+    if (isStaleModuleError(error)) reloadForStaleModules()
+  }
   render() {
     if (this.state.error) {
       return (
@@ -33,9 +60,11 @@ console.log('[Clavus] App starting', { ts: new Date().toISOString(), ua: navigat
 // Catch unhandled errors globally
 window.addEventListener('error', (e) => {
   console.error('[Clavus Global Error]', e.error || e.message)
+  if (isStaleModuleError(e.error || e.message)) reloadForStaleModules()
 })
 window.addEventListener('unhandledrejection', (e) => {
   console.error('[Clavus Unhandled Rejection]', e.reason)
+  if (isStaleModuleError(e.reason)) reloadForStaleModules()
 })
 
 // Tag the document so CSS can target the Capacitor shell when needed
