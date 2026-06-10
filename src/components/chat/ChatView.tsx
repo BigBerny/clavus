@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { MessageBubble } from './MessageBubble'
 import type { Message } from '../../state/chat'
 import { useThreadsStore } from '../../state/threads'
+import { useRecordingStore } from '../../state/recording'
 
 interface Props {
   messages: Message[]
@@ -49,6 +50,24 @@ function getLatestStreamingAssistantId(messages: Message[]): string | null {
   return null
 }
 
+function getLatestVisibleMessageId(messages: Message[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'system') continue
+    if (
+      msg.role === 'assistant'
+      && !msg.content.trim()
+      && !msg.streaming
+      && !msg.thinking
+      && !msg.toolCalls?.length
+    ) {
+      continue
+    }
+    return msg.id
+  }
+  return null
+}
+
 function findMessageElement(container: HTMLElement, messageId: string): HTMLElement | null {
   const els = container.querySelectorAll<HTMLElement>('[data-msg-id]')
   for (const el of els) {
@@ -91,10 +110,33 @@ function FavoriteButton({ threadId }: { threadId: string }) {
   )
 }
 
+function TranscribingMessageBubble() {
+  return (
+    <div
+      className="mt-2 flex justify-end animate-[fadeSlideIn_0.3s_ease-out]"
+      role="status"
+      aria-label="Transcribing voice message"
+      data-transcribing-bubble
+    >
+      <div className="flex items-end gap-1 max-w-[95%] md:max-w-[750px] min-w-0 flex-row-reverse">
+        <div className="glass-user text-foreground/85 rounded-[16px] rounded-br-[5px] px-3.5 py-2 min-w-[10.5rem]">
+          <div className="flex items-center gap-2">
+            <div className="voice-spinner shrink-0" aria-hidden="true" />
+            <span className="text-[15px] leading-[1.55]">Transcribing...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit, editingMessageId, onBranch }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
+  const recordingState = useRecordingStore((s) => s.state)
+  const recordingTargetThreadId = useRecordingStore((s) => s.targetThreadId)
+  const isTranscribingForThread = recordingState === 'transcribing' && recordingTargetThreadId === threadId
   const latestUserIdRef = useRef<string | null>(getLatestUserMessageId(messages))
   const streamingAssistantIdRef = useRef<string | null>(getLatestStreamingAssistantId(messages))
   const manualBottomStreamingIdRef = useRef<string | null>(null)
@@ -169,14 +211,16 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
     }, 120)
   }, [])
 
-  const scrollToBottom = useCallback(() => {
+  const scrollToLatestMessageStart = useCallback(() => {
     const container = containerRef.current
     if (!container) return
-    const streamingAssistantId = getLatestStreamingAssistantId(messages)
-    if (streamingAssistantId) {
-      manualBottomStreamingIdRef.current = streamingAssistantId
-    }
-    const target = container.scrollHeight - container.clientHeight
+    manualBottomStreamingIdRef.current = null
+    const maxTarget = Math.max(0, container.scrollHeight - container.clientHeight)
+    const latestMessageId = getLatestVisibleMessageId(messages)
+    const latestMessageEl = latestMessageId ? findMessageElement(container, latestMessageId) : null
+    const target = latestMessageEl
+      ? Math.min(maxTarget, Math.max(0, getElementTopInScroll(container, latestMessageEl) - getTopLockOffset(container)))
+      : maxTarget
     const start = container.scrollTop
     const distance = target - start
     if (Math.abs(distance) < 10) {
@@ -282,8 +326,9 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
+    if (programmaticScrollRef.current) return
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
-    if (activeStreamingAssistantId && !programmaticScrollRef.current) {
+    if (activeStreamingAssistantId) {
       manualBottomStreamingIdRef.current = atBottom ? activeStreamingAssistantId : null
     }
     setAutoScroll(atBottom)
@@ -301,6 +346,22 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
   useEffect(() => {
     autoScrollRef.current = autoScroll
   }, [autoScroll])
+
+  useEffect(() => {
+    if (!isTranscribingForThread) return
+    const el = containerRef.current
+    if (!el) return
+    const activeStreamingId = streamingAssistantIdRef.current
+    if (activeStreamingId) {
+      manualBottomStreamingIdRef.current = activeStreamingId
+    }
+    requestAnimationFrame(() => {
+      const c = containerRef.current
+      if (!c) return
+      setProgrammaticScrollTop(c, Math.max(0, c.scrollHeight - c.clientHeight))
+      setAutoScroll(true)
+    })
+  }, [isTranscribingForThread, setProgrammaticScrollTop])
 
   // Keep the conversation glued to the bottom while the messages container
   // shrinks during keyboard expansion. ResizeObserver fires before paint, so
@@ -451,7 +512,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
         aria-live="polite"
       >
         <div className="max-w-[900px] mx-auto px-4" style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 3rem)', paddingBottom: 'calc(var(--input-bar-h, 72px) + 0.5rem)' }}>
-        {isEmptyChat ? (
+        {isEmptyChat && !isTranscribingForThread ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-text-light-muted/30 dark:text-text-dark-muted/30">New conversation</p>
           </div>
@@ -489,6 +550,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
                 </div>
               )
             })}
+            {isTranscribingForThread && <TranscribingMessageBubble />}
           </>
         )}
         </div>
@@ -499,10 +561,10 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
         <button
           onTouchStart={(e) => e.preventDefault()}
           onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => { e.stopPropagation(); scrollToBottom() }}
+          onClick={(e) => { e.stopPropagation(); scrollToLatestMessageStart() }}
           className="absolute right-3 z-20 flex items-center justify-center w-11 h-11 rounded-full glass text-muted-foreground active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
           style={{ bottom: 'calc(var(--input-bar-h, 72px) + 0.5rem)' }}
-          aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to bottom'}
+          aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to latest message'}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
           {unseenCount > 0 && (

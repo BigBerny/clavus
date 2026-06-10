@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { Bell, ChevronRight } from 'lucide-react'
 import { useThreadsStore } from '../../state/threads'
 import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab, type MarksenseTab } from '../../state/tabs'
 import { ThreadSearch } from './ThreadSearch.tsx'
@@ -125,12 +126,6 @@ const EmailIcon = (
   </svg>
 )
 
-const ChevronRight = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m9 18 6-6-6-6"/>
-  </svg>
-)
-
 const SunIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
@@ -154,10 +149,10 @@ function ChannelTile({ label, icon, accent, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="inline-btn flex flex-col items-center justify-center gap-1.5 p-3 rounded-[var(--glass-radius)] glass hover:glass-heavy transition-all"
+      className="inline-btn flex flex-col items-center justify-center gap-2 px-3 py-4 rounded-[16px] glass hover:glass-heavy transition-all"
     >
       <span style={{ color: `var(--color-${accent})` }}>{icon}</span>
-      <span className="text-[12px] font-medium text-foreground">{label}</span>
+      <span className="text-[13px] font-semibold text-foreground text-glow">{label}</span>
     </button>
   )
 }
@@ -261,13 +256,15 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
           {resolvedTheme === 'dark' ? SunIcon : MoonIcon}
         </button>
 
-        {/* Greeting */}
-        <header className="mb-6">
-          <div className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-2">
-            <span style={{ color: 'var(--color-cat-violet)' }}>{SparkleIcon}</span>
+        {/* Greeting — frosted-glass hero with coral spark, lifted directly
+            from the Clavus Desktop design. The text-glow class makes the
+            hero readable when floating over a wallpaper-tinted matte. */}
+        <header className="mb-8">
+          <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted-foreground/85 mb-2.5 text-glow">
+            <span style={{ color: 'var(--accent)' }}>{SparkleIcon}</span>
             {formatDateLabel(now)}
           </div>
-          <h1 className="font-display text-[28px] md:text-[32px] leading-tight font-semibold tracking-tight text-foreground">
+          <h1 className="font-display text-[40px] md:text-[46px] leading-none font-extrabold tracking-[-0.035em] text-foreground text-glow">
             {greeting(now)}.
           </h1>
         </header>
@@ -278,36 +275,30 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
             onClick={onEnablePush}
             className="inline-btn w-full mb-5 flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 transition-colors text-left"
           >
-            <span className="text-xl">🔔</span>
+            <Bell className="w-5 h-5 text-primary shrink-0" strokeWidth={1.75} aria-hidden="true" />
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-medium text-foreground">Enable notifications</p>
               <p className="text-[11px] text-muted-foreground">Get notified when Jane sends you a message</p>
             </div>
-            <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+            <ChevronRight className="w-4 h-4 text-primary shrink-0" strokeWidth={2} aria-hidden="true" />
           </button>
         )}
 
-        {/* Compose */}
-        <section className="mb-6">
-          <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
-            Compose
-          </h2>
-          <div className="grid grid-cols-3 gap-2">
+        {/* Compose — section label removed per design feedback; whitespace
+            does the separating now. */}
+        <section className="mb-7">
+          <div className="grid grid-cols-3 gap-2.5">
             <ChannelTile label="Message" icon={ChatIcon} accent="cat-chat" onClick={() => onCompose?.('messaging')} />
             <ChannelTile label="Slack" icon={SlackIcon} accent="cat-voice" onClick={() => onCompose?.('slack')} />
             <ChannelTile label="Email" icon={EmailIcon} accent="cat-doc" onClick={() => onCompose?.('email')} />
           </div>
         </section>
 
-        {/* Pick up where you left off */}
+        {/* Recent threads — section label removed per design feedback. */}
         {(recentTabs.length > 0 || allConversationCount > 0) && (
           <section className="mb-6">
             {recentTabs.length > 0 && (
               <>
-                <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
-                  Pick up where you left off
-                </h2>
-
                 {/* Grouped recent cards */}
                 <div className="home-group">
                   {recentTabs.map((tab, i) => {
@@ -387,7 +378,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     {allConversationCount}
                   </span>
                 )}
-                <span className={`text-muted-foreground transition-transform ${allConversationsOpen ? 'rotate-90' : ''}`}>{ChevronRight}</span>
+                <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${allConversationsOpen ? 'rotate-90' : ''}`} strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
 
@@ -424,12 +415,9 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
           </section>
         )}
 
-        {/* Tools */}
+        {/* Tools — section label removed per design feedback. */}
         <section>
-          <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
-            Tools
-          </h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2.5">
             <ChannelTile label="Finder" icon={FinderIcon} accent="cat-doc" onClick={openFinder} />
             <ChannelTile label="Voice mode" icon={MicIcon} accent="cat-voice" onClick={() => onOpenRealtime?.()} />
             <ChannelTile label="Transcripts" icon={TranscriptsIcon} accent="cat-violet" onClick={() => onOpenTranscripts?.()} />

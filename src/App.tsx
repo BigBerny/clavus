@@ -23,6 +23,19 @@ import { usePushNotifications } from './hooks/usePushNotifications.ts'
 import { useVisualViewport } from './hooks/useVisualViewport.ts'
 import { useSortedTabs } from './hooks/useSortedTabs.ts'
 import { FloatingRecordingPill } from './components/voice/FloatingRecordingPill.tsx'
+import { ClavusNub } from './components/layout/ClavusNub.tsx'
+import { getSmartOpenThreadId, markThreadRead } from './state/lastActivity.ts'
+import { isTauriShell, hideTauriWindow } from './lib/tauriShell.ts'
+import { useSwipeBack } from './hooks/useSwipeBack.ts'
+import { TauriTopBar } from './components/layout/TauriTopBar.tsx'
+
+// Desktop layout switch. 'pager' is the Clavus Desktop design: no sidebar —
+// Home and the active conversation page edge-to-edge with a slide, swipe-back,
+// and a floating back button. Flip to 'sidebar' to restore the previous
+// sidebar + split-view layout (all of that code is kept intact behind this
+// flag).
+const DESKTOP_LAYOUT = 'pager' as 'pager' | 'sidebar'
+const PAGER_DESKTOP = DESKTOP_LAYOUT === 'pager'
 import { TokenPrompt } from './components/auth/TokenPrompt.tsx'
 import {
   ComposeFlow,
@@ -206,6 +219,71 @@ export function App() {
   } | null>(null)
 
   const sortedTabs = useSortedTabs()
+
+  // ── Desktop pager (DESKTOP_LAYOUT === 'pager') ──────────────────────────
+  // Mirrors the design mockup's coordinated pager: Home and the detail pane
+  // move in lockstep to the screen edge. The detail pane stays mounted while
+  // it slides out, and a fresh push mounts off-screen right, then slides in.
+  const [pagerDetailId, setPagerDetailId] = useState<string | null>(null)
+  const [pagerEntering, setPagerEntering] = useState(false)
+  useEffect(() => {
+    if (!isDesktop || !PAGER_DESKTOP) return
+    if (visiblePanel !== 'home') {
+      if (pagerDetailId === null) setPagerEntering(true)
+      if (pagerDetailId !== visiblePanel) setPagerDetailId(visiblePanel)
+    } else if (pagerDetailId !== null) {
+      // Back to home: let the slide-out transition play before unmounting.
+      const id = setTimeout(() => setPagerDetailId(null), 520)
+      return () => clearTimeout(id)
+    }
+  }, [visiblePanel, isDesktop, pagerDetailId])
+  useEffect(() => {
+    if (!pagerEntering) return
+    let done = false
+    const finish = () => { if (!done) { done = true; setPagerEntering(false) } }
+    // Double-rAF fires after the off-screen mount has painted; the timeout is
+    // a fallback for backgrounded tabs where rAF is paused.
+    const raf = requestAnimationFrame(() => requestAnimationFrame(finish))
+    const fallback = setTimeout(finish, 48)
+    return () => { cancelAnimationFrame(raf); clearTimeout(fallback) }
+  }, [pagerEntering])
+
+  const pagerSwipe = useSwipeBack(
+    isDesktop && PAGER_DESKTOP && visiblePanel !== 'home' && !pagerEntering,
+    useCallback(() => setVisiblePanel('home'), [setVisiblePanel]),
+  )
+  // p = 0 → detail fully front; p = 1 → home fully front (mockup geometry).
+  const pagerP = pagerSwipe.dragging
+    ? pagerSwipe.dragFrac
+    : (pagerEntering ? 1 : (visiblePanel === 'home' ? 1 : 0))
+
+  const pagerDetailTab = pagerDetailId ? sortedTabs.find((t) => t.id === pagerDetailId) ?? null : null
+  const pagerDetailThreadTitle = useThreadsStore((s) =>
+    pagerDetailTab?.type === 'chat'
+      ? s.threads.find((t) => t.id === (pagerDetailTab as ChatTab).threadId)?.title
+      : undefined,
+  )
+  const pagerDetailTitle = pagerDetailThreadTitle || pagerDetailTab?.title || 'Untitled'
+
+  // Esc in pager mode: detail → home; home → hide the Tauri window (the
+  // overlay dismiss gesture from the design). Skipped while a modal/overlay
+  // is open or while typing in an input.
+  useEffect(() => {
+    if (!isDesktop || !PAGER_DESKTOP) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'TEXTAREA' || t.tagName === 'INPUT' || t.isContentEditable)) return
+      if (editingMessage || composeChannel || realtimeOpen || transcriptsOpen) return
+      if (visiblePanelRef.current !== 'home') {
+        setVisiblePanel('home')
+      } else if (isTauriShell) {
+        hideTauriWindow()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isDesktop, editingMessage, composeChannel, realtimeOpen, transcriptsOpen, setVisiblePanel])
 
   const logKeyboardScroll = useCallback((event: string, details: Record<string, unknown> = {}) => {
     const container = scrollContainerRef.current
@@ -400,12 +478,13 @@ export function App() {
     })
   }, [])
 
-  // Check for pending thread from IndexedDB (iOS push) or URL params
-  const checkPendingNavigation = useCallback(async () => {
+  // Check for pending thread from IndexedDB (iOS push) or URL params.
+  // Returns true when it navigated somewhere (so smart-open can stand down).
+  const checkPendingNavigation = useCallback(async (): Promise<boolean> => {
     const pendingThreadId = await consumePendingThread()
     if (pendingThreadId) {
       navigateToThread(pendingThreadId)
-      return
+      return true
     }
 
     const params = new URLSearchParams(window.location.search)
@@ -413,8 +492,31 @@ export function App() {
     if (threadParam) {
       window.history.replaceState({}, '', window.location.pathname)
       navigateToThread(threadParam)
+      return true
     }
+    return false
   }, [navigateToThread])
+
+  // ── Smart open ──────────────────────────────────────────────────────────
+  // When the app (re)opens, land on Home unless a conversation has an unread
+  // answer or the user wrote in it within the last 15 minutes — then land
+  // directly in that conversation (mirrors the design mockup's resume).
+  const runSmartOpen = useCallback(() => {
+    const target = getSmartOpenThreadId()
+    if (target) {
+      const store = useThreadsStore.getState()
+      const thread = store.threads.find((t) => t.id === target)
+      if (thread?.archived) store.unarchiveThread(target)
+      const tabId = applyRoute({ kind: 'chat', threadId: target })
+      if (tabId) {
+        setVisiblePanel(tabId)
+        if (!isDesktop) requestAnimationFrame(() => scrollToTabRef.current(tabId))
+      }
+    } else if (visiblePanelRef.current !== 'home') {
+      setVisiblePanel('home')
+      if (!isDesktop) requestAnimationFrame(() => scrollToTabRef.current('home'))
+    }
+  }, [setVisiblePanel, isDesktop])
 
   // ── Deep-link router ────────────────────────────────────────────────────
   // On mount: apply the route from the URL hash (e.g. #/chat/abc).
@@ -446,7 +548,15 @@ export function App() {
 
   useEffect(() => {
     if (needsToken) return
-    syncFromServer().then(() => checkPendingNavigation())
+    syncFromServer().then(async () => {
+      const navigated = await checkPendingNavigation()
+      // Boot smart-open: only when nothing else claimed the navigation (no
+      // push deep-link, no #/chat/... hash route).
+      if (!navigated) {
+        const route = getCurrentRoute()
+        if (!route || route.kind === 'home') runSmartOpen()
+      }
+    })
 
     // Live cross-device sync. Opens a single EventSource and pushes deltas
     // into the threads/chat stores without disturbing the active view.
@@ -462,6 +572,11 @@ export function App() {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         checkPendingNavigation()
+        // Tauri: the window was hidden and just got summoned again — treat it
+        // like a fresh overlay open (mockup behavior): land on Home unless a
+        // conversation has an unread answer / recent user activity. Browser
+        // tabs skip this (tab switches are too frequent to force-navigate).
+        if (isTauriShell) runSmartOpen()
         // Re-run idle auto-archive in case the tab was left open across the cutoff
         archiveStaleThreads()
         // Recover interrupted responses when app becomes visible
@@ -487,8 +602,10 @@ export function App() {
     const handleOpenFile = (e: Event) => {
       const detail = (e as CustomEvent).detail as { path?: string; title?: string }
       if (!detail?.path) return
-      // On desktop, if a chat tab is active and this is a .md file, open in split view
-      if (isDesktop && detail.path.endsWith('.md')) {
+      // On desktop (sidebar layout only), if a chat tab is active and this is
+      // a .md file, open in split view. The pager layout opens it as a
+      // full detail pane instead.
+      if (isDesktop && !PAGER_DESKTOP && detail.path.endsWith('.md')) {
         const currentPanel = visiblePanelRef.current
         const tabs = useTabsStore.getState().tabs
         const currentTab = tabs.find(t => t.id === currentPanel)
@@ -522,7 +639,7 @@ export function App() {
       window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop, checkRecovery, setVisiblePanel])
+  }, [needsToken, navigateToThread, checkPendingNavigation, runSmartOpen, setConnectionStatus, isDesktop, checkRecovery, setVisiblePanel])
 
   // Initial scroll. If the app was opened via a deep link, land directly
   // on that file/chat panel. Otherwise keep the old behavior: Home is the
@@ -774,45 +891,48 @@ export function App() {
     return panelIndex >= sortedTabs.length
   }, [sortedTabs, visiblePanel])
 
+  const createConversationFromHome = useCallback((title = 'New conversation') => {
+    // Capture the model/reasoning the user selected on the home screen before
+    // switching threads, since switchThread restores per-thread settings.
+    const homeModelId = useModelStore.getState().selectedModelId
+    const homeReasoning = useChatSettingsStore.getState().globalReasoning
+    const newThreadId = useThreadsStore.getState().createThread()
+
+    useThreadsStore.getState().updateThreadModel(newThreadId, homeModelId)
+    if (homeReasoning) {
+      useThreadsStore.getState().updateThreadReasoning(newThreadId, homeReasoning)
+    }
+    useModelStore.getState().setSelectedModelId(homeModelId)
+    useChatSettingsStore.getState().setGlobalReasoning(homeReasoning)
+
+    switchThread(newThreadId)
+    ensureChatTab(newThreadId, title)
+    setVisiblePanel(newThreadId)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const panel = panelRefs.current.get(newThreadId)
+        if (panel) {
+          panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+        }
+      })
+    })
+
+    return newThreadId
+  }, [switchThread, setVisiblePanel])
+
+  const ensureVoiceThread = useCallback(() => {
+    if (isHomeVisible()) return createConversationFromHome()
+    if (visiblePanel === 'home') return null
+    const tab = sortedTabs.find(t => t.id === visiblePanel)
+    return tab?.type === 'chat' ? visiblePanel : null
+  }, [createConversationFromHome, isHomeVisible, sortedTabs, visiblePanel])
+
   // Handle sending from any panel — thread-scoped
   const handleSend = useCallback((text: string, images?: string[], files?: import('./state/chat').PendingFile[]) => {
     if (isHomeVisible()) {
-      // Capture the model/reasoning the user selected on the home screen
-      // BEFORE creating the thread (which triggers switchThread and resets state).
-      const homeModelId = useModelStore.getState().selectedModelId
-      const homeReasoning = useChatSettingsStore.getState().globalReasoning
-
-      // Create a NEW thread, send to it directly
-      const createThread = useThreadsStore.getState().createThread
-      const newThreadId = createThread()
-
-      // Persist the home-screen model/reasoning onto the new thread
-      useThreadsStore.getState().updateThreadModel(newThreadId, homeModelId)
-      if (homeReasoning) {
-        useThreadsStore.getState().updateThreadReasoning(newThreadId, homeReasoning)
-      }
-      // Restore model/reasoning so switchThread doesn't clobber them
-      useModelStore.getState().setSelectedModelId(homeModelId)
-      useChatSettingsStore.getState().setGlobalReasoning(homeReasoning)
-
-      switchThread(newThreadId)
-
-      // Ensure a tab exists for the new thread
-      ensureChatTab(newThreadId, 'New conversation')
-
-      // Send immediately targeting the new thread
+      const newThreadId = createConversationFromHome()
       send(newThreadId, text, images, files)
-      setVisiblePanel(newThreadId)
-
-      // Scroll to the new thread panel once it renders
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const panel = panelRefs.current.get(newThreadId)
-          if (panel) {
-            panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
-          }
-        })
-      })
     } else {
       // Send to the visible thread directly (only for chat tabs)
       if (visiblePanel !== 'home') {
@@ -834,7 +954,7 @@ export function App() {
         console.warn('[Clavus] handleSend dropped — visiblePanel is home but isHomeVisible() was false')
       }
     }
-  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs, setVisiblePanel])
+  }, [createConversationFromHome, isHomeVisible, visiblePanel, send, switchThread, sortedTabs])
 
   useEffect(() => {
     const handleInteractiveSend = (event: Event) => {
@@ -958,6 +1078,21 @@ export function App() {
   // Determine if the visible tab is a chat tab (to show InputBar)
   const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
   const isVisibleChat = visiblePanel === 'home' || visibleTab?.type === 'chat'
+
+  // Smart-open read tracking — record that the visible chat thread has been
+  // seen whenever it's on screen and whenever it updates while on screen
+  // (a streamed answer bumps updatedAt, which re-fires this effect). Guarded
+  // by document visibility so an answer arriving while the Tauri window is
+  // hidden still counts as unread.
+  const visibleThreadUpdatedAt = useThreadsStore((s) =>
+    visiblePanel !== 'home' ? s.threads.find((t) => t.id === visiblePanel)?.updatedAt : undefined,
+  )
+  useEffect(() => {
+    if (visiblePanel === 'home') return
+    if (visibleTab?.type !== 'chat') return
+    if (document.visibilityState !== 'visible') return
+    markThreadRead(visiblePanel)
+  }, [visiblePanel, visibleTab?.type, visibleThreadUpdatedAt])
 
   // Desktop sidebar: select tab by setting visiblePanel directly.
   // The sidebar synthesizes ChatTab entries from synced thread state, so the
@@ -1131,8 +1266,14 @@ export function App() {
 
   return (
     <div className="app-shell h-full flex flex-col">
-      {/* Tauri: invisible drag region for transparent titlebar */}
-      <div className="tauri-drag-region fixed top-0 left-0 right-0 h-8 z-[9999]" data-tauri-drag-region />
+      {/* Tauri: macOS-style top bar (clock, drag region) over the frameless
+          transparent window. Falls back to the invisible drag strip when the
+          bar is not rendered (non-Tauri builds skip both via CSS). */}
+      {isTauriShell ? (
+        <TauriTopBar />
+      ) : (
+        <div className="tauri-drag-region fixed top-0 left-0 right-0 h-8 z-[9999]" data-tauri-drag-region />
+      )}
 
       {/* Connection status banners */}
       <ConnectionBanner status={connectionStatus} onRetry={handleRetryConnection} />
@@ -1140,8 +1281,9 @@ export function App() {
       {/* Main content */}
       <div className={`flex-1 min-h-0 flex flex-row ${isDesktop ? 'home-screen' : ''}`}>
 
-        {/* Desktop sidebar — only visible on md+ */}
-        {isDesktop && (
+        {/* Desktop sidebar — only in the legacy 'sidebar' layout (kept intact
+            behind DESKTOP_LAYOUT so it can be re-enabled easily) */}
+        {isDesktop && !PAGER_DESKTOP && (
           <div className="py-2 pl-2 shrink-0">
           <DesktopSidebar
             tabs={[...sortedTabs].reverse()}
@@ -1178,8 +1320,94 @@ export function App() {
         {/* Content area */}
         <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 grid-rows-1">
 
-        {/* Desktop: panel view with optional split */}
-        {isDesktop ? (
+        {/* Desktop (pager layout): Home and the detail view page edge-to-edge,
+            matching the Clavus Desktop design mockup. Home parks off-left
+            while a conversation is front; swipe right (or back / Esc) pages
+            back. */}
+        {isDesktop && PAGER_DESKTOP ? (
+          <div className="row-start-1 col-start-1 min-h-0 relative overflow-hidden">
+            {/* HOME pane */}
+            <div
+              className={`absolute inset-0 flex flex-col min-h-0 pager-pane${pagerSwipe.dragging ? ' is-dragging' : ''}`}
+              style={{ transform: `translateX(${((pagerP - 1) * 100).toFixed(2)}%)` }}
+              {...(visiblePanel !== 'home' ? { inert: true } : {})}
+            >
+              <HomeScreen
+                onCompose={(channel) => setComposeChannel(channel)}
+                onSelectTab={handleDesktopSelectTab}
+                pushState={pushState}
+                onEnablePush={requestPermission}
+                onOpenRealtime={() => setRealtimeOpen(true)}
+                onOpenTranscripts={() => {
+                  setTranscriptsOpen(true)
+                  pushHash({ kind: 'transcripts' })
+                }}
+              />
+            </div>
+
+            {/* DETAIL pane — chat / document / finder pages in from the right */}
+            {pagerDetailTab && (
+              <div
+                className={`absolute inset-0 flex flex-col min-h-0 pager-pane${pagerSwipe.dragging ? ' is-dragging' : ''}`}
+                style={{ transform: `translateX(${(pagerP * 100).toFixed(2)}%)`, touchAction: 'pan-y' }}
+                {...pagerSwipe.handlers}
+                {...(visiblePanel === 'home' ? { inert: true } : {})}
+              >
+                {/* Floating top bar — back, centered title (design mockup) */}
+                <div className="pager-topbar">
+                  <button
+                    className="gcircle"
+                    onClick={() => setVisiblePanel('home')}
+                    title="Back to home (Esc · swipe right)"
+                    aria-label="Back to home"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+                  </button>
+                  <div className="flex-1 min-w-0 text-center">
+                    <div className="pager-title text-glow">{pagerDetailTitle}</div>
+                  </div>
+                  <span className="w-8 shrink-0" aria-hidden="true" />
+                </div>
+                <div className="flex-1 min-h-0 flex flex-col">
+                  <Suspense fallback={<PanelLoading />}>
+                    {pagerDetailTab.type === 'chat' && (
+                      <ChatViewPanel
+                        threadId={(pagerDetailTab as ChatTab).threadId}
+                        onRegenerate={handleRegenerate}
+                        onStartEdit={handleStartEditMessage}
+                        editingMessageId={editingMessage?.threadId === (pagerDetailTab as ChatTab).threadId ? editingMessage.messageId : null}
+                        onBranch={handleBranch}
+                      />
+                    )}
+                    {pagerDetailTab.type === 'marksense' && (
+                      <MarksensePanel
+                        path={(pagerDetailTab as MarksenseTab).path}
+                        title={pagerDetailTab.title}
+                        isVisible={visiblePanel === pagerDetailTab.id}
+                        onOpenFinder={handleOpenFinder}
+                      />
+                    )}
+                    {pagerDetailTab.type === 'file' && (
+                      <FileViewerPanel
+                        path={(pagerDetailTab as FileTab).path}
+                        title={pagerDetailTab.title}
+                        isVisible={visiblePanel === pagerDetailTab.id}
+                        onClose={() => handleCloseTab(pagerDetailTab.id)}
+                      />
+                    )}
+                    {pagerDetailTab.type === 'finder' && (
+                      <FinderPanel
+                        tab={pagerDetailTab as FinderTab}
+                        isVisible={visiblePanel === pagerDetailTab.id}
+                        onClose={() => handleCloseTab(pagerDetailTab.id)}
+                      />
+                    )}
+                  </Suspense>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : isDesktop ? (
           <div className="row-start-1 col-start-1 min-h-0 flex flex-row">
             {/* Main panel — when doc is expanded to full width, collapse to zero
                 but keep in DOM to avoid unmount/remount thrashing */}
@@ -1267,6 +1495,7 @@ export function App() {
                     onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
                     onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
                     threadId={visiblePanel !== 'home' ? visiblePanel : null}
+                    onVoiceThreadNeeded={ensureVoiceThread}
                     draftKey={visiblePanel}
                     onRetry={visiblePanel !== 'home' ? () => {
                       const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
@@ -1414,9 +1643,11 @@ export function App() {
         </div>
         )}
 
-        {/* InputBar floating over content with glass effect (skip when split view has its own) */}
+        {/* InputBar floating over content with glass effect (skip when split view has its own).
+            In pager mode it's constrained to the same centered column as the
+            home view, so it visually belongs to both panes during slides. */}
         {isVisibleChat && !(isDesktop && splitDocPath) && (
-          <div className="row-start-1 col-start-1 self-end z-10" style={{ touchAction: 'none' }}>
+          <div className={`row-start-1 col-start-1 self-end z-10 ${isDesktop && PAGER_DESKTOP ? 'w-full max-w-[720px] mx-auto' : ''}`} style={{ touchAction: 'none' }}>
             <InputBar
               onSend={handleSend}
               onAbort={handleAbort}
@@ -1427,6 +1658,7 @@ export function App() {
               onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               threadId={visiblePanel !== 'home' ? visiblePanel : null}
+              onVoiceThreadNeeded={ensureVoiceThread}
               draftKey={visiblePanel}
               onRetry={visiblePanel !== 'home' ? () => {
                 const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
@@ -1447,6 +1679,25 @@ export function App() {
           composer (Markdown / Finder / File viewer) so the user can stop
           recording even after navigating away from the chat that started it. */}
       <FloatingRecordingPill visible={!isVisibleChat} />
+
+      {/* Always-present Clavus nub — bottom-left corner on desktop, lifted
+          from the Clavus Desktop design. Click summons focus to the active
+          composer (jumps to home if not already there). Hidden during
+          recording so it doesn't collide with the recording pill, and hidden
+          in the Tauri shell where the OS-level hot corner replaces it. */}
+      <ClavusNub
+        enabled={isDesktop && !isTauriShell && !cancelRecordingRef.current}
+        onSummon={() => {
+          if (visiblePanel !== 'home') setVisiblePanel('home')
+          // Defer focus to next tick so panel transitions can settle first.
+          setTimeout(() => {
+            const ta = document.querySelector<HTMLTextAreaElement>(
+              '.inputbar__text, textarea[data-clavus-composer], .home-screen textarea',
+            )
+            ta?.focus()
+          }, 60)
+        }}
+      />
 
       <Suspense fallback={null}>
         <DebugOverlay />

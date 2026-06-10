@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Composer — Stop / Mic / Voice Mockups</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:            oklch(0.165 0.006 50);
+    --fg:            oklch(0.95 0.005 80);
+    --muted:         oklch(0.68 0.008 60);
+    --primary:       oklch(0.72 0.15 280);
+    --primary-fg:    oklch(0.18 0.012 60);
+    --glass-bg:        oklch(0.95 0.008 50 / 0.04);
+    --glass-bg-heavy:  oklch(0.95 0.008 50 / 0.07);
+    --glass-inner-glow: oklch(0.95 0.008 50 / 0.06);
+    --glass-border:        oklch(0.95 0.008 50 / 0.08);
+    --glass-border-strong: oklch(0.95 0.008 50 / 0.16);
+    --glass-shadow: oklch(0 0 0 / 0.35);
+    --red:  oklch(0.62 0.22 25);
+    --red-soft: oklch(0.62 0.22 25 / 0.15);
+    --red-soft-2: oklch(0.62 0.22 25 / 0.25);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--fg);
+    min-height: 100vh;
+    padding: 48px 24px 96px;
+    background:
+      radial-gradient(60% 50% at 20% 0%, oklch(0.60 0.16 300 / 0.18), transparent 70%),
+      radial-gradient(50% 60% at 95% 100%, oklch(0.68 0.13 65 / 0.10), transparent 70%),
+      linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 45%, oklch(0.18 0.018 340) 100%);
+    background-attachment: fixed;
+  }
+
+  .page-title { font-size: 13px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; margin-bottom: 8px; }
+  .page-sub { font-size: 13px; color: oklch(0.6 0.008 60); text-align: center; margin-bottom: 44px; }
+
+  /* spec card */
+  .spec {
+    max-width: 720px; margin: 0 auto 56px; padding: 26px 30px;
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--glass-border); border-radius: 1.5rem;
+    box-shadow: 0 8px 32px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+  }
+  .spec h1 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+  .spec h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.62 0.04 300); margin: 22px 0 10px; }
+  .spec p, .spec li { font-size: 13px; color: oklch(0.74 0.008 60); line-height: 1.7; }
+  .spec ul { padding-left: 18px; } .spec li { margin-bottom: 5px; }
+  .spec code { font-size: 12px; background: oklch(0.95 0.008 50 / 0.07); padding: 1px 6px; border-radius: 5px; color: var(--fg); }
+  .spec .ord { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:6px 0 4px; }
+  .spec .ord .chip { font-size:12px; padding:4px 11px; border-radius:8px; background: oklch(0.95 0.008 50 / 0.06); border:1px solid var(--glass-border); }
+  .spec .ord .chip.accent { background: oklch(0.72 0.15 280 / 0.16); border-color: oklch(0.72 0.15 280 / 0.3); color: oklch(0.86 0.08 280); }
+  .spec .ord .arr { color: var(--muted); font-size: 13px; }
+  .spec .divider { height:1px; background: var(--glass-border); margin: 18px 0; }
+
+  /* grid */
+  .grid { display:flex; flex-wrap:wrap; gap: 56px 48px; justify-content:center; max-width: 1320px; margin: 0 auto; }
+  .section-title { width:100%; text-align:center; font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color: oklch(0.55 0.04 300); margin: 40px 0 4px; }
+
+  .cell { display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .cell .label { font-size:12px; font-weight:600; color: var(--fg); }
+  .cell .desc  { font-size:11.5px; color: var(--muted); max-width: 340px; text-align:center; line-height:1.55; }
+
+  /* phone bottom frame */
+  .frame {
+    width: 380px; border-radius: 28px; padding: 0 0 16px;
+    background: linear-gradient(180deg, transparent 0%, oklch(0.18 0.01 280 / 0.4) 60%);
+    border: 1px solid oklch(0.95 0.008 50 / 0.05);
+    border-bottom: none; position: relative; overflow: visible;
+    display:flex; flex-direction:column; justify-content:flex-end;
+    min-height: 220px;
+  }
+  /* faint chat content so the glass blur reads */
+  .chat { padding: 22px 18px 0; display:flex; flex-direction:column; gap:9px; }
+  .bubble { max-width: 78%; border-radius: 16px; padding: 9px 12px; font-size: 12px; line-height:1.5; }
+  .bubble.a { align-self:flex-start; background: var(--glass-bg); border:1px solid var(--glass-border); color: oklch(0.78 0.008 60); }
+  .bubble.u { align-self:flex-end; background: oklch(0.72 0.15 280 / 0.16); border:1px solid oklch(0.72 0.15 280 / 0.22); color: oklch(0.86 0.05 280); }
+  .typing-dots { display:inline-flex; gap:3px; vertical-align:middle; }
+  .typing-dots span { width:5px; height:5px; border-radius:50%; background: var(--muted); animation: blink 1.2s infinite; }
+  .typing-dots span:nth-child(2){ animation-delay:.2s } .typing-dots span:nth-child(3){ animation-delay:.4s }
+  @keyframes blink { 0%,60%,100%{opacity:.25} 30%{opacity:1} }
+
+  /* float button stack (Down / Stop) */
+  .floats { position:absolute; right: 14px; display:flex; flex-direction:column; gap:9px; align-items:center; z-index:5; }
+  .circ {
+    width:44px; height:44px; border-radius:50%;
+    background: var(--glass-bg-heavy); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border:1px solid var(--glass-border-strong);
+    box-shadow: 0 8px 24px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+    display:flex; align-items:center; justify-content:center; color: var(--muted); position:relative;
+  }
+  .circ.stop { color: var(--red); border-color: oklch(0.62 0.22 25 / 0.35); background: oklch(0.62 0.22 25 / 0.13); }
+  .circ .badge { position:absolute; top:-5px; right:-5px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background: var(--primary); color:#fff; font-size:10.5px; font-weight:700; display:flex; align-items:center; justify-content:center; box-shadow: 0 2px 8px oklch(0.72 0.15 280 / 0.4); }
+  .floats .lbl { font-size: 9px; letter-spacing:.06em; text-transform:uppercase; color: oklch(0.5 0.02 300); margin-top:-3px; }
+
+  /* composer */
+  .composer-wrap { padding: 0 14px; position: relative; }
+  .composer {
+    border-radius: 24px; background: var(--glass-bg-heavy);
+    backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: 0 8px 32px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+    overflow: hidden;
+  }
+  .ta { padding: 12px 16px 4px; font-size: 15px; line-height: 1.5; min-height: 24px; }
+  .ta.placeholder { color: oklch(0.5 0.008 60); }
+  .ta.text { color: var(--fg); }
+
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; padding: 4px 8px 8px; }
+  .tb-left, .tb-right { display:flex; align-items:center; gap:4px; }
+  .pill { height:28px; padding: 0 8px; border-radius:12px; display:flex; align-items:center; gap:6px; font-size:11.5px; color: oklch(0.78 0.005 80); }
+  .pill .dot { width:6px; height:6px; border-radius:50%; }
+  .pill .chev { color: var(--muted); opacity:.6; }
+  .sep { width:1px; height:16px; background: var(--glass-border-strong); margin: 0 6px; }
+  .ibtn { width:32px; height:32px; border-radius:12px; display:flex; align-items:center; justify-content:center; color: var(--muted); }
+  .ibtn.active { color: var(--fg); }
+  .send { width:32px; height:32px; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+  .send.on  { background: var(--primary); color: var(--primary-fg); box-shadow: 0 2px 8px oklch(0.72 0.15 280 / 0.35); }
+  .send.off { background: oklch(0.95 0.008 50 / 0.07); color: var(--muted); }
+
+  /* rows above composer */
+  .row {
+    margin: 0 14px 8px; padding: 8px 12px; border-radius: 18px;
+    background: var(--glass-bg-heavy); border:1px solid var(--glass-border-strong);
+    backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
+    display:flex; align-items:center; gap:10px; font-size:12.5px; color: oklch(0.82 0.008 60);
+  }
+  .row .ring { width:14px; height:14px; border-radius:50%; border:2px solid oklch(0.68 0.008 60 / 0.5); flex-shrink:0; }
+  .row .tag { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color: var(--muted); }
+  .row .grow { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row .mini { width:26px; height:26px; border-radius:9px; display:flex; align-items:center; justify-content:center; color: var(--muted); }
+
+  /* recording waveform */
+  .wave { flex:1; display:flex; align-items:center; justify-content:center; gap:2.5px; height:22px; }
+  .wave i { width:2.5px; border-radius:2px; background: oklch(0.7 0.16 25 / 0.85); animation: w 1s ease-in-out infinite; }
+  @keyframes w { 0%,100%{height:4px} 50%{height:var(--h,16px)} }
+  .reddot { width:8px; height:8px; border-radius:50%; background: var(--red); box-shadow:0 0 0 0 var(--red-soft-2); animation: pulse 1.4s infinite; flex-shrink:0; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 oklch(0.62 0.22 25 / 0.4)} 70%{box-shadow:0 0 0 8px transparent} 100%{box-shadow:0 0 0 0 transparent} }
+  .timer { font-size:12px; font-variant-numeric: tabular-nums; color: var(--muted); flex-shrink:0; }
+
+  .spinner { width:14px; height:14px; border-radius:50%; border:2px solid oklch(0.95 0.008 50 / 0.18); border-top-color: var(--primary); animation: spin .8s linear infinite; flex-shrink:0; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+
+  .shimmer { height:11px; border-radius:6px; background: linear-gradient(90deg, oklch(0.95 0.008 50 / 0.06) 25%, oklch(0.95 0.008 50 / 0.14) 50%, oklch(0.95 0.008 50 / 0.06) 75%); background-size:200% 100%; animation: sh 1.3s linear infinite; }
+  @keyframes sh { to { background-position: -200% 0 } }
+
+  svg { display:block; }
+</style>
+</head>
+<body>
+
+  <div class="page-title">Clavus · Composer — Stop / Mic / Voice</div>
+  <div class="page-sub">Mockup-Vorschlag · Reihenfolge von oben nach unten: Down → Stop → Queue → Input-Field</div>
+
+  <div class="spec">
+    <h1>Das neue Modell</h1>
+    <p>Die Toolbar unten ist <b>immer gleich aufgebaut</b> — links Model/Reasoning/Attach/@, rechts <b>Mic + Send</b>. Diese beiden Buttons verschwinden nie. Damit kannst du jederzeit diktieren, auch während eine Antwort generiert wird.</p>
+
+    <h2>Send-Button</h2>
+    <ul>
+      <li><b>Input leer:</b> Send ist ausgegraut (disabled).</li>
+      <li><b>Input hat Text:</b> Send ist aktiv (lila).</li>
+      <li><b>Während Streaming + Text:</b> Send <i>queued</i> die Nachricht (wird nach der laufenden Antwort gesendet) — Verhalten existiert schon, bleibt.</li>
+    </ul>
+
+    <h2>Stop-Button — eigene Affordance, nicht mehr im Send-Slot</h2>
+    <p>Stop wandert raus aus der Toolbar und wird ein schwebender Kreis am rechten Rand, <b>direkt über dem Input-Field</b> (näher dran als Down, weil das Input die aktive Zone ist). Wenn auch der Scroll-down-Button aktiv ist, stapeln sie sich:</p>
+    <div class="ord">
+      <span class="chip">↓ Down</span><span class="arr">über</span>
+      <span class="chip accent">■ Stop</span><span class="arr">über</span>
+      <span class="chip">○ Queue-Row</span><span class="arr">über</span>
+      <span class="chip">Input-Field</span>
+    </div>
+    <p style="margin-top:8px">Stop erscheint immer wenn gestreamt wird; Down nur wenn man hochgescrollt ist. Treffen sie zusammen, sitzt Down oben, Stop unten.</p>
+
+    <div class="divider"></div>
+    <h2>Offene Frage: Voice-Flow</h2>
+    <p>Recording &amp; Transcribing haben aktuell je eine eigene UI. Unten zwei Varianten, wie sich das einbetten lässt — <b>A (Takeover)</b> vs. <b>B (Inline, Composer bleibt stabil)</b>.</p>
+  </div>
+
+  <!-- ============ CORE STATES ============ -->
+  <div class="section-title">Kern-Zustände</div>
+  <div class="grid">
+
+    <!-- 1 idle -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Klar — soll ich dir die Liste als Tabelle zusammenstellen?</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="ta placeholder">Message…</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send off">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">Idle — leer</div>
+      <div class="desc">Mic aktiv, Send ausgegraut. Keine schwebenden Buttons.</div>
+    </div>
+
+    <!-- 2 typing -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Klar — soll ich dir die Liste als Tabelle zusammenstellen?</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="ta text">Ja, und sortier nach Datum bitte</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send on">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">Tippen</div>
+      <div class="desc">Send wird lila-aktiv. Mic bleibt erreichbar.</div>
+    </div>
+
+    <!-- 3 streaming empty -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble u">Ja, und sortier nach Datum bitte</div>
+          <div class="bubble a">Mache ich<span class="typing-dots"><span></span><span></span><span></span></span></div>
+        </div>
+        <div class="floats" style="bottom: 92px;">
+          <div class="circ stop">__STOP__</div>
+          <div class="lbl">Stop</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="ta placeholder">Message…</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send off">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">Streaming — Input leer</div>
+      <div class="desc">Stop schwebt rechts über dem Input. Mic bleibt da → du kannst sofort diktieren.</div>
+    </div>
+
+    <!-- 4 streaming + typed -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble u">Ja, und sortier nach Datum bitte</div>
+          <div class="bubble a">Mache ich<span class="typing-dots"><span></span><span></span><span></span></span></div>
+        </div>
+        <div class="floats" style="bottom: 92px;">
+          <div class="circ stop">__STOP__</div>
+          <div class="lbl">Stop</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="ta text">Und schick mir danach den Kalender</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send on">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">Streaming — du tippst weiter</div>
+      <div class="desc">Send ist aktiv und <b>queued</b> die Nachricht. Stop bleibt separat oben rechts erreichbar — kein Leeren des Inputs nötig.</div>
+    </div>
+
+    <!-- 5 full stack -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">… (lange Antwort, du bist hochgescrollt)</div>
+          <div class="bubble u">Ja, und sortier nach Datum bitte</div>
+        </div>
+        <div class="floats" style="bottom: 150px;">
+          <div class="circ">__DOWN__<span class="badge">2</span></div>
+          <div class="lbl">Down</div>
+          <div class="circ stop" style="margin-top:4px">__STOP__</div>
+          <div class="lbl">Stop</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="row">
+            <span class="ring"></span>
+            <span class="grow">Und schick mir danach den Kalender</span>
+            <span class="tag">Queued</span>
+            <span class="mini">__EDIT__</span>
+            <span class="mini">__SENDNOW__</span>
+            <span class="mini">__TRASH__</span>
+          </div>
+          <div class="composer">
+            <div class="ta placeholder">Message…</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send off">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">Alles gleichzeitig</div>
+      <div class="desc">Hochgescrollt + Streaming + Nachricht im Queue. Reihenfolge: <b>Down → Stop → Queue → Input</b>.</div>
+    </div>
+
+  </div>
+
+  <!-- ============ VOICE FLOW A/B ============ -->
+  <div class="section-title">Voice-Flow — Variante A (Takeover) vs. B (Inline)</div>
+  <div class="grid">
+
+    <!-- A recording -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat"><div class="bubble a">Diktier einfach drauflos.</div></div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="toolbar" style="padding:12px 14px">
+              <div class="reddot"></div>
+              <span style="font-size:12.5px;color:oklch(0.82 0.008 60);flex-shrink:0">Recording</span>
+              <div class="wave">
+                <i style="--h:14px;animation-delay:0s"></i><i style="--h:20px;animation-delay:.1s"></i><i style="--h:9px;animation-delay:.2s"></i><i style="--h:18px;animation-delay:.05s"></i><i style="--h:12px;animation-delay:.25s"></i><i style="--h:22px;animation-delay:.15s"></i><i style="--h:8px;animation-delay:.3s"></i><i style="--h:16px;animation-delay:.12s"></i><i style="--h:20px;animation-delay:.22s"></i><i style="--h:11px;animation-delay:.08s"></i><i style="--h:17px;animation-delay:.28s"></i><i style="--h:13px;animation-delay:.18s"></i>
+              </div>
+              <div class="timer">0:07</div>
+              <div class="ibtn" style="color:var(--red);width:30px;height:30px">__X__</div>
+              <div class="send on">__CHECK__</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">A · Recording (Takeover)</div>
+      <div class="desc">Composer-Zeile wird komplett zur Aufnahme: Pegel + Timer, rechts Abbrechen + Bestätigen.</div>
+    </div>
+
+    <!-- A transcribing -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat"><div class="bubble a">Diktier einfach drauflos.</div></div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="toolbar" style="padding:13px 14px">
+              <div class="spinner"></div>
+              <span style="font-size:12.5px;color:oklch(0.7 0.1 280);flex-shrink:0">Transcribing…</span>
+              <div class="wave" style="justify-content:flex-start;gap:8px">
+                <div class="shimmer" style="width:48%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">A · Transcribing (Takeover)</div>
+      <div class="desc">Gleiche Zeile, jetzt Spinner + Shimmer-Linie statt Pegel.</div>
+    </div>
+
+    <!-- B recording inline -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat"><div class="bubble a">Diktier einfach drauflos.</div></div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="ta placeholder">Listening…</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="reddot"></div>
+                <div class="wave" style="justify-content:flex-start;width:auto;flex:none">
+                  <i style="--h:12px"></i><i style="--h:18px;animation-delay:.1s"></i><i style="--h:8px;animation-delay:.2s"></i><i style="--h:16px;animation-delay:.05s"></i><i style="--h:11px;animation-delay:.25s"></i><i style="--h:19px;animation-delay:.15s"></i>
+                </div>
+                <div class="timer">0:07</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn" style="color:var(--red)">__X__</div>
+                <div class="send on">__CHECK__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">B · Recording (Inline)</div>
+      <div class="desc">Composer-Form bleibt erhalten: Textzeile dimmt zu „Listening…“, Pegel + Timer sitzen links wo die Pills waren.</div>
+    </div>
+
+    <!-- B transcribing inline -->
+    <div class="cell">
+      <div class="frame">
+        <div class="chat"><div class="bubble a">Diktier einfach drauflos.</div></div>
+        <div class="composer-wrap">
+          <div class="composer">
+            <div class="ta" style="padding-bottom:6px"><div class="shimmer" style="width:62%"></div></div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="spinner"></div>
+                <span style="font-size:12px;color:oklch(0.7 0.1 280)">Transcribing…</span>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send off">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="label">B · Transcribing (Inline)</div>
+      <div class="desc">Kein Layout-Sprung: Shimmer in der Textzeile, Spinner + Label links. Mic/Send-Slots bleiben an Ort und Stelle.</div>
+    </div>
+
+  </div>
+
+<script>
+  // Inject shared SVG icons via placeholder replacement to keep markup readable.
+  const ICONS = {
+    __MIC__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+    __SEND__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>',
+    __STOP__: '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>',
+    __DOWN__: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>',
+    __PAPERCLIP__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
+    __AT__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>',
+    __EDIT__: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>',
+    __SENDNOW__: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>',
+    __TRASH__: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    __X__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    __CHECK__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  };
+  document.body.innerHTML = document.body.innerHTML.replace(/__[A-Z]+__/g, (m) => ICONS[m] || m);
+</script>
+</body>
+</html>

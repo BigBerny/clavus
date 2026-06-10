@@ -164,7 +164,7 @@ class GatewayWsClient {
         minProtocol: 4,
         maxProtocol: 4,
         role: 'operator',
-        scopes: ['operator.read', 'operator.write'],
+        scopes: ['operator.read', 'operator.write', 'operator.admin'],
         auth: { token: this.token },
         client: {
           id: 'gateway-client',

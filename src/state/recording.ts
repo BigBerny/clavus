@@ -50,13 +50,22 @@ interface RecordingStore {
   error: string | null
   levels: number[]
   hasFailedAudio: boolean
-  /** Thread the recording was started for. Locked at start time so the user
-   *  can navigate away mid-recording without retargeting the transcript. */
+  /** Thread the recording belongs to. Usually locked at start time; home-screen
+   *  recordings can be assigned when the user stops and sends them. */
   targetThreadId: string | null
 
+  /** Eagerly acquire the mic stream + spin up MediaRecorder without yet
+   *  capturing audio. Safe to call on pointerdown / keydown so the long
+   *  `getUserMedia` round-trip overlaps with the hold gesture.
+   *  Returns true if a fresh warmup was kicked off; false if already warming
+   *  or recording. */
+  prepare: () => boolean
+  /** Drop a warmed-up but not-yet-started recording (user released the
+   *  trigger before the hold threshold). */
+  abortPrepare: () => void
   start: (threadId: string | null) => Promise<void>
-  stop: () => void
-  stopAndInsert: () => void
+  stop: (threadId?: string | null) => void
+  stopAndInsert: (threadId?: string | null) => void
   cancel: () => void
   retryLastTranscription: () => void
   clearLastFailedAudio: () => void
@@ -85,6 +94,19 @@ let insertMode = false
 let lastFailedBlob: Blob | null = null
 let handlers: TranscriptionHandlers | null = null
 
+// Warm-up state: when prepare() is called we kick off getUserMedia and
+// MediaRecorder construction so the user-perceived latency between
+// "press the mic" and "actually capturing audio" stays under ~50ms even on a
+// cold start. The warmup is independent of the store's `state` field — the UI
+// stays idle until start() commits.
+type WarmupState =
+  | { kind: 'pending'; promise: Promise<MediaStream | null>; aborted: boolean }
+  | { kind: 'ready'; stream: MediaStream; aborted: boolean }
+  | null
+let warmup: WarmupState = null
+let warmupCleanupTimer: ReturnType<typeof setTimeout> | null = null
+const WARMUP_HOLD_MS = 8000 // keep a prepared stream alive this long if user hasn't committed
+
 function setErrorWithAutoDismiss(msg: string) {
   if (errorTimerId) clearTimeout(errorTimerId)
   useRecordingStore.setState({ error: msg })
@@ -101,6 +123,36 @@ function cleanupHardware() {
   mediaRecorder = null
   chunks = []
   useRecordingStore.setState({ duration: 0, warning: false, levels: [] })
+}
+
+async function acquireMicStream(): Promise<MediaStream> {
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+    })
+  } catch {
+    return await navigator.mediaDevices.getUserMedia({ audio: true })
+  }
+}
+
+function disposeWarmup() {
+  if (warmupCleanupTimer) { clearTimeout(warmupCleanupTimer); warmupCleanupTimer = null }
+  if (warmup?.kind === 'ready') {
+    warmup.stream.getTracks().forEach((t) => t.stop())
+  } else if (warmup?.kind === 'pending') {
+    warmup.aborted = true
+    void warmup.promise.then((s) => { if (s) s.getTracks().forEach((t) => t.stop()) }).catch(() => {})
+  }
+  warmup = null
+}
+
+function scheduleWarmupExpiry() {
+  if (warmupCleanupTimer) clearTimeout(warmupCleanupTimer)
+  warmupCleanupTimer = setTimeout(() => {
+    // If still warming/ready and nothing committed, release the mic so the
+    // OS-level indicator goes away.
+    if (warmup) disposeWarmup()
+  }, WARMUP_HOLD_MS)
 }
 
 function startAnalyser(s: MediaStream) {
@@ -221,6 +273,34 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
   setHandlers: (h) => { handlers = h },
   clearHandlers: () => { handlers = null },
 
+  prepare: () => {
+    if (warmup) return false
+    if (useRecordingStore.getState().state !== 'idle') return false
+    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) return false
+    if (typeof MediaRecorder === 'undefined') return false
+    if (typeof window !== 'undefined' && !window.isSecureContext) return false
+
+    const promise = acquireMicStream().then((s) => {
+      if (warmup && warmup.kind === 'pending' && warmup.aborted) {
+        s.getTracks().forEach((t) => t.stop())
+        warmup = null
+        return null
+      }
+      warmup = { kind: 'ready', stream: s, aborted: false }
+      return s
+    }).catch(() => {
+      warmup = null
+      return null
+    })
+    warmup = { kind: 'pending', promise, aborted: false }
+    scheduleWarmupExpiry()
+    return true
+  },
+
+  abortPrepare: () => {
+    disposeWarmup()
+  },
+
   start: async (threadId) => {
     set({ error: null, targetThreadId: threadId })
     cancelled = false
@@ -239,14 +319,21 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
     }
 
     try {
-      let s: MediaStream
-      try {
-        s = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        })
-      } catch {
-        s = await navigator.mediaDevices.getUserMedia({ audio: true })
+      let s: MediaStream | null = null
+      // If a prepare() warmup is in flight (or ready), claim its stream.
+      if (warmup) {
+        if (warmupCleanupTimer) { clearTimeout(warmupCleanupTimer); warmupCleanupTimer = null }
+        if (warmup.kind === 'ready') {
+          s = warmup.stream
+          warmup = null
+        } else {
+          const pending = warmup
+          // Wait for the in-flight prepare to settle, then take its stream.
+          s = await pending.promise
+          if (warmup === pending) warmup = null
+        }
       }
+      if (!s) s = await acquireMicStream()
       stream = s
 
       let recorder: MediaRecorder
@@ -295,9 +382,12 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
         set({ state: 'idle' })
       }
 
-      recorder.start(200)
-      startTimeMs = Date.now()
+      // Flip UI state before recorder.start() so the user sees the
+      // "recording" affordance the moment the stream is in hand — even if
+      // the underlying recorder takes another tick to fully arm.
       set({ state: 'recording' })
+      startTimeMs = Date.now()
+      recorder.start(200)
       startAnalyser(s)
 
       if ('wakeLock' in navigator) {
@@ -331,13 +421,15 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
     }
   },
 
-  stop: () => {
+  stop: (threadId) => {
     insertMode = false
+    if (threadId !== undefined) set({ targetThreadId: threadId })
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
   },
 
-  stopAndInsert: () => {
+  stopAndInsert: (threadId) => {
     insertMode = true
+    if (threadId !== undefined) set({ targetThreadId: threadId })
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
   },
 

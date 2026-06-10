@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState, useCallback } from 'react'
+import { AlertTriangle, Check, X } from 'lucide-react'
 
 function sendInteractiveMessage(content: string) {
   window.dispatchEvent(new CustomEvent('clavus:interactive-send', {
@@ -146,12 +147,17 @@ export function ConfirmBlock({ message, confirmLabel, cancelLabel }: {
   return (
     <div className="my-2 rounded-xl border border-amber-500/20 bg-amber-500/5 dark:bg-amber-500/8 p-3 space-y-2.5">
       <div className="flex items-start gap-2">
-        <span className="text-amber-500 text-base mt-0.5">⚠️</span>
+        <AlertTriangle className="text-amber-500 w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
         <p className="text-[13px] text-text-light dark:text-text-dark leading-relaxed">{message}</p>
       </div>
       {resolved ? (
-        <div className={`text-[12px] font-medium ${resolved === 'approved' ? 'text-emerald-500' : 'text-red-400'}`}>
-          {resolved === 'approved' ? '✓ Approved' : '✕ Denied'}
+        <div className={`inline-flex items-center gap-1 text-[12px] font-medium ${resolved === 'approved' ? 'text-emerald-500' : 'text-red-400'}`}>
+          {resolved === 'approved' ? (
+            <Check className="w-3.5 h-3.5" strokeWidth={2.25} aria-hidden="true" />
+          ) : (
+            <X className="w-3.5 h-3.5" strokeWidth={2.25} aria-hidden="true" />
+          )}
+          {resolved === 'approved' ? 'Approved' : 'Denied'}
         </div>
       ) : (
         <div className="flex gap-2">
@@ -428,9 +434,10 @@ export function FormBlock({ data }: { data: FormBlockData }) {
       <button
         onClick={handleSubmit}
         disabled={!allAnswered || submitted}
-        className="inline-btn px-4 py-1.5 rounded-lg text-[13px] font-medium bg-accent text-white hover:bg-accent/90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+        className="inline-btn inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-[13px] font-medium bg-accent text-white hover:bg-accent/90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
       >
-        {submitted ? 'Sent ✓' : data.submitLabel}
+        {submitted && <Check className="w-3.5 h-3.5" strokeWidth={2.25} aria-hidden="true" />}
+        {submitted ? 'Sent' : data.submitLabel}
       </button>
     </div>
   )

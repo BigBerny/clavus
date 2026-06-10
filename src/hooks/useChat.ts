@@ -12,6 +12,7 @@ import { resolveChatRoutingSelection } from '../lib/chatRouting.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
+import { markUserWrote } from '../state/lastActivity.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
@@ -116,6 +117,9 @@ export function useChat() {
 
     if (retryCount === 0) {
       addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files })
+      // Smart-open: remember that the user wrote here so reopening the app
+      // within 15 minutes lands directly in this conversation.
+      markUserWrote(threadId)
       // Claim the streaming slot before any awaits so a concurrent recovery sweep
       // (or a second submit) doesn't see "last message is user, isStreaming=false"
       // and kick off a duplicate run. Auto-classify below can await up to 3s.

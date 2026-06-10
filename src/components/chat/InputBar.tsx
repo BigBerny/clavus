@@ -27,7 +27,7 @@ import {
 import { InputBarTalkMode, type InputBarTalkModeState } from './InputBarTalkMode'
 import { InputBarAttachments } from './InputBarAttachments'
 import { EditingMessageRow, QueuedMessageRow } from './InputBarStatusRows'
-import { FailedDictationPrompt, TranscribingRow, VoiceErrorRow } from './InputBarVoiceStatus'
+import { FailedDictationPrompt, VoiceErrorRow } from './InputBarVoiceStatus'
 import { AtMentionPalette, SlashCommandPalette, ToastRow } from './InputBarPalettes'
 import { SlashCommandsModal } from './SlashCommandsModal'
 
@@ -43,6 +43,8 @@ interface Props {
   onClear?: () => void
   /** Currently visible thread id, or null when on the home screen. */
   threadId?: string | null
+  /** Return/create the thread that a sent voice message should belong to. */
+  onVoiceThreadNeeded?: () => string | null
   /** Resend the last user message in this thread (used by /retry). */
   onRetry?: () => void
   talkMode?: InputBarTalkModeState
@@ -74,7 +76,7 @@ async function uploadFile(file: File, threadId?: string | null): Promise<{ path:
   }
 }
 
-export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onRetry, talkMode, draftKey, editingMessage, onEditSubmit, onEditCancel }: Props) {
+export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onVoiceThreadNeeded, onRetry, talkMode, draftKey, editingMessage, onEditSubmit, onEditCancel }: Props) {
   // Initialize with the persisted draft for this column (or empty if none).
   const [value, setValue] = useState(() => (draftKey ? useDraftsStore.getState().getDraft(draftKey) : ''))
 
@@ -457,6 +459,19 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
   })
   const voiceState = voice.state
   const cancelVoiceRecording = voice.cancel
+  const stopVoiceTargetRef = useRef<{ targetThreadId: string | null } | null>(null)
+  const stopVoiceAndSend = useCallback(() => {
+    const existing = stopVoiceTargetRef.current
+    const targetThreadId = existing
+      ? existing.targetThreadId
+      : (onVoiceThreadNeeded?.() ?? threadId ?? null)
+    stopVoiceTargetRef.current = { targetThreadId }
+    voice.stop(targetThreadId)
+  }, [onVoiceThreadNeeded, threadId, voice])
+
+  useEffect(() => {
+    if (voice.state === 'idle') stopVoiceTargetRef.current = null
+  }, [voice.state])
 
   // Report recording state changes to parent (for header recording bar)
   useEffect(() => {
@@ -516,20 +531,34 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     [handleSubmit, showSlashPalette, filteredCommands, slashIndex, selectSlashCommand, editingMessage, onEditCancel],
   )
 
-  // Hold-to-record + tap-to-toggle hybrid
+  // Hold-to-record + tap-to-toggle hybrid.
+  //
+  // To minimise perceived latency we kick off mic warmup the moment the
+  // pointer goes down — getUserMedia takes long enough on a cold start that
+  // overlapping it with the user's hold gesture is the difference between
+  // "feels instant" and "noticeably laggy". If the user releases within
+  // HOLD_THRESHOLD_MS we treat it as a tap (toggle) and abort the warmup;
+  // if they hold past the threshold we commit the recording — by then
+  // getUserMedia has typically resolved so start() is effectively free.
+  const HOLD_THRESHOLD_MS = 500
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isHoldRecording = useRef(false)
+  const warmingUp = useRef(false)
 
   const handleMicPointerDown = useCallback(() => {
     if (voice.state === 'recording') return // already recording (tap-toggle mode)
     if (voice.state !== 'idle') return
     isHoldRecording.current = false
+    // Kick off mic warmup immediately so the cold-start latency overlaps
+    // with the hold threshold. No UI change yet — that comes at commit.
+    warmingUp.current = voice.prepare()
     holdTimerRef.current = setTimeout(() => {
-      // Long press: start hold-to-record
+      // Hold past threshold → commit. start() will reuse the warmed stream.
       isHoldRecording.current = true
+      warmingUp.current = false
       haptic.medium()
       voice.start()
-    }, 300)
+    }, HOLD_THRESHOLD_MS)
   }, [voice])
 
   const handleMicPointerUp = useCallback(() => {
@@ -540,19 +569,26 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     if (isHoldRecording.current && voice.state === 'recording') {
       // Release after hold → stop and transcribe
       isHoldRecording.current = false
-      voice.stop()
+      stopVoiceAndSend()
     }
-  }, [voice])
+    // If we were warming up but didn't commit (released before threshold),
+    // we deliberately keep the warmup alive. The user is either about to
+    // tap-toggle (the synthetic click that follows pointerup) — in which
+    // case start() will claim the warm stream instantly — or they walked
+    // away, and the warmup self-destructs after WARMUP_HOLD_MS so the OS
+    // mic indicator clears on its own.
+    warmingUp.current = false
+  }, [stopVoiceAndSend, voice.state])
 
   const handleMicClick = useCallback(() => {
     if (isHoldRecording.current) return // was a hold gesture, not a tap
     haptic.tap()
     if (voice.state === 'recording') {
-      voice.stop()
+      stopVoiceAndSend()
     } else if (voice.state === 'idle') {
       voice.start()
     }
-  }, [voice])
+  }, [stopVoiceAndSend, voice])
 
   const handleAttachClick = useCallback(() => {
     fileInputRef.current?.click()
@@ -676,6 +712,11 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     onSendNow?.()
   }, [onSendNow, queuedMessage])
 
+  const handleAbortClick = useCallback(() => {
+    haptic.tap()
+    onAbort()
+  }, [onAbort])
+
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0 || pendingFiles.length > 0
 
@@ -723,7 +764,21 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           onDiscard={voice.clearLastFailedAudio}
           onRecordNew={() => { voice.clearLastFailedAudio(); voice.start() }}
         />
-        <TranscribingRow visible={isTranscribing} />
+
+        {isStreaming && (
+          <div className="mb-2 flex justify-end pr-1 animate-[fadeSlideIn_0.2s_ease-out]">
+            <button
+              type="button"
+              onClick={handleAbortClick}
+              className="inline-btn h-9 px-3 rounded-full glass flex items-center gap-2 text-[12px] font-medium text-red-400 hover:bg-red-500/10 active:scale-95 transition-all"
+              aria-label="Stop generating"
+              title="Stop generating"
+            >
+              <StopMini />
+              <span>Stop</span>
+            </button>
+          </div>
+        )}
 
         {editingMessage && <EditingMessageRow onCancel={onEditCancel} />}
 
@@ -872,22 +927,11 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
             <div className="flex items-center gap-1 flex-none">
               {isRecording ? (
                 <>
-                  <IconBtn title="Stop & insert" onClick={voice.stopAndInsert}>
+                  <IconBtn title="Stop & insert" onClick={() => voice.stopAndInsert()}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
                   </IconBtn>
-                  <SendBtn onClick={voice.stop} />
+                  <SendBtn onClick={stopVoiceAndSend} />
                 </>
-              ) : isStreaming && hasContent ? (
-                <>
-                  <IconBtn title="Stop generating" onClick={onAbort} variant="danger">
-                    <StopMini />
-                  </IconBtn>
-                  <SendBtn onClick={handleSubmit} pulse={sendAnim} />
-                </>
-              ) : isStreaming ? (
-                <IconBtn title="Stop generating" onClick={onAbort} variant="danger">
-                  <StopMini />
-                </IconBtn>
               ) : (
                 <>
                   <IconBtn
@@ -896,10 +940,16 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
                     onPointerDown={handleMicPointerDown}
                     onPointerUp={handleMicPointerUp}
                     onPointerLeave={handleMicPointerUp}
+                    disabled={isTranscribing}
                   >
                     <MicMini />
                   </IconBtn>
-                  <SendBtn onClick={handleSubmit} disabled={!hasContent} pulse={sendAnim} />
+                  <SendBtn
+                    onClick={handleSubmit}
+                    disabled={!hasContent || isTranscribing}
+                    pulse={sendAnim}
+                    label={isStreaming ? 'Queue message' : 'Send'}
+                  />
                 </>
               )}
             </div>

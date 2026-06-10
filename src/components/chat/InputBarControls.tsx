@@ -95,13 +95,13 @@ export function IconBtn({
   )
 }
 
-export function SendBtn({ onClick, disabled, pulse }: { onClick: () => void; disabled?: boolean; pulse?: boolean }) {
+export function SendBtn({ onClick, disabled, pulse, label = 'Send' }: { onClick: () => void; disabled?: boolean; pulse?: boolean; label?: string }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      aria-label="Send"
-      title="Send"
+      aria-label={label}
+      title={label}
       className={`inline-btn h-8 w-8 rounded-xl flex items-center justify-center transition-all touch-none ${
         disabled ? 'bg-foreground/[0.07] text-muted-foreground' : 'bg-primary text-primary-foreground hover:opacity-90 shadow-sm'
       } ${pulse ? 'animate-[sendPulse_0.3s_ease-out]' : ''}`}

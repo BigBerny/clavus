@@ -40,18 +40,44 @@
   --radius: 0.625rem;
   --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', system-ui, sans-serif;
 
-  /* === Liquid Glass material tokens ======================================= */
-  --glass-bg: oklch(0.92 0.006 60 / 0.55);
-  --glass-bg-heavy: oklch(0.90 0.008 60 / 0.65);
-  --glass-border: oklch(0 0 0 / 0.08);
-  --glass-border-strong: oklch(0 0 0 / 0.14);
-  --glass-shadow: oklch(0.3 0.02 260 / 0.12);
-  --glass-inner-glow: oklch(1 0 0 / 0.25);
-  --glass-blur: 16px;
-  --glass-saturate: 180%;
+  /* === Liquid Glass material tokens =======================================
+     Tuned to iOS 26 / macOS 26 liquid glass: legibility comes from the bright
+     rim + inner highlight + a slightly darker backdrop, NOT from a dark fill.
+     Tones are split: this :root block is the LIGHT defaults (bright frosted
+     white); the .dark overrides below switch to the dark-glass variant. */
+  --glass-bg: oklch(1 0 0 / 0.44);
+  --glass-bg-heavy: oklch(1 0 0 / 0.60);
+  --glass-bg-strong: oklch(1 0 0 / 0.74);
+  --glass-border: oklch(0.45 0.02 275 / 0.14);
+  --glass-border-strong: oklch(0.45 0.02 275 / 0.22);
+  --glass-shadow: oklch(0.35 0.03 275 / 0.22);
+  --glass-inner-glow: oklch(1 0 0 / 0.80);
+  --glass-inner-strong: oklch(1 0 0 / 1);
+  --glass-sheen: oklch(1 0 0 / 0.65);
+  --glass-blur: 22px;
+  --glass-saturate: 200%;
   --glass-radius: 1.25rem;
   --glass-radius-lg: 1.75rem;
   --glass-radius-full: 9999px;
+
+  /* Text-glow lifts floating text off the matte backdrop on dark mode.
+     Light mode disables it (dark text doesn't need a halo). */
+  --text-glow: none;
+
+  /* Hairline separator that reads on the frosted matte */
+  --hairline: oklch(0.30 0.02 275 / 0.12);
+
+  /* Frosted popover fill — used for menus over the matte so the dropdown
+     doesn't disappear into the wallpaper. */
+  --pop-bg: oklch(1 0 0 / 0.88);
+
+  /* === Coral accent (lifted from the Clavus dictation overlay) ============
+     The soft/line/glow tints derive from --accent automatically. Override
+     --accent if you need to retheme. */
+  --accent: #ef7f5b;
+  --accent-soft: color-mix(in oklab, var(--accent) 16%, transparent);
+  --accent-line: color-mix(in oklab, var(--accent) 34%, transparent);
+  --accent-glow: color-mix(in oklab, var(--accent) 50%, transparent);
 
   /* === Existing token compatibility =======================================
      These are re-pointed to the new mockup palette so every component that
@@ -109,15 +135,22 @@
   --color-accent: oklch(0.72 0.15 280);
   --color-accent-hover: oklch(0.78 0.15 280);
 
-  /* Liquid Glass — dark mode. Use a warm tint (hue 50, matching the charcoal
-     surface palette) instead of pure white so the glass reads as warm-Nordic
-     rather than cold grey on top of the dark surface. */
-  --glass-bg: oklch(0.95 0.008 50 / 0.04);
-  --glass-bg-heavy: oklch(0.95 0.008 50 / 0.07);
-  --glass-border: oklch(0.95 0.008 50 / 0.08);
-  --glass-border-strong: oklch(0.95 0.008 50 / 0.16);
-  --glass-shadow: oklch(0 0 0 / 0.35);
-  --glass-inner-glow: oklch(0.95 0.008 50 / 0.06);
+  /* Liquid Glass — dark mode. A faint light film over a darkened blur;
+     legibility comes from the bright rim + inner highlight, not opacity.
+     Tokens mirror the Clavus dictation overlay (iOS 26 / macOS 26). */
+  --glass-bg: oklch(0.78 0.01 60 / 0.07);
+  --glass-bg-heavy: oklch(0.80 0.01 60 / 0.11);
+  --glass-bg-strong: oklch(0.82 0.01 60 / 0.16);
+  --glass-border: oklch(1 0 0 / 0.20);
+  --glass-border-strong: oklch(1 0 0 / 0.34);
+  --glass-shadow: oklch(0 0 0 / 0.42);
+  --glass-inner-glow: oklch(1 0 0 / 0.16);
+  --glass-inner-strong: oklch(1 0 0 / 0.26);
+  --glass-sheen: oklch(1 0 0 / 0.12);
+
+  --text-glow: 0 1px 10px oklch(0 0 0 / 0.32);
+  --pop-bg: oklch(0.26 0.006 60 / 0.74);
+  --hairline: oklch(0.98 0.008 50 / 0.10);
 }
 
 html {
@@ -169,9 +202,12 @@ body {
   overscroll-behavior: none;
   background-color: var(--color-background, #1c1c1e);
   scrollbar-width: none;
-  isolation: isolate;
-  /* Limit reflow scope: height changes don't propagate outside #root. */
-  contain: layout style paint;
+  /* Limit reflow scope to layout/style only. `paint` containment would make
+     #root a backdrop-root, which on iOS 26 WebKit breaks backdrop-filter
+     (composer bar loses its blur ~0.5s after first paint, restored on any
+     layer-tree rebuild like a tab swipe). `isolation: isolate` was paired
+     with paint containment and is no longer needed once it's gone. */
+  contain: layout style;
 }
 #root::before {
   content: '';
@@ -200,17 +236,34 @@ html[data-native] #root {
   transition: height 0.28s cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Tauri macOS: transparent overlay titlebar — the gradient spans the full
-   window including the traffic-light area. We move it to #root so it covers
-   the padding region above the content. */
+/* Tauri macOS: frameless transparent window — the native window carries a
+   hudWindow vibrancy blur (set in tauri.conf.json windowEffects), so the web
+   side only paints a translucent scrim. This is what produces the edge-to-edge
+   "matte takeover" from the Clavus Desktop design: the desktop shows through,
+   darkened and frosted. Browser/PWA builds keep the opaque gradient. */
+html[data-tauri],
+html[data-tauri] body {
+  background: transparent !important;
+  background-image: none !important;
+}
 html[data-tauri] #root {
   padding-top: 32px;
   padding-bottom: 12px;
-  background: linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 40%, oklch(0.18 0.018 340) 100%);
-  background-attachment: fixed;
+  background: oklch(0.10 0.006 50 / 0.35);
+  background-image: none;
 }
 html:not(.dark)[data-tauri] #root {
-  background: linear-gradient(160deg, oklch(0.95 0.015 280) 0%, oklch(0.97 0.008 80) 40%, oklch(0.96 0.012 340) 100%);
+  background: oklch(0.97 0.008 275 / 0.50);
+  background-image: none;
+}
+html[data-tauri] #root::before {
+  display: none;
+}
+html[data-tauri] .home-screen,
+html[data-tauri] .chat-bg,
+html[data-tauri] .marksense-bg {
+  background: transparent !important;
+  background-attachment: scroll;
 }
 
 /* Tauri: drag region for window moving in the titlebar area */
@@ -437,6 +490,16 @@ html:not(.dark) .chat-bg {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+@keyframes recpill-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--accent-soft); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 6px transparent; }
+}
+
+@keyframes nub-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 14px var(--accent-glow), inset 0 1px 0 oklch(1 0 0 / 0.4); }
+  50% { transform: scale(1.06); box-shadow: 0 0 24px var(--accent-glow), inset 0 1px 0 oklch(1 0 0 / 0.4); }
+}
 .voice-spinner {
   width: 14px;
   height: 14px;
@@ -654,38 +717,62 @@ html.theme-ready *::after {
       var(--color-background);
   }
 
-  /* === Liquid Glass utilities ============================================= */
+  /* === Liquid Glass utilities =============================================
+     iOS 26 / macOS 26 liquid glass: a faint light film over a darkened blur,
+     with the legibility coming from a bright rim, inner highlight, and a
+     subtle specular sheen at the top edge — NOT from a dark fill. */
   .glass {
+    position: relative;
     background: var(--glass-bg);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     border: 1px solid var(--glass-border);
     box-shadow:
-      0 8px 32px var(--glass-shadow),
-      inset 0 1px 0 var(--glass-inner-glow);
+      0 24px 70px -12px var(--glass-shadow),
+      0 8px 24px -8px var(--glass-shadow),
+      inset 0 1px 0 var(--glass-inner-strong);
   }
   .glass-heavy {
+    position: relative;
     background: var(--glass-bg-heavy);
     backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
     border: 1px solid var(--glass-border-strong);
     box-shadow:
-      0 8px 32px var(--glass-shadow),
-      inset 0 1px 0 var(--glass-inner-glow);
+      0 24px 70px -12px var(--glass-shadow),
+      0 8px 24px -8px var(--glass-shadow),
+      inset 0 1px 0 var(--glass-inner-strong);
   }
   /* Lighter glass for elements that repeat many times (e.g. assistant bubbles) */
   .glass-light {
     background: var(--glass-bg);
-    backdrop-filter: blur(8px) saturate(150%);
-    -webkit-backdrop-filter: blur(8px) saturate(150%);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
     border: 1px solid var(--glass-border);
+    box-shadow: inset 0 1px 0 var(--glass-inner-glow);
   }
-  /* Warm-tinted glass for user bubbles — subtle, not loud */
+  /* Coral-tinted glass for user bubbles — subtle, not loud */
   .glass-user {
-    background: color-mix(in oklch, var(--color-primary) 12%, var(--glass-bg));
-    backdrop-filter: blur(10px) saturate(160%);
-    -webkit-backdrop-filter: blur(10px) saturate(160%);
-    border: 1px solid color-mix(in oklch, var(--color-primary) 18%, var(--glass-border));
+    background: color-mix(in oklab, var(--accent) 30%, transparent);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--accent-line);
+    box-shadow: inset 0 1px 0 var(--glass-inner-strong);
+  }
+  /* Frosted popover/menu — used over the matte so dropdowns don't vanish. */
+  .glass-pop {
+    background: var(--pop-bg);
+    backdrop-filter: blur(34px) saturate(190%);
+    -webkit-backdrop-filter: blur(34px) saturate(190%);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow:
+      0 24px 60px -12px var(--glass-shadow),
+      inset 0 1px 0 var(--glass-inner-strong);
+  }
+  /* Soft text shadow that lifts white text off the frosted matte. No-op in
+     light tone (the token is `none`). */
+  .text-glow {
+    text-shadow: var(--text-glow);
   }
 }
 
@@ -759,6 +846,64 @@ html:not(.dark) .marksense-bg {
  * title bar with the file name and Browse button. */
 .marksense-scope .notion-like-editor-header {
   display: none;
+}
+
+/* ── Desktop pager (Clavus Desktop design) ────────────────────────────────
+   Home and the active conversation page edge-to-edge in lockstep; the
+   transforms are driven inline from App.tsx (p = 0 detail front, p = 1 home
+   front), this just provides the shared transition. */
+.pager-pane {
+  transition: transform 0.46s cubic-bezier(0.4, 0.8, 0.2, 1);
+  will-change: transform;
+}
+.pager-pane.is-dragging {
+  transition: none;
+}
+
+/* Floating top bar inside the detail pane — back gcircle + centered title */
+.pager-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px 6px;
+  flex-shrink: 0;
+}
+.pager-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Circular glass button (design mockup's .gcircle) */
+.gcircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-muted-foreground);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-inner-glow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.14s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.gcircle:hover {
+  background: var(--glass-bg-heavy);
+  color: var(--color-foreground);
+  border-color: var(--glass-border-strong);
+}
+.gcircle svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* ── Home screen ──────────────────────────────────────────────────────────── */

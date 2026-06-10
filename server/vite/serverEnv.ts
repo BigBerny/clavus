@@ -68,6 +68,7 @@ webpush.setVapidDetails('https://mac-mini-von-janis.taild2ad59.ts.net:5173', vap
 export const phoneServerOptions = {
   host: '0.0.0.0',
   port: 5173,
+  strictPort: true,
   https: {
     cert: './mac-mini-von-janis.taild2ad59.ts.net.crt',
     key: './mac-mini-von-janis.taild2ad59.ts.net.key',
