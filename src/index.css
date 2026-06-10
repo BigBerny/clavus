@@ -247,7 +247,9 @@ html[data-tauri] body {
   background-image: none !important;
 }
 html[data-tauri] #root {
-  padding-top: 32px;
+  /* Frameless window — no traffic lights / title bar to clear anymore,
+     just a hint of breathing room above the pager top bar. */
+  padding-top: 10px;
   padding-bottom: 12px;
   background: oklch(0.10 0.006 50 / 0.35);
   background-image: none;
@@ -905,6 +907,18 @@ html:not(.dark) .marksense-bg {
 .gcircle svg {
   width: 16px;
   height: 16px;
+}
+
+/* Glass keycap for shortcut hints (design mockup's keycap chips) */
+.kbd-glass {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-muted-foreground);
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
 }
 
 /* ── Home screen ──────────────────────────────────────────────────────────── */

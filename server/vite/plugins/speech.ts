@@ -44,25 +44,27 @@ export function elevenLabsProxy() {
           let parsed: any = null
           try { parsed = JSON.parse(responseText) } catch {}
 
-          if (parsed?.text && resp.ok) {
-            try {
-              if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
-              fs.appendFileSync(transcriptsFile, JSON.stringify({
-                timestamp: new Date().toISOString(),
-                source: typeof req.headers['x-clavus-source'] === 'string'
-                  ? req.headers['x-clavus-source']
-                  : inferSourceFromUserAgent(req.headers['user-agent']),
-                appName: req.headers['x-clavus-app-name'] || '',
-                bundleId: req.headers['x-clavus-bundle-id'] || '',
-                audioBytes: body?.length ?? 0,
-                status: resp.status,
-                durationMs: Date.now() - startedAt,
-                text: parsed.text,
-                transcriptionId: parsed.transcription_id || '',
-              }) + '\n')
-            } catch {
-              // Logging is best-effort; never fail the response if disk write hiccups.
-            }
+          // Log every STT attempt — including failures and empty results —
+          // so post-mortems can see WHY a dictation produced nothing (the
+          // upstream error body is otherwise lost).
+          try {
+            if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+            fs.appendFileSync(transcriptsFile, JSON.stringify({
+              timestamp: new Date().toISOString(),
+              source: typeof req.headers['x-clavus-source'] === 'string'
+                ? req.headers['x-clavus-source']
+                : inferSourceFromUserAgent(req.headers['user-agent']),
+              appName: req.headers['x-clavus-app-name'] || '',
+              bundleId: req.headers['x-clavus-bundle-id'] || '',
+              audioBytes: body?.length ?? 0,
+              status: resp.status,
+              durationMs: Date.now() - startedAt,
+              text: parsed?.text || '',
+              transcriptionId: parsed?.transcription_id || '',
+              ...(resp.ok ? {} : { error: responseText.slice(0, 300) }),
+            }) + '\n')
+          } catch {
+            // Logging is best-effort; never fail the response if disk write hiccups.
           }
 
           res.end(responseText)
@@ -165,6 +167,9 @@ export function desktopDictationPlugin() {
           durationMs: Date.now() - startedAt,
           text: parsed?.text || '',
           transcriptionId: parsed?.transcription_id || '',
+          // Keep the upstream error body on failures — without it a 400
+          // (e.g. "audio too short / corrupt") is undiagnosable later.
+          ...(resp.ok ? {} : { error: responseText.slice(0, 300) }),
         }) + '\n')
 
         res.statusCode = resp.status

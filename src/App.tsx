@@ -27,7 +27,7 @@ import { ClavusNub } from './components/layout/ClavusNub.tsx'
 import { getSmartOpenThreadId, markThreadRead } from './state/lastActivity.ts'
 import { isTauriShell, hideTauriWindow } from './lib/tauriShell.ts'
 import { useSwipeBack } from './hooks/useSwipeBack.ts'
-import { TauriTopBar } from './components/layout/TauriTopBar.tsx'
+import { useWheelPager } from './hooks/useWheelPager.ts'
 
 // Desktop layout switch. 'pager' is the Clavus Desktop design: no sidebar —
 // Home and the active conversation page edge-to-edge with a slide, swipe-back,
@@ -252,10 +252,30 @@ export function App() {
     isDesktop && PAGER_DESKTOP && visiblePanel !== 'home' && !pagerEntering,
     useCallback(() => setVisiblePanel('home'), [setVisiblePanel]),
   )
+
+  // Trackpad two-finger swipe (the native macOS gesture): right on the
+  // conversation pages back to Home with 1:1 tracking; left on Home flicks
+  // forward into the most recent conversation.
+  const pagerRef = useRef<HTMLDivElement>(null)
+  const pagerWheel = useWheelPager(pagerRef, {
+    enabled: isDesktop && PAGER_DESKTOP,
+    detailFront: visiblePanel !== 'home' && !pagerEntering,
+    onBack: useCallback(() => setVisiblePanel('home'), [setVisiblePanel]),
+    onForward: useCallback(() => {
+      const tabs = useTabsStore.getState().tabs
+      const chats = tabs.filter((t) => t.type === 'chat').sort((a, b) => b.updatedAt - a.updatedAt)
+      const latest = chats[0]
+      if (latest) setVisiblePanel(latest.id)
+    }, [setVisiblePanel]),
+  })
+
+  const pagerGestureActive = pagerSwipe.dragging || pagerWheel.active
   // p = 0 → detail fully front; p = 1 → home fully front (mockup geometry).
   const pagerP = pagerSwipe.dragging
     ? pagerSwipe.dragFrac
-    : (pagerEntering ? 1 : (visiblePanel === 'home' ? 1 : 0))
+    : pagerWheel.active
+      ? pagerWheel.frac
+      : (pagerEntering ? 1 : (visiblePanel === 'home' ? 1 : 0))
 
   const pagerDetailTab = pagerDetailId ? sortedTabs.find((t) => t.id === pagerDetailId) ?? null : null
   const pagerDetailThreadTitle = useThreadsStore((s) =>
@@ -1266,14 +1286,11 @@ export function App() {
 
   return (
     <div className="app-shell h-full flex flex-col">
-      {/* Tauri: macOS-style top bar (clock, drag region) over the frameless
-          transparent window. Falls back to the invisible drag strip when the
-          bar is not rendered (non-Tauri builds skip both via CSS). */}
-      {isTauriShell ? (
-        <TauriTopBar />
-      ) : (
-        <div className="tauri-drag-region fixed top-0 left-0 right-0 h-8 z-[9999]" data-tauri-drag-region />
-      )}
+      {/* Tauri: invisible drag strip along the top edge of the frameless
+          window. (A visible Clavus bar + clock was tried here and removed —
+          the macOS menu bar already shows the time, and the extra bar made
+          the overlay feel less native.) */}
+      <div className="tauri-drag-region fixed top-0 left-0 right-0 h-6 z-[9999]" data-tauri-drag-region />
 
       {/* Connection status banners */}
       <ConnectionBanner status={connectionStatus} onRetry={handleRetryConnection} />
@@ -1325,10 +1342,10 @@ export function App() {
             while a conversation is front; swipe right (or back / Esc) pages
             back. */}
         {isDesktop && PAGER_DESKTOP ? (
-          <div className="row-start-1 col-start-1 min-h-0 relative overflow-hidden">
+          <div ref={pagerRef} className="row-start-1 col-start-1 min-h-0 relative overflow-hidden">
             {/* HOME pane */}
             <div
-              className={`absolute inset-0 flex flex-col min-h-0 pager-pane${pagerSwipe.dragging ? ' is-dragging' : ''}`}
+              className={`absolute inset-0 flex flex-col min-h-0 pager-pane${pagerGestureActive ? ' is-dragging' : ''}`}
               style={{ transform: `translateX(${((pagerP - 1) * 100).toFixed(2)}%)` }}
               {...(visiblePanel !== 'home' ? { inert: true } : {})}
             >
@@ -1348,7 +1365,7 @@ export function App() {
             {/* DETAIL pane — chat / document / finder pages in from the right */}
             {pagerDetailTab && (
               <div
-                className={`absolute inset-0 flex flex-col min-h-0 pager-pane${pagerSwipe.dragging ? ' is-dragging' : ''}`}
+                className={`absolute inset-0 flex flex-col min-h-0 pager-pane${pagerGestureActive ? ' is-dragging' : ''}`}
                 style={{ transform: `translateX(${(pagerP * 100).toFixed(2)}%)`, touchAction: 'pan-y' }}
                 {...pagerSwipe.handlers}
                 {...(visiblePanel === 'home' ? { inert: true } : {})}

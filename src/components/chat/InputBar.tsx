@@ -965,14 +965,16 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           )}
         </div>
 
-        {/* Hint row — desktop only (mouse + keyboard hints don't apply on touch) */}
+        {/* Hint row — desktop only (mouse + keyboard hints don't apply on
+            touch). Keycaps use the glass tokens (design mockup) — an opaque
+            bg-muted reads as black blobs on the frosted matte. */}
         {!isRecording && !isTranscribing && (
-          <div className="hidden md:flex text-[10.5px] text-muted-foreground/70 mt-2 px-1 items-center gap-3 flex-wrap">
+          <div className="hidden md:flex text-[10.5px] text-muted-foreground/70 mt-2 px-1 items-center justify-center gap-4 flex-wrap text-glow">
             <span>↵ to send</span>
             <span>⇧↵ for new line</span>
             <span className="opacity-50">·</span>
-            <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">/</kbd> commands</span>
-            <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">@</kbd> attach a file</span>
+            <span><kbd className="kbd-glass">/</kbd> commands</span>
+            <span><kbd className="kbd-glass">@</kbd> attach a file</span>
           </div>
         )}
       </div>
