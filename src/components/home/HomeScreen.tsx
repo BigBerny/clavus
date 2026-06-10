@@ -149,10 +149,10 @@ function ChannelTile({ label, icon, accent, onClick }: {
   return (
     <button
       onClick={onClick}
-      className="inline-btn flex flex-col items-center justify-center gap-2 px-3 py-4 rounded-[16px] glass hover:glass-heavy transition-all"
+      className="inline-btn flex flex-col items-center justify-center gap-1.5 p-3 md:gap-2 md:px-3 md:py-4 rounded-[var(--glass-radius)] md:rounded-[16px] glass hover:glass-heavy transition-all"
     >
       <span style={{ color: `var(--color-${accent})` }}>{icon}</span>
-      <span className="text-[13px] font-semibold text-foreground text-glow">{label}</span>
+      <span className="text-[12px] font-medium md:text-[13px] md:font-semibold text-foreground text-glow">{label}</span>
     </button>
   )
 }
@@ -288,7 +288,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
         {/* Compose — section label removed per design feedback; whitespace
             does the separating now. */}
         <section className="mb-7">
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-2 md:gap-2.5">
             <ChannelTile label="Message" icon={ChatIcon} accent="cat-chat" onClick={() => onCompose?.('messaging')} />
             <ChannelTile label="Slack" icon={SlackIcon} accent="cat-voice" onClick={() => onCompose?.('slack')} />
             <ChannelTile label="Email" icon={EmailIcon} accent="cat-doc" onClick={() => onCompose?.('email')} />
@@ -418,7 +418,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
 
         {/* Tools — section label removed per design feedback. */}
         <section>
-          <div className="grid grid-cols-3 gap-2.5">
+          <div className="grid grid-cols-3 gap-2 md:gap-2.5">
             <ChannelTile label="Finder" icon={FinderIcon} accent="cat-doc" onClick={openFinder} />
             <ChannelTile label="Voice mode" icon={MicIcon} accent="cat-voice" onClick={() => onOpenRealtime?.()} />
             <ChannelTile label="Transcripts" icon={TranscriptsIcon} accent="cat-violet" onClick={() => onOpenTranscripts?.()} />
