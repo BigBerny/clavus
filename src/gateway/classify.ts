@@ -62,9 +62,8 @@ export async function classifyMessage(
     const modelId = parsed.model === 'opus' ? 'opus' : parsed.model === 'flash' ? 'flash' : 'gpt'
     const validReasonings: ReasoningLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
     let reasoning: ReasoningLevel = validReasonings.includes(parsed.reasoning) ? parsed.reasoning : 'medium'
-    // Flash is only for very simple work and is configured without thinking
-    // on the gateway — never request a reasoning effort for it.
-    if (modelId === 'flash') reasoning = 'none'
+    // Flash is only for very simple work; keep it cheap and fast.
+    if (modelId === 'flash') reasoning = 'minimal'
     // GPT should never use "none" — floor to "minimal"
     if (modelId === 'gpt' && reasoning === 'none') reasoning = 'minimal'
     // Opus should always use at least "high"

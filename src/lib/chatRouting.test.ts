@@ -26,28 +26,16 @@ describe('resolveChatRoutingSelection', () => {
     expect(result.shouldPinAutoReasoning).toBe(true)
   })
 
-  it('never sends a reasoning effort for flash (gateway only accepts "off")', () => {
+  it('passes classified minimal reasoning through for flash', () => {
     const result = resolveChatRoutingSelection({
-      autoClassification: { modelId: 'flash', reasoning: 'none', label: 'Simple factual' },
+      autoClassification: { modelId: 'flash', reasoning: 'minimal', label: 'Simple factual' },
       selectedModelId: 'auto',
       manualReasoning: null,
     })
 
     expect(result.modelOption.id).toBe('flash')
-    expect(result.reasoningEffort).toBeUndefined()
-    expect(result.shouldPinAutoReasoning).toBe(false)
-  })
-
-  it('drops manual reasoning when flash is selected manually', () => {
-    const result = resolveChatRoutingSelection({
-      autoClassification: null,
-      selectedModelId: 'flash',
-      manualReasoning: 'medium',
-    })
-
-    expect(result.modelOption.id).toBe('flash')
-    expect(result.reasoningEffort).toBeUndefined()
-    expect(result.shouldPinAutoReasoning).toBe(false)
+    expect(result.reasoningEffort).toBe('minimal')
+    expect(result.shouldPinAutoReasoning).toBe(true)
   })
 
   it('does not invent reasoning for a manually selected model', () => {
