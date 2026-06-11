@@ -145,6 +145,8 @@ export function App() {
       ensureChatTab(newId, 'Talk Mode')
       setTalkModeThreadId(newId)
       setVisiblePanel(newId)
+      // Bring the new pane into view (pager) once it's mounted.
+      requestAnimationFrame(() => scrollToTabRef.current(newId))
       // Start talk mode after state settles
       setTimeout(() => talkMode.toggle(), 100)
     } else {
@@ -167,6 +169,14 @@ export function App() {
     mq.addEventListener('change', handler)
     return () => mq.removeEventListener('change', handler)
   }, [])
+
+  // Pager mode — the Clavus Desktop design's navigation model: Home is the
+  // leftmost panel and the place you start; the active conversation (or file)
+  // slides in as a single pane on the right with swipe/trackpad-back. Used on
+  // all mobile sizes AND in the Tauri main window ("window mode"). The
+  // desktop *browser* keeps the sidebar + grid layout.
+  const isTauriShell = document.documentElement.hasAttribute('data-tauri')
+  const pagerMode = !isDesktop || isTauriShell
 
   // Pre-warm the Marksense editor bundle (Tiptap + ~25 extensions + CodeMirror)
   // while the user is reading chat. Without this, opening a markdown for the
@@ -432,13 +442,13 @@ export function App() {
       const tabId = applyRoute(route)
       if (tabId === null) {
         setVisiblePanel('home')
-        if (!isDesktop) requestAnimationFrame(() => scrollToTabRef.current('home'))
+        if (pagerMode) requestAnimationFrame(() => scrollToTabRef.current('home'))
       } else {
         setVisiblePanel(tabId)
-        if (!isDesktop) {
+        if (pagerMode) {
           // External/PWA deep links can arrive while the app is already open.
-          // Setting visiblePanel alone updates state/sidebar, but the mobile
-          // scroll-snap viewport stays where it was unless we explicitly move it.
+          // Setting visiblePanel alone updates state, but the pager's
+          // scroll-snap viewport stays where it was unless we move it.
           requestAnimationFrame(() => requestAnimationFrame(() => scrollToTabRef.current(tabId)))
         }
       }
@@ -446,7 +456,7 @@ export function App() {
     apply(getCurrentRoute())
     const unsub = onRouteChange(apply)
     return unsub
-  }, [setVisiblePanel, isDesktop])
+  }, [setVisiblePanel, pagerMode])
 
   useEffect(() => {
     if (needsToken) return
@@ -491,8 +501,9 @@ export function App() {
     const handleOpenFile = (e: Event) => {
       const detail = (e as CustomEvent).detail as { path?: string; title?: string }
       if (!detail?.path) return
-      // On desktop, if a chat tab is active and this is a .md file, open in split view
-      if (isDesktop && detail.path.endsWith('.md')) {
+      // Desktop browser only: open .md in split view next to the active chat.
+      // Pager mode opens it as the right-hand pane instead.
+      if (!pagerMode && detail.path.endsWith('.md')) {
         const currentPanel = visiblePanelRef.current
         const tabs = useTabsStore.getState().tabs
         const currentTab = tabs.find(t => t.id === currentPanel)
@@ -506,7 +517,7 @@ export function App() {
       const tabId = applyRoute({ kind: 'file', path: detail.path, title: detail.title })
       if (tabId) {
         setVisiblePanel(tabId)
-        if (!isDesktop) scrollToTabRef.current(tabId)
+        if (pagerMode) scrollToTabRef.current(tabId)
       }
     }
     window.addEventListener('clavus:open-file', handleOpenFile)
@@ -526,12 +537,12 @@ export function App() {
       window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, isDesktop, checkRecovery, setVisiblePanel])
+  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, pagerMode, checkRecovery, setVisiblePanel])
 
   // Initial scroll. If the app was opened via a deep link, land directly
-  // on that file/chat panel. Otherwise keep the old behavior: Home is the
-  // rightmost panel and should be the startup target. This fixes iOS/PWA links
-  // where the target tab was created but the initial Home scroll hid it.
+  // on that file/chat panel. Otherwise start on Home — the leftmost panel
+  // in the pager. This fixes iOS/PWA links where the target tab was created
+  // but the initial Home scroll hid it.
   useEffect(() => {
     if (needsToken) return
     const container = scrollContainerRef.current
@@ -542,6 +553,9 @@ export function App() {
       ? applyRoute(initialRoute)
       : null
     const targetPanelId = routeTabId ?? 'home'
+    // A deep-linked tab must be mounted as the pager's right pane before we
+    // can scroll to it.
+    if (targetPanelId !== 'home') setVisiblePanel(targetPanelId)
 
     const scrollToTarget = () => {
       const target = targetPanelId === 'home'
@@ -686,16 +700,15 @@ export function App() {
         const panelIndex = Math.round(scrollLeft / containerWidth)
         const rawPanelIndex = scrollLeft / containerWidth
 
-        const nextPanel = panelIndex >= sortedTabs.length ? 'home' : sortedTabs[panelIndex]?.id
-
-        // Total panels: sortedTabs.length + 1 (home)
-        if (panelIndex >= sortedTabs.length) {
+        // Pager order: [Home, active pane]. Index 0 = Home.
+        if (panelIndex <= 0) {
           logKeyboardScroll('scroll-accept-home', { panelIndex, rawPanelIndex })
           setVisiblePanel('home')
         } else {
-          const tab = sortedTabs[panelIndex]
+          const paneId = paneTabIdRef.current
+          const tab = paneId ? sortedTabs.find(t => t.id === paneId) : undefined
           if (tab) {
-            logKeyboardScroll('scroll-accept-tab', { panelIndex, rawPanelIndex, nextPanel })
+            logKeyboardScroll('scroll-accept-tab', { panelIndex, rawPanelIndex, nextPanel: tab.id })
             setVisiblePanel(tab.id)
             if (tab.type === 'chat') switchThread((tab as ChatTab).threadId)
           } else {
@@ -725,38 +738,37 @@ export function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- need to re-pin when tab ORDER changes, not just count
   }, [pinVisiblePanelIfNeeded, sortedTabs.map(t => t.id).join(','), visiblePanel])
 
-  // Scroll to a specific tab panel
+  // Scroll to a specific tab panel. Setting visiblePanel mounts the pane
+  // (pager order: [Home, pane]) — the scroll retries across a few frames so
+  // a freshly-mounted pane is found once React commits it.
   const scrollToTab = useCallback((tabId: string) => {
-    const container = scrollContainerRef.current
-    const panel = panelRefs.current.get(tabId)
-    if (!container || !panel) {
-      // Fallback: switch panel without scrolling
-      if (tabId !== 'home') {
-        const tab = sortedTabs.find(t => t.id === tabId)
-        if (tab?.type === 'chat') switchThread((tab as ChatTab).threadId)
-      }
-      setVisiblePanel(tabId)
-      return
-    }
-    isProgrammaticScroll.current = true
-    container.style.scrollSnapType = 'none'
     setVisiblePanel(tabId)
     if (tabId !== 'home') {
       const tab = sortedTabs.find(t => t.id === tabId)
       if (tab?.type === 'chat') switchThread((tab as ChatTab).threadId)
     }
-    requestAnimationFrame(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    isProgrammaticScroll.current = true
+    container.style.scrollSnapType = 'none'
+    const finish = () => {
+      container.style.scrollSnapType = 'x mandatory'
+      isProgrammaticScroll.current = false
+    }
+    const attempt = (triesLeft: number) => {
       const target = panelRefs.current.get(tabId)
-      if (target && container) {
-        // Smooth scroll to give "swipe" feel when tapping tabs
+      if (target) {
+        // Smooth scroll to give "swipe" feel when tapping threads
         container.scrollTo({ left: target.offsetLeft, behavior: 'smooth' })
+        // Re-enable snap after smooth scroll completes (~300ms)
+        setTimeout(finish, 350)
+      } else if (triesLeft > 0) {
+        requestAnimationFrame(() => attempt(triesLeft - 1))
+      } else {
+        finish()
       }
-      // Re-enable snap after smooth scroll completes (~300ms)
-      setTimeout(() => {
-        container.style.scrollSnapType = 'x mandatory'
-        isProgrammaticScroll.current = false
-      }, 350)
-    })
+    }
+    requestAnimationFrame(() => attempt(5))
   }, [switchThread, sortedTabs, setVisiblePanel])
 
   // Wire up ref so navigateToThread can use scrollToTab
@@ -764,19 +776,33 @@ export function App() {
     scrollToTabRef.current = scrollToTab
   }, [scrollToTab])
 
+  // Window mode: Esc pages back to Home (matches the design's dismiss).
+  useEffect(() => {
+    if (!(pagerMode && isDesktop)) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      const active = document.activeElement as HTMLElement | null
+      if (active?.matches('input, textarea, [contenteditable="true"]')) return
+      if (visiblePanelRef.current !== 'home') scrollToTab('home')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [pagerMode, isDesktop, scrollToTab])
+
   const handleRecordingChange = useCallback((...args: [boolean, string, () => void]) => {
     cancelRecordingRef.current = args[2]
   }, [])
 
-  // Check actual scroll position to determine if home panel is visible
+  // Check actual scroll position to determine if home panel is visible.
+  // Pager order: Home is the leftmost panel (index 0).
   const isHomeVisible = useCallback(() => {
     const container = scrollContainerRef.current
     if (!container) return visiblePanel === 'home'
     const containerWidth = container.clientWidth
     if (!containerWidth) return visiblePanel === 'home'
     const panelIndex = Math.round(container.scrollLeft / containerWidth)
-    return panelIndex >= sortedTabs.length
-  }, [sortedTabs, visiblePanel])
+    return panelIndex <= 0
+  }, [visiblePanel])
 
   const createConversationFromHome = useCallback((title = 'New conversation') => {
     // Capture the model/reasoning the user selected on the home screen before
@@ -920,51 +946,62 @@ export function App() {
     }
   }, [])
 
-  // Handle archiving a tab via pull-down gesture (mobile)
+  // Handle archiving a tab via pull-down gesture. The pane is gone — land
+  // back on Home (the leftmost panel).
   const handleArchiveTab = useCallback((tabId: string) => {
     const tab = sortedTabs.find(t => t.id === tabId)
     if (tab?.type === 'chat') {
       const threadId = (tab as ChatTab).threadId
       useThreadsStore.getState().archiveThread(threadId)
     }
-    // Navigate to neighbor or home
-    const neighbor = closeTab(tabId)
-    if (neighbor) {
+    closeTab(tabId)
+    setStickyPaneId(null)
+    const container = scrollContainerRef.current
+    if (container) {
+      isProgrammaticScroll.current = true
+      container.style.scrollSnapType = 'none'
+      container.scrollLeft = 0
+      setVisiblePanel('home')
       requestAnimationFrame(() => {
-        scrollToTab(neighbor.id)
+        container.style.scrollSnapType = 'x mandatory'
+        isProgrammaticScroll.current = false
       })
-    } else {
-      const container = scrollContainerRef.current
-      if (container) {
-        isProgrammaticScroll.current = true
-        container.style.scrollSnapType = 'none'
-        container.scrollLeft = container.scrollWidth
-        setVisiblePanel('home')
-        requestAnimationFrame(() => {
-          container.style.scrollSnapType = 'x mandatory'
-          isProgrammaticScroll.current = false
-        })
-      }
-    }
-  }, [closeTab, scrollToTab, sortedTabs, setVisiblePanel])
-
-  // Close a non-chat tab (e.g. Finder) and navigate to a neighbor or home.
-  const handleCloseTab = useCallback((tabId: string) => {
-    const neighbor = closeTab(tabId)
-    if (neighbor) {
-      if (isDesktop) {
-        setVisiblePanel(neighbor.id)
-      } else {
-        requestAnimationFrame(() => scrollToTab(neighbor.id))
-      }
     } else {
       setVisiblePanel('home')
     }
-  }, [closeTab, scrollToTab, setVisiblePanel, isDesktop])
+  }, [closeTab, sortedTabs, setVisiblePanel])
+
+  // Close a non-chat tab (e.g. Finder). Pager: back to Home; desktop
+  // browser: neighbor tab like before.
+  const handleCloseTab = useCallback((tabId: string) => {
+    const neighbor = closeTab(tabId)
+    if (pagerMode) {
+      setStickyPaneId(null)
+      scrollToTab('home')
+      return
+    }
+    if (neighbor) {
+      setVisiblePanel(neighbor.id)
+    } else {
+      setVisiblePanel('home')
+    }
+  }, [closeTab, scrollToTab, setVisiblePanel, pagerMode])
 
   // Determine if the visible tab is a chat tab (to show InputBar)
   const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
   const isVisibleChat = visiblePanel === 'home' || visibleTab?.type === 'chat'
+
+  // The pager's right-hand pane. Sticky: going back to Home keeps the last
+  // pane mounted (parked off-screen right) so the snap-back animation has
+  // something to slide away from and reopening is instant.
+  const [stickyPaneId, setStickyPaneId] = useState<string | null>(null)
+  useEffect(() => {
+    if (visiblePanel !== 'home') setStickyPaneId(visiblePanel)
+  }, [visiblePanel])
+  const paneTabId = visiblePanel !== 'home' ? visiblePanel : stickyPaneId
+  const paneTab = paneTabId ? sortedTabs.find(t => t.id === paneTabId) : undefined
+  const paneTabIdRef = useRef<string | null>(null)
+  paneTabIdRef.current = paneTab?.id ?? null
 
   // Desktop sidebar: select tab by setting visiblePanel directly.
   // The sidebar synthesizes ChatTab entries from synced thread state, so the
@@ -990,7 +1027,8 @@ export function App() {
   const handleOpenFinder = useCallback(() => {
     const id = openOrFocusFinderTab()
     setVisiblePanel(id)
-  }, [setVisiblePanel])
+    if (pagerMode) requestAnimationFrame(() => scrollToTabRef.current(id))
+  }, [setVisiblePanel, pagerMode])
 
   const markHorizontalGestureStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const wasSwipeInProgress = !!userGestureEndTimer.current
@@ -1106,6 +1144,20 @@ export function App() {
     })
   }, [logKeyboardScroll])
 
+  // Trackpad two-finger pans (window mode) arrive as wheel events with NO
+  // pointer events, so the pointer-based gesture flags never arm and the
+  // layout pin fights the scroll. Treat horizontal wheel input as a gesture.
+  const markWheelGesture = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
+    isUserHorizontalGesture.current = true
+    if (userGestureEndTimer.current) clearTimeout(userGestureEndTimer.current)
+    userGestureEndTimer.current = setTimeout(() => {
+      isUserHorizontalGesture.current = false
+      userGestureEndTimer.current = null
+      logKeyboardScroll('gesture-end-cleared')
+    }, 400)
+  }, [logKeyboardScroll])
+
   const markHorizontalGestureEnd = useCallback(() => {
     gestureStartPoint.current = null
     // Keep gestureStartPanelIndex alive until the gesture-end timer fires so
@@ -1147,8 +1199,8 @@ export function App() {
       {/* Main content */}
       <div className={`flex-1 min-h-0 flex flex-row ${isDesktop ? 'home-screen' : ''}`}>
 
-        {/* Desktop sidebar — only visible on md+ */}
-        {isDesktop && (
+        {/* Desktop sidebar — browser only; window mode (Tauri) uses the pager */}
+        {!pagerMode && (
           <div className="py-2 pl-2 shrink-0">
           <DesktopSidebar
             tabs={[...sortedTabs].reverse()}
@@ -1185,8 +1237,8 @@ export function App() {
         {/* Content area */}
         <div className="flex-1 min-h-0 min-w-0 grid grid-cols-1 grid-rows-1">
 
-        {/* Desktop: panel view with optional split */}
-        {isDesktop ? (
+        {/* Desktop browser: panel view with optional split */}
+        {!pagerMode ? (
           <div className="row-start-1 col-start-1 min-h-0 flex flex-row">
             {/* Main panel — when doc is expanded to full width, collapse to zero
                 but keep in DOM to avoid unmount/remount thrashing */}
@@ -1333,7 +1385,9 @@ export function App() {
             )}
           </div>
         ) : (
-          /* Mobile: horizontal scroll-snap */
+          /* Pager (mobile + Tauri window mode): [Home | active pane] with
+             scroll-snap — the conversation slides in from the right, swipe
+             or trackpad-pan right to go back home. */
           <div
             ref={scrollContainerRef}
             className="row-start-1 col-start-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto relative z-[1]"
@@ -1341,6 +1395,7 @@ export function App() {
             onPointerMove={markHorizontalGestureMove}
             onPointerUp={markHorizontalGestureEnd}
             onPointerCancel={markHorizontalGestureEnd}
+            onWheel={markWheelGesture}
             style={{
               scrollbarWidth: 'none',
               msOverflowStyle: 'none',
@@ -1351,57 +1406,7 @@ export function App() {
               overscrollBehaviorX: 'none',
             }}
           >
-            {sortedTabs.map((tab) => {
-              const isActive = visiblePanel === tab.id
-              return (
-                <div
-                  key={tab.id}
-                  ref={setPanelRef(tab.id)}
-                  className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
-                  style={{ touchAction: 'pan-x pan-y' }}
-                  {...(!isActive ? { inert: true } : {})}
-                >
-                  <PullDownDismissable tabId={tab.id} onDismiss={handleArchiveTab}>
-                    <Suspense fallback={<PanelLoading />}>
-                      {tab.type === 'chat' && (
-                        <ChatViewPanel
-                          threadId={(tab as ChatTab).threadId}
-                          onRegenerate={handleRegenerate}
-                          onStartEdit={handleStartEditMessage}
-                          editingMessageId={editingMessage?.threadId === (tab as ChatTab).threadId ? editingMessage.messageId : null}
-                          onBranch={handleBranch}
-                        />
-                      )}
-                      {tab.type === 'marksense' && (
-                        <MarksensePanel
-                          path={(tab as MarksenseTab).path}
-                          title={tab.title}
-                          isVisible={isActive}
-                          onOpenFinder={handleOpenFinder}
-                        />
-                      )}
-                      {tab.type === 'file' && (
-                        <FileViewerPanel
-                          path={(tab as FileTab).path}
-                          title={tab.title}
-                          isVisible={isActive}
-                          onClose={() => handleCloseTab(tab.id)}
-                        />
-                      )}
-                      {tab.type === 'finder' && (
-                        <FinderPanel
-                          tab={tab as FinderTab}
-                          isVisible={isActive}
-                          onClose={() => handleCloseTab(tab.id)}
-                        />
-                      )}
-                    </Suspense>
-                  </PullDownDismissable>
-                </div>
-              )
-            })}
-
-          {/* Home panel (rightmost) */}
+          {/* Home panel — leftmost, the place you start */}
           <div
             ref={setPanelRef('home')}
             className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 overflow-hidden box-border"
@@ -1419,7 +1424,75 @@ export function App() {
               }}
             />
           </div>
+
+          {/* The single right-hand pane — the active conversation or file.
+              Sticky across back-to-home so the slide-away stays smooth; no
+              other panes are mounted, so there is no swiping between
+              conversations. */}
+          {paneTab && (() => {
+            const isActive = visiblePanel === paneTab.id
+            return (
+                <div
+                  key={paneTab.id}
+                  ref={setPanelRef(paneTab.id)}
+                  className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
+                  style={{ touchAction: 'pan-x pan-y' }}
+                  {...(!isActive ? { inert: true } : {})}
+                >
+                  <PullDownDismissable tabId={paneTab.id} onDismiss={handleArchiveTab}>
+                    <Suspense fallback={<PanelLoading />}>
+                      {paneTab.type === 'chat' && (
+                        <ChatViewPanel
+                          threadId={(paneTab as ChatTab).threadId}
+                          onRegenerate={handleRegenerate}
+                          onStartEdit={handleStartEditMessage}
+                          editingMessageId={editingMessage?.threadId === (paneTab as ChatTab).threadId ? editingMessage.messageId : null}
+                          onBranch={handleBranch}
+                        />
+                      )}
+                      {paneTab.type === 'marksense' && (
+                        <MarksensePanel
+                          path={(paneTab as MarksenseTab).path}
+                          title={paneTab.title}
+                          isVisible={isActive}
+                          onOpenFinder={handleOpenFinder}
+                        />
+                      )}
+                      {paneTab.type === 'file' && (
+                        <FileViewerPanel
+                          path={(paneTab as FileTab).path}
+                          title={paneTab.title}
+                          isVisible={isActive}
+                          onClose={() => handleCloseTab(paneTab.id)}
+                        />
+                      )}
+                      {paneTab.type === 'finder' && (
+                        <FinderPanel
+                          tab={paneTab as FinderTab}
+                          isVisible={isActive}
+                          onClose={() => handleCloseTab(paneTab.id)}
+                        />
+                      )}
+                    </Suspense>
+                  </PullDownDismissable>
+                </div>
+            )
+          })()}
         </div>
+        )}
+
+        {/* Window-mode back affordance — floating circle, like the design's
+            back button. Swipe/trackpad works too; Esc as well. */}
+        {pagerMode && isDesktop && visiblePanel !== 'home' && (
+          <button
+            onClick={() => scrollToTab('home')}
+            className="fixed left-3 z-30 w-8 h-8 rounded-full glass flex items-center justify-center text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors"
+            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 40px)' }}
+            aria-label="Back to home"
+            title="Back to home (Esc)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          </button>
         )}
 
         {/* InputBar floating over content with glass effect (skip when split view has its own) */}
@@ -1431,7 +1504,7 @@ export function App() {
               onSendNow={handleSendNow}
               isStreaming={visibleThreadStreaming}
               onRecordingChange={handleRecordingChange}
-              isHome={!isDesktop && visiblePanel === 'home'}
+              isHome={pagerMode && visiblePanel === 'home'}
               onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               threadId={visiblePanel !== 'home' ? visiblePanel : null}
