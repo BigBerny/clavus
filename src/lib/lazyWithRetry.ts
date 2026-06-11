@@ -20,6 +20,26 @@ function moduleUrlFromError(err: unknown): string | null {
   return match ? match[1].replace(/[.,;)]+$/, '') : null
 }
 
+// Fetches the failed module URL once to capture what the network actually
+// returned (status, redirect target, content type) — surfaced via console so
+// the dashboard browser-log pipeline records it for remote debugging.
+async function probeModuleUrl(name: string, url: string) {
+  try {
+    const res = await fetch(url, { cache: 'no-store' })
+    const body = await res.text()
+    console.warn(`[Clavus] Lazy import "${name}" probe: ${JSON.stringify({
+      url,
+      status: res.status,
+      redirected: res.redirected,
+      finalUrl: res.url,
+      contentType: res.headers.get('content-type'),
+      bodyStart: body.slice(0, 120),
+    })}`)
+  } catch (err) {
+    console.warn(`[Clavus] Lazy import "${name}" probe failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
 // Recovers from transient "Failed to fetch dynamically imported module" errors
 // (dev-server restarts behind the Cloudflare tunnel, brief tunnel drops):
 // retry with backoff + cache-bust, then reload the page once to re-sync the
@@ -42,8 +62,11 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
         return { default: pick(mod as Record<string, unknown>) }
       } catch (err) {
         lastError = err
-        moduleUrl = moduleUrl ?? moduleUrlFromError(err)
-        console.warn(`[Clavus] Lazy import "${name}" failed (attempt ${attempt + 1})`, err)
+        if (!moduleUrl) {
+          moduleUrl = moduleUrlFromError(err)
+          if (moduleUrl) void probeModuleUrl(name, moduleUrl)
+        }
+        console.warn(`[Clavus] Lazy import "${name}" failed (attempt ${attempt + 1}): ${err instanceof Error ? err.message : String(err)}`)
       }
     }
 

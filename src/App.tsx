@@ -182,8 +182,12 @@ export function App() {
         ? (cb) => idleWindow.requestIdleCallback?.(cb, { timeout: 2000 }) ?? window.setTimeout(cb, 800)
         : (cb) => window.setTimeout(cb, 800)
     const handle = idle(() => {
-      void import('./components/marksense/MarksensePanel.tsx')
-      void import('@clavus/marksense-core')
+      import('./components/marksense/MarksensePanel.tsx').catch((err: unknown) => {
+        console.warn(`[Clavus] MarksensePanel warm import failed: ${err instanceof Error ? err.message : String(err)}`)
+      })
+      import('@clavus/marksense-core').catch((err: unknown) => {
+        console.warn(`[Clavus] marksense-core warm import failed: ${err instanceof Error ? err.message : String(err)}`)
+      })
     })
     return () => {
       if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(handle)
