@@ -5,8 +5,9 @@ import { ToolCallCards } from './ToolCallCard.tsx'
 import { ButtonGroup, SelectBlock, ConfirmBlock, FormBlock, parseButtonsLine, parseSelectLine, parseFormBlock, type ButtonAction, type SelectOption, type FormBlockData } from './InteractiveBlock.tsx'
 import { haptic } from '../../lib/native'
 import { normalizeToolCalls } from '../../lib/toolCalls.ts'
+import { importWithRetry } from '../../lib/lazyRetry.ts'
 
-const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(m => ({ default: m.RichMessageRenderer })))
+const RichMessageRenderer = lazy(() => importWithRetry(() => import('./RichMessageRenderer.tsx')).then(m => ({ default: m.RichMessageRenderer })))
 
 // ─── Thinking Block ─────────────────────────────────────────────────────────
 

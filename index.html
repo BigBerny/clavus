@@ -10,6 +10,13 @@
     <meta name="apple-mobile-web-app-title" content="Clavus" />
     <meta name="theme-color" content="#110e0c" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#fdfaf4" media="(prefers-color-scheme: light)" />
+    <!-- Paint the app background before any JS/CSS loads, so reloads never
+         flash white in dark mode (the <html class="dark"> default wins until
+         the theme store re-applies the stored choice). -->
+    <style>
+      html { background: #fdfaf4; }
+      html.dark { background: #110e0c; }
+    </style>
     <title>Clavus</title>
   </head>
   <body>

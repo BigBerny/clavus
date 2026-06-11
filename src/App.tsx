@@ -195,8 +195,11 @@ export function App() {
         ? (cb) => idleWindow.requestIdleCallback?.(cb, { timeout: 2000 }) ?? window.setTimeout(cb, 800)
         : (cb) => window.setTimeout(cb, 800)
     const handle = idle(() => {
-      void import('./components/marksense/MarksensePanel.tsx')
-      void import('@clavus/marksense-core')
+      // Prewarm failures must be swallowed: an uncaught rejection here would
+      // look like a stale-module error to the self-heal and reload the page —
+      // for a fetch that was pure optimization in the first place.
+      import('./components/marksense/MarksensePanel.tsx').catch(() => {})
+      import('@clavus/marksense-core').catch(() => {})
     })
     return () => {
       if (idleWindow.cancelIdleCallback) idleWindow.cancelIdleCallback(handle)
