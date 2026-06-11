@@ -42,12 +42,12 @@ export function useVoiceRecorder({ onTranscription, onInsertTranscription, threa
     }
   }, [onTranscription, onInsertTranscription, threadId])
 
-  const start = useCallback(() => {
-    void useRecordingStore.getState().start(threadId)
+  const start = useCallback((targetThreadId?: string | null) => {
+    void useRecordingStore.getState().start(targetThreadId ?? threadId)
   }, [threadId])
 
-  const stop = useCallback(() => useRecordingStore.getState().stop(), [])
-  const stopAndInsert = useCallback(() => useRecordingStore.getState().stopAndInsert(), [])
+  const stop = useCallback((targetThreadId?: string | null) => useRecordingStore.getState().stop(targetThreadId), [])
+  const stopAndInsert = useCallback((targetThreadId?: string | null) => useRecordingStore.getState().stopAndInsert(targetThreadId), [])
   const cancel = useCallback(() => useRecordingStore.getState().cancel(), [])
   const retryLastTranscription = useCallback(() => useRecordingStore.getState().retryLastTranscription(), [])
   const clearLastFailedAudio = useCallback(() => useRecordingStore.getState().clearLastFailedAudio(), [])

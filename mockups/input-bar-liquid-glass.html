@@ -1,0 +1,1181 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Clavus Input Bar - Liquid Glass Mockups</title>
+<style>
+  :root {
+    --page: #100d10;
+    --ink: #f3efec;
+    --ink-soft: rgba(243, 239, 236, 0.68);
+    --ink-faint: rgba(243, 239, 236, 0.42);
+    --line: rgba(255, 255, 255, 0.12);
+    --line-strong: rgba(255, 255, 255, 0.2);
+    --glass: rgba(53, 40, 49, 0.42);
+    --glass-heavy: rgba(61, 46, 56, 0.58);
+    --glass-light: rgba(255, 255, 255, 0.075);
+    --violet: #b58cff;
+    --blue: #67aaff;
+    --green: #7fd0aa;
+    --orange: #f2ad68;
+    --red: #ff6b6b;
+    --red-soft: rgba(255, 82, 82, 0.18);
+    --radius-xl: 34px;
+    --radius-lg: 24px;
+    --radius-md: 16px;
+    --shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    min-height: 100%;
+    background:
+      linear-gradient(180deg, rgba(34, 28, 36, 0.92), rgba(14, 11, 14, 1) 28%, rgba(18, 13, 15, 1));
+    color: var(--ink);
+    font-family: var(--font);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    padding: 28px;
+  }
+
+  button {
+    color: inherit;
+    font: inherit;
+  }
+
+  .page {
+    width: min(1720px, 100%);
+    margin: 0 auto;
+  }
+
+  .top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 20px;
+    align-items: end;
+    margin-bottom: 24px;
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: 26px;
+    line-height: 1.08;
+    font-weight: 650;
+    letter-spacing: 0;
+  }
+
+  .intro {
+    margin: 0;
+    max-width: 760px;
+    color: var(--ink-soft);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .state-toggle {
+    display: flex;
+    gap: 6px;
+    padding: 5px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.055);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .state-toggle button {
+    border: 0;
+    min-width: 76px;
+    height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-soft);
+    font-size: 12px;
+    font-weight: 590;
+    cursor: pointer;
+    transition: background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+  }
+
+  .state-toggle button.is-active {
+    color: var(--ink);
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      0 5px 18px rgba(0, 0, 0, 0.22);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(320px, 1fr));
+    gap: 18px;
+    align-items: start;
+  }
+
+  .variant {
+    min-width: 0;
+  }
+
+  .label-row {
+    min-height: 54px;
+    margin-bottom: 12px;
+  }
+
+  .kicker {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    margin-bottom: 8px;
+    border-radius: 999px;
+    color: rgba(243, 239, 236, 0.72);
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .variant h2 {
+    margin: 0;
+    font-size: 15px;
+    line-height: 1.25;
+    font-weight: 650;
+    letter-spacing: 0;
+  }
+
+  .variant p {
+    margin: 5px 0 0;
+    color: var(--ink-soft);
+    font-size: 12.5px;
+    line-height: 1.38;
+  }
+
+  .phone {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 393 / 852;
+    min-height: 640px;
+    max-height: calc(100dvh - 136px);
+    border-radius: 46px;
+    overflow: hidden;
+    background:
+      linear-gradient(180deg, #18151d 0%, #100d10 46%, #130d10 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+      var(--shadow);
+  }
+
+  .phone::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(90deg, rgba(255,255,255,0.07), transparent 14%, transparent 86%, rgba(255,255,255,0.055)),
+      linear-gradient(180deg, rgba(255,255,255,0.08), transparent 15%, transparent 82%, rgba(255,255,255,0.04));
+    mix-blend-mode: screen;
+    opacity: 0.55;
+    z-index: 10;
+  }
+
+  .header {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(210px, 58%);
+    height: 44px;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 620;
+    color: rgba(243, 239, 236, 0.86);
+    z-index: 5;
+  }
+
+  .messages {
+    position: absolute;
+    inset: 78px 14px 118px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 6px 4px 2px;
+  }
+
+  .msg {
+    width: fit-content;
+    max-width: 84%;
+    border-radius: 23px;
+    padding: 11px 14px;
+    font-size: 13px;
+    line-height: 1.42;
+    letter-spacing: 0;
+  }
+
+  .msg.user {
+    align-self: flex-end;
+    color: #fff;
+    background:
+      linear-gradient(180deg, rgba(119, 159, 255, 0.88), rgba(106, 122, 230, 0.82));
+    border-bottom-right-radius: 9px;
+  }
+
+  .msg.assistant {
+    align-self: flex-start;
+    color: rgba(244, 239, 235, 0.93);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom-left-radius: 9px;
+  }
+
+  .msg.long {
+    max-width: 92%;
+  }
+
+  .tool-rail {
+    position: absolute;
+    right: 12px;
+    bottom: 250px;
+    display: grid;
+    gap: 10px;
+    color: rgba(243, 239, 236, 0.48);
+  }
+
+  .tool-rail .ghost-icon {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+  }
+
+  .composer-zone {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 4;
+  }
+
+  .liquid {
+    position: relative;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.115), rgba(255, 255, 255, 0.035)),
+      linear-gradient(135deg, rgba(181, 140, 255, 0.08), rgba(127, 208, 170, 0.035) 48%, rgba(242, 173, 104, 0.055)),
+      var(--glass);
+    border: 1px solid var(--line);
+    box-shadow:
+      0 18px 55px rgba(0, 0, 0, 0.32),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(26px) saturate(185%) contrast(1.04);
+    -webkit-backdrop-filter: blur(26px) saturate(185%) contrast(1.04);
+  }
+
+  .liquid::after {
+    content: "";
+    position: absolute;
+    inset: 1px;
+    pointer-events: none;
+    border-radius: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    mask-image: linear-gradient(155deg, black 0%, transparent 44%, black 82%);
+    -webkit-mask-image: linear-gradient(155deg, black 0%, transparent 44%, black 82%);
+  }
+
+  .liquid-strong {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.045)),
+      linear-gradient(135deg, rgba(181, 140, 255, 0.1), rgba(103, 170, 255, 0.045) 44%, rgba(242, 173, 104, 0.065)),
+      var(--glass-heavy);
+    border-color: var(--line-strong);
+  }
+
+  .composer {
+    min-height: 102px;
+    border-radius: var(--radius-xl);
+    padding: 14px 14px 10px;
+  }
+
+  .placeholder {
+    height: 32px;
+    color: rgba(243, 239, 236, 0.44);
+    font-size: 18px;
+    line-height: 32px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .text-value {
+    color: rgba(243, 239, 236, 0.92);
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .tool-left,
+  .tool-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .chip {
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 9px;
+    border-radius: 999px;
+    color: rgba(243, 239, 236, 0.7);
+    background: rgba(255, 255, 255, 0.055);
+    border: 1px solid rgba(255, 255, 255, 0.065);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 12px rgba(103, 170, 255, 0.38);
+  }
+
+  .dot.violet { background: var(--violet); box-shadow: 0 0 12px rgba(181, 140, 255, 0.42); }
+  .dot.green { background: var(--green); box-shadow: 0 0 12px rgba(127, 208, 170, 0.42); }
+  .dot.red { background: var(--red); box-shadow: 0 0 12px rgba(255, 107, 107, 0.42); }
+  .dot.orange { background: var(--orange); box-shadow: 0 0 12px rgba(242, 173, 104, 0.42); }
+
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 15px;
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 auto;
+    color: rgba(243, 239, 236, 0.67);
+    background: transparent;
+  }
+
+  .icon-btn.glass {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .icon-btn.primary {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .icon-btn.danger {
+    color: #ffd8d8;
+    background: rgba(255, 81, 81, 0.23);
+    border: 1px solid rgba(255, 123, 123, 0.16);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      0 9px 24px rgba(255, 65, 65, 0.18);
+  }
+
+  .icon-btn.send {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.13);
+  }
+
+  .icon-btn[disabled] {
+    opacity: 0.42;
+  }
+
+  svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+    stroke-width: 2;
+  }
+
+  .icon-small svg,
+  svg.icon-small {
+    width: 14px;
+    height: 14px;
+  }
+
+  .status-shelf {
+    min-height: 50px;
+    border-radius: 28px;
+    padding: 8px 9px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .status-main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-copy {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+  }
+
+  .status-title {
+    font-size: 13px;
+    line-height: 1.15;
+    font-weight: 640;
+    color: rgba(243, 239, 236, 0.92);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .status-sub {
+    font-size: 11px;
+    line-height: 1.2;
+    color: rgba(243, 239, 236, 0.52);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .queue-preview {
+    min-width: 0;
+    max-width: 135px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(243, 239, 236, 0.78);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    font-size: 12px;
+  }
+
+  .queue-preview .truncate,
+  .truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bars {
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .bars span {
+    width: 3px;
+    border-radius: 999px;
+    background: currentColor;
+    opacity: 0.9;
+    animation: bar 900ms ease-in-out infinite;
+  }
+
+  .bars span:nth-child(1) { height: 8px; animation-delay: 0ms; }
+  .bars span:nth-child(2) { height: 15px; animation-delay: 100ms; }
+  .bars span:nth-child(3) { height: 10px; animation-delay: 180ms; }
+  .bars span:nth-child(4) { height: 17px; animation-delay: 260ms; }
+  .bars span:nth-child(5) { height: 7px; animation-delay: 340ms; }
+
+  @keyframes bar {
+    0%, 100% { transform: scaleY(0.72); opacity: 0.62; }
+    45% { transform: scaleY(1.22); opacity: 1; }
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.24);
+    border-top-color: var(--blue);
+    animation: spin 820ms linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .progress-line {
+    position: absolute;
+    left: 28px;
+    right: 28px;
+    bottom: 0;
+    height: 1px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .progress-line span {
+    display: block;
+    width: 46%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, transparent, rgba(103, 170, 255, 0.95), transparent);
+    animation: glide 1.35s ease-in-out infinite;
+  }
+
+  @keyframes glide {
+    from { transform: translateX(-130%); }
+    to { transform: translateX(250%); }
+  }
+
+  .voice-row {
+    min-height: 40px;
+    border-radius: 24px;
+    padding: 7px 9px;
+    margin-bottom: 8px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .voice-row .status-main {
+    gap: 10px;
+  }
+
+  .dock-float {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+
+  .float-pill {
+    min-width: 0;
+    height: 42px;
+    border-radius: 999px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    color: rgba(243, 239, 236, 0.86);
+    font-size: 13px;
+  }
+
+  .float-pill.wide {
+    flex: 1;
+  }
+
+  .float-stop {
+    width: 48px;
+    height: 48px;
+    border-radius: 999px;
+  }
+
+  .attached-composer {
+    padding-top: 0;
+    overflow: hidden;
+  }
+
+  .attached-strip {
+    min-height: 46px;
+    margin: -1px -1px 12px;
+    padding: 9px 13px;
+    border-radius: 31px 31px 21px 21px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.045);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .attached-strip .status-main {
+    flex: 1;
+  }
+
+  .baseline-queue {
+    height: 48px;
+    margin-bottom: 8px;
+    border-radius: 28px;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 0 12px;
+  }
+
+  .baseline-queue .status-title {
+    max-width: 122px;
+  }
+
+  .baseline .status-shelf,
+  .baseline .dock-float,
+  .baseline .attached-strip,
+  .baseline .voice-row {
+    display: none;
+  }
+
+  .state-idle .baseline-queue,
+  .state-generating .baseline-queue,
+  .state-recording .baseline-queue,
+  .state-transcribing .baseline-queue {
+    display: none;
+  }
+
+  .state-queued .baseline-queue {
+    display: flex;
+  }
+
+  .state-idle .when-generating,
+  .state-idle .when-queued,
+  .state-idle .when-recording,
+  .state-idle .when-transcribing,
+  .state-generating .when-idle,
+  .state-generating .when-queued,
+  .state-generating .when-recording,
+  .state-generating .when-transcribing,
+  .state-queued .when-idle,
+  .state-queued .when-generating,
+  .state-queued .when-recording,
+  .state-queued .when-transcribing,
+  .state-recording .when-idle,
+  .state-recording .when-generating,
+  .state-recording .when-queued,
+  .state-recording .when-transcribing,
+  .state-transcribing .when-idle,
+  .state-transcribing .when-generating,
+  .state-transcribing .when-queued,
+  .state-transcribing .when-recording {
+    display: none !important;
+  }
+
+  .state-recording .composer .text-box,
+  .state-recording .attached-composer .text-box {
+    display: none;
+  }
+
+  .recording-box {
+    display: none;
+    min-height: 32px;
+    align-items: center;
+    gap: 10px;
+    color: rgba(243, 239, 236, 0.86);
+  }
+
+  .state-recording .recording-box {
+    display: flex;
+  }
+
+  .recording-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.34);
+    animation: pulse 1.15s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.34); opacity: 1; }
+    50% { box-shadow: 0 0 0 8px rgba(255, 107, 107, 0); opacity: 0.72; }
+  }
+
+  .shelf .status-shelf {
+    display: flex;
+  }
+
+  .shelf.state-idle .status-shelf {
+    display: none;
+  }
+
+  .shelf.state-recording .voice-row {
+    display: flex;
+  }
+
+  .shelf.state-recording .status-shelf {
+    display: none;
+  }
+
+  .floating .dock-float {
+    display: flex;
+  }
+
+  .floating.state-idle .dock-float {
+    display: none;
+  }
+
+  .attached .attached-strip {
+    display: flex;
+  }
+
+  .attached.state-idle .attached-strip {
+    display: none;
+  }
+
+  .baseline.state-recording .composer {
+    min-height: 88px;
+  }
+
+  .baseline.state-transcribing .composer {
+    opacity: 0.85;
+  }
+
+  .baseline.state-recording .tool-left .chip,
+  .baseline.state-transcribing .tool-left .chip {
+    opacity: 0.65;
+  }
+
+  .transcribing-hint {
+    display: none;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: rgba(243, 239, 236, 0.58);
+    font-size: 12px;
+  }
+
+  .baseline.state-transcribing .transcribing-hint {
+    display: flex;
+  }
+
+  .baseline.state-transcribing .placeholder {
+    color: rgba(243, 239, 236, 0.28);
+  }
+
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 22px;
+  }
+
+  .note {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.045);
+    color: rgba(243, 239, 236, 0.68);
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .note strong {
+    display: block;
+    color: rgba(243, 239, 236, 0.9);
+    margin-bottom: 4px;
+    font-weight: 650;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  @media (max-width: 1480px) {
+    .grid { grid-template-columns: repeat(2, minmax(320px, 1fr)); }
+    .phone { max-height: none; }
+  }
+
+  @media (max-width: 760px) {
+    body { padding: 18px 12px 24px; }
+    .top { grid-template-columns: 1fr; align-items: start; }
+    .state-toggle { overflow: hidden; width: 100%; gap: 3px; }
+    .state-toggle button {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 0 4px;
+      font-size: 11px;
+    }
+    .grid { grid-template-columns: 1fr; }
+    .phone { min-height: auto; }
+    .notes { grid-template-columns: 1fr; }
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .liquid,
+    .state-toggle {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: rgba(43, 35, 42, 0.96);
+    }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <section class="top">
+    <div>
+      <h1>Clavus Mobile Composer Mockups</h1>
+      <p class="intro">External prototypes for keeping dictation available while a response is generating, with queue, stop, recording, and transcribing states moved into a Liquid Glass control layer above or attached to the composer.</p>
+    </div>
+    <div class="state-toggle" role="tablist" aria-label="Composer state">
+      <button class="is-active" data-state="idle" type="button">Idle</button>
+      <button data-state="generating" type="button">Generating</button>
+      <button data-state="queued" type="button">Queued</button>
+      <button data-state="recording" type="button">Recording</button>
+      <button data-state="transcribing" type="button">Transcribing</button>
+    </div>
+  </section>
+
+  <section class="grid" id="mockups">
+    <article class="variant">
+      <div class="label-row">
+        <span class="kicker">Current</span>
+        <h2>Single action slot</h2>
+        <p>The stop action occupies the same right-side slot as mic/send.</p>
+      </div>
+      <div class="phone baseline state-idle">
+        <div class="header liquid">AI File System</div>
+        <div class="messages">
+          <div class="msg user">Can you compare these options and keep the reply short?</div>
+          <div class="msg assistant long">For Clavus I would keep files as the source of truth and add a database/index layer for archive flags, embeddings, versions, and search.</div>
+          <div class="msg assistant long">The important part is not just storage. It is the workflow around drafts, queueing, and recovery.</div>
+        </div>
+        <div class="tool-rail">
+          <span class="ghost-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 0 1 1-1h9"/></svg></span>
+          <span class="ghost-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12a9 9 0 0 1 15.5-6.2"/><path d="M21 3v6h-6"/><path d="M21 12a9 9 0 0 1-15.5 6.2"/><path d="M3 21v-6h6"/></svg></span>
+          <span class="ghost-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 3v12"/><path d="M18 9v12"/><path d="M6 15l6-6 6 6"/></svg></span>
+        </div>
+        <div class="composer-zone">
+          <div class="baseline-queue liquid">
+            <span class="dot orange"></span>
+            <div class="status-main">
+              <div class="status-copy">
+                <span class="status-title">Can you compare thes...</span>
+                <span class="status-sub">Queued</span>
+              </div>
+            </div>
+            <button class="icon-btn" title="Edit queued message"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button class="icon-btn" title="Send queued message"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+          </div>
+          <div class="transcribing-hint"><span class="spinner"></span><span>Transcribing...</span></div>
+          <div class="composer liquid liquid-strong">
+            <div class="text-box">
+              <div class="placeholder when-idle">Message...</div>
+              <div class="placeholder when-generating">Message...</div>
+              <div class="placeholder when-queued">Message...</div>
+              <div class="placeholder when-transcribing">Message...</div>
+            </div>
+            <div class="recording-box">
+              <span class="recording-dot"></span>
+              <span>Recording</span>
+              <span class="bars" style="color: var(--red); margin-left: auto"><span></span><span></span><span></span><span></span><span></span></span>
+              <span style="font-variant-numeric: tabular-nums; color: var(--ink-soft)">0:12</span>
+            </div>
+            <div class="toolbar">
+              <div class="tool-left">
+                <span class="chip"><span class="dot violet"></span>Opus</span>
+                <span class="chip"><span class="dot"></span>Medium</span>
+                <button class="icon-btn" title="Attach file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 1 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
+                <button class="icon-btn" title="Mention file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.9 7.9"/></svg></button>
+              </div>
+              <div class="tool-right">
+                <button class="icon-btn when-idle" title="Dictate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></button>
+                <button class="icon-btn send when-idle" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn danger when-generating" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+                <button class="icon-btn danger when-queued" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+                <button class="icon-btn when-recording" title="Stop and insert"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+                <button class="icon-btn send when-recording" title="Stop and send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn when-transcribing" disabled title="Dictate disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></button>
+                <button class="icon-btn send when-transcribing" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="variant">
+      <div class="label-row">
+        <span class="kicker">Option A</span>
+        <h2>Status shelf above composer</h2>
+        <p>Queue, transcribing, and stop live in one glass shelf. Mic stays available.</p>
+      </div>
+      <div class="phone shelf state-idle">
+        <div class="header liquid">AI File System</div>
+        <div class="messages">
+          <div class="msg user">Can you compare these options and keep the reply short?</div>
+          <div class="msg assistant long">For Clavus I would keep files as the source of truth and add a database/index layer for archive flags, embeddings, versions, and search.</div>
+          <div class="msg assistant long">The important part is not just storage. It is the workflow around drafts, queueing, and recovery.</div>
+        </div>
+        <div class="composer-zone">
+          <div class="voice-row liquid">
+            <div class="status-main">
+              <span class="recording-dot"></span>
+              <div class="status-copy">
+                <span class="status-title">Recording</span>
+                <span class="status-sub">0:12</span>
+              </div>
+              <span class="bars" style="color: var(--red); margin-left: auto"><span></span><span></span><span></span><span></span><span></span></span>
+            </div>
+            <button class="icon-btn glass" title="Insert dictation"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+            <button class="icon-btn send" title="Send dictation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+          </div>
+          <div class="status-shelf liquid">
+            <div class="status-main when-generating">
+              <span class="bars" style="color: var(--blue)"><span></span><span></span><span></span><span></span><span></span></span>
+              <div class="status-copy">
+                <span class="status-title">Generating</span>
+                <span class="status-sub">You can keep composing or dictate</span>
+              </div>
+            </div>
+            <div class="status-main when-queued">
+              <span class="bars" style="color: var(--blue)"><span></span><span></span><span></span><span></span><span></span></span>
+              <div class="status-copy">
+                <span class="status-title">Generating</span>
+                <span class="status-sub">Queued reply waits below</span>
+              </div>
+            </div>
+            <div class="status-main when-transcribing">
+              <span class="spinner"></span>
+              <div class="status-copy">
+                <span class="status-title">Transcribing</span>
+                <span class="status-sub">Text will send when ready</span>
+              </div>
+            </div>
+            <div class="queue-preview when-queued">
+              <span class="dot orange"></span>
+              <span class="truncate">Can you compare...</span>
+            </div>
+            <button class="icon-btn danger when-generating" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+            <button class="icon-btn danger when-queued" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+            <div class="progress-line when-transcribing"><span></span></div>
+          </div>
+          <div class="composer liquid liquid-strong">
+            <div class="text-box">
+              <div class="placeholder when-idle">Message...</div>
+              <div class="placeholder when-generating">Message...</div>
+              <div class="placeholder text-value when-queued">Add one note about database versioning</div>
+              <div class="placeholder when-transcribing">Message...</div>
+            </div>
+            <div class="recording-box">
+              <span class="recording-dot"></span>
+              <span>Recording</span>
+            </div>
+            <div class="toolbar">
+              <div class="tool-left">
+                <span class="chip"><span class="dot violet"></span>Opus</span>
+                <span class="chip"><span class="dot"></span>Medium</span>
+                <button class="icon-btn" title="Attach file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 1 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
+              </div>
+              <div class="tool-right">
+                <button class="icon-btn" title="Dictate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></button>
+                <button class="icon-btn send when-idle" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-generating" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-queued" title="Queue message"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-recording" title="Send dictation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-transcribing" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="variant">
+      <div class="label-row">
+        <span class="kicker">Option B</span>
+        <h2>Floating stop and status chips</h2>
+        <p>The composer is stable; transient controls float just above it.</p>
+      </div>
+      <div class="phone floating state-idle">
+        <div class="header liquid">AI File System</div>
+        <div class="messages">
+          <div class="msg user">Can you compare these options and keep the reply short?</div>
+          <div class="msg assistant long">For Clavus I would keep files as the source of truth and add a database/index layer for archive flags, embeddings, versions, and search.</div>
+          <div class="msg assistant long">The important part is not just storage. It is the workflow around drafts, queueing, and recovery.</div>
+        </div>
+        <div class="composer-zone">
+          <div class="dock-float">
+            <div class="float-pill wide liquid when-generating">
+              <span class="bars" style="color: var(--blue)"><span></span><span></span><span></span><span></span><span></span></span>
+              <span class="truncate">Generating</span>
+            </div>
+            <div class="float-pill wide liquid when-queued">
+              <span class="dot orange"></span>
+              <span class="truncate">Queued: Can you compare...</span>
+            </div>
+            <div class="float-pill wide liquid when-recording">
+              <span class="recording-dot"></span>
+              <span class="truncate">Recording 0:12</span>
+              <span class="bars" style="color: var(--red); margin-left: auto"><span></span><span></span><span></span><span></span><span></span></span>
+            </div>
+            <div class="float-pill wide liquid when-transcribing">
+              <span class="spinner"></span>
+              <span class="truncate">Transcribing</span>
+            </div>
+            <button class="icon-btn danger float-stop when-generating" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+            <button class="icon-btn danger float-stop when-queued" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+            <button class="icon-btn glass float-stop when-recording" title="Stop recording"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+            <button class="icon-btn glass float-stop when-transcribing" disabled title="Transcribing"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.93 4.93 2.83 2.83"/><path d="m16.24 16.24 2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.93 19.07 2.83-2.83"/><path d="m16.24 7.76 2.83-2.83"/></svg></button>
+          </div>
+          <div class="composer liquid liquid-strong">
+            <div class="text-box">
+              <div class="placeholder when-idle">Message...</div>
+              <div class="placeholder when-generating">Message...</div>
+              <div class="placeholder text-value when-queued">Add one note about database versioning</div>
+              <div class="placeholder when-recording">Message...</div>
+              <div class="placeholder when-transcribing">Message...</div>
+            </div>
+            <div class="toolbar">
+              <div class="tool-left">
+                <span class="chip"><span class="dot violet"></span>Opus</span>
+                <span class="chip"><span class="dot"></span>Medium</span>
+                <button class="icon-btn" title="Attach file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 1 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
+              </div>
+              <div class="tool-right">
+                <button class="icon-btn" title="Dictate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></button>
+                <button class="icon-btn send when-idle" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-generating" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-queued" title="Queue message"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-recording" title="Send dictation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-transcribing" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="variant">
+      <div class="label-row">
+        <span class="kicker">Option C</span>
+        <h2>Attached activity strip</h2>
+        <p>A compact strip is part of the composer material but not the action slot.</p>
+      </div>
+      <div class="phone attached state-idle">
+        <div class="header liquid">AI File System</div>
+        <div class="messages">
+          <div class="msg user">Can you compare these options and keep the reply short?</div>
+          <div class="msg assistant long">For Clavus I would keep files as the source of truth and add a database/index layer for archive flags, embeddings, versions, and search.</div>
+          <div class="msg assistant long">The important part is not just storage. It is the workflow around drafts, queueing, and recovery.</div>
+        </div>
+        <div class="composer-zone">
+          <div class="composer attached-composer liquid liquid-strong">
+            <div class="attached-strip">
+              <div class="status-main when-generating">
+                <span class="bars" style="color: var(--blue)"><span></span><span></span><span></span><span></span><span></span></span>
+                <div class="status-copy">
+                  <span class="status-title">Generating</span>
+                  <span class="status-sub">Mic remains available</span>
+                </div>
+              </div>
+              <div class="status-main when-queued">
+                <span class="dot orange"></span>
+                <div class="status-copy">
+                  <span class="status-title">Queued</span>
+                  <span class="status-sub">Can you compare...</span>
+                </div>
+              </div>
+              <div class="status-main when-recording">
+                <span class="recording-dot"></span>
+                <div class="status-copy">
+                  <span class="status-title">Recording</span>
+                  <span class="status-sub">0:12</span>
+                </div>
+                <span class="bars" style="color: var(--red); margin-left: auto"><span></span><span></span><span></span><span></span><span></span></span>
+              </div>
+              <div class="status-main when-transcribing">
+                <span class="spinner"></span>
+                <div class="status-copy">
+                  <span class="status-title">Transcribing</span>
+                  <span class="status-sub">Preparing message</span>
+                </div>
+              </div>
+              <button class="icon-btn danger when-generating" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+              <button class="icon-btn danger when-queued" title="Stop generating"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+              <button class="icon-btn glass when-recording" title="Stop recording"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"/></svg></button>
+              <div class="progress-line when-transcribing"><span></span></div>
+            </div>
+            <div class="text-box">
+              <div class="placeholder when-idle">Message...</div>
+              <div class="placeholder when-generating">Message...</div>
+              <div class="placeholder text-value when-queued">Add one note about database versioning</div>
+              <div class="placeholder when-recording">Message...</div>
+              <div class="placeholder when-transcribing">Message...</div>
+            </div>
+            <div class="toolbar">
+              <div class="tool-left">
+                <span class="chip"><span class="dot violet"></span>Opus</span>
+                <span class="chip"><span class="dot"></span>Medium</span>
+                <button class="icon-btn" title="Attach file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 1 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></svg></button>
+              </div>
+              <div class="tool-right">
+                <button class="icon-btn" title="Dictate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></button>
+                <button class="icon-btn send when-idle" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-generating" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-queued" title="Queue message"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-recording" title="Send dictation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+                <button class="icon-btn send when-transcribing" disabled title="Send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section class="notes">
+    <div class="note"><strong>Recommended direction</strong>Option A keeps transient generation/queue/transcription state in a distinct top control layer, which matches the Liquid Glass principle best and preserves the mic action.</div>
+    <div class="note"><strong>Implementation note</strong>On the web this is an approximation: backdrop blur, edge highlights, saturation, and a solid fallback for reduced transparency.</div>
+    <div class="note"><strong>Behavior rule</strong>The composer action row should never replace the dictation button just because a response is generating. Stop is a sibling control, not a mode replacement.</div>
+  </section>
+</main>
+
+<script>
+  const buttons = Array.from(document.querySelectorAll("[data-state]"));
+  const phones = Array.from(document.querySelectorAll(".phone"));
+
+  function setState(state) {
+    document.documentElement.dataset.state = state;
+    buttons.forEach((button) => {
+      button.classList.toggle("is-active", button.dataset.state === state);
+    });
+    phones.forEach((phone) => {
+      phone.classList.remove("state-idle", "state-generating", "state-queued", "state-recording", "state-transcribing");
+      phone.classList.add("state-" + state);
+    });
+  }
+
+  buttons.forEach((button) => {
+    button.addEventListener("click", () => setState(button.dataset.state));
+  });
+
+  setState("queued");
+</script>
+</body>
+</html>

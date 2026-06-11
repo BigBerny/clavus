@@ -1,4 +1,5 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
+import { FileText, Paperclip, Volume2 } from 'lucide-react'
 import type { Message, MessageUsage } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
 import { ButtonGroup, SelectBlock, ConfirmBlock, FormBlock, parseButtonsLine, parseSelectLine, parseFormBlock, type ButtonAction, type SelectOption, type FormBlockData } from './InteractiveBlock.tsx'
@@ -564,7 +565,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                   )}
                   {m.type === 'audio' && (
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-light-2/50 dark:bg-surface-dark-2/50">
-                      <span className="text-sm">🔊</span>
+                      <Volume2 className="w-3.5 h-3.5 text-text-light-muted/70 dark:text-text-dark-muted/70 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                       <audio controls preload="metadata" className="h-8 flex-1 min-w-0">
                         <source src={m.url} type={m.mimeType || 'audio/mpeg'} />
                       </audio>
@@ -577,7 +578,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                   )}
                   {m.type === 'file' && (
                     <a href={m.url} download={m.title} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-light-2/50 dark:bg-surface-dark-2/50 hover:bg-surface-light-3/50 dark:hover:bg-surface-dark-3/50 transition-colors">
-                      <span className="text-sm">📎</span>
+                      <Paperclip className="w-3.5 h-3.5 text-text-light-muted/70 dark:text-text-dark-muted/70 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                       <span className="text-[13px] text-text-light-muted dark:text-text-dark-muted truncate">{m.title || 'Download'}</span>
                     </a>
                   )}
@@ -590,7 +591,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             <div className={`flex flex-wrap gap-1.5 ${message.content ? 'mb-2' : ''}`}>
               {message.attachments.map((file, i) => (
                 <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-light-2/40 dark:bg-surface-dark-2/40 text-[12.5px] text-text-light-muted dark:text-text-dark-muted">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 opacity-60"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+                  <FileText className="w-3.5 h-3.5 shrink-0 opacity-60" strokeWidth={1.75} aria-hidden="true" />
                   <span className="truncate max-w-[200px]">{file.name}</span>
                   {file.size > 0 && <span className="opacity-50 shrink-0">{file.size < 1024 ? `${file.size} B` : `${(file.size / 1024).toFixed(1)} KB`}</span>}
                 </span>

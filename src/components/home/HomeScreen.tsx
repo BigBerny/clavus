@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import { Bell, ChevronRight } from 'lucide-react'
 import { useThreadsStore } from '../../state/threads'
 import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab, type MarksenseTab } from '../../state/tabs'
 import { ThreadSearch } from './ThreadSearch.tsx'
@@ -122,12 +123,6 @@ const EmailIcon = (
   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect width="20" height="16" x="2" y="4" rx="2"/>
     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-  </svg>
-)
-
-const ChevronRight = (
-  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="m9 18 6-6-6-6"/>
   </svg>
 )
 
@@ -278,12 +273,12 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
             onClick={onEnablePush}
             className="inline-btn w-full mb-5 flex items-center gap-3 px-4 py-3 rounded-xl bg-primary/10 hover:bg-primary/15 transition-colors text-left"
           >
-            <span className="text-xl">🔔</span>
+            <Bell className="w-5 h-5 text-primary shrink-0" strokeWidth={1.75} aria-hidden="true" />
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-medium text-foreground">Enable notifications</p>
               <p className="text-[11px] text-muted-foreground">Get notified when Jane sends you a message</p>
             </div>
-            <svg className="w-4 h-4 text-primary shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+            <ChevronRight className="w-4 h-4 text-primary shrink-0" strokeWidth={2} aria-hidden="true" />
           </button>
         )}
 
@@ -387,7 +382,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     {allConversationCount}
                   </span>
                 )}
-                <span className={`text-muted-foreground transition-transform ${allConversationsOpen ? 'rotate-90' : ''}`}>{ChevronRight}</span>
+                <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${allConversationsOpen ? 'rotate-90' : ''}`} strokeWidth={2} aria-hidden="true" />
               </button>
             </div>
 

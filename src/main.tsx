@@ -1,5 +1,6 @@
 import { StrictMode, Component, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { AlertTriangle } from 'lucide-react'
 import './index.css'
 import { App } from './App.tsx'
 import { isNative, nativePlatform, setupNativeShell } from './lib/native'
@@ -12,7 +13,10 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
     if (this.state.error) {
       return (
         <div style={{ padding: 24, color: '#ff4444', background: '#111', minHeight: '100vh', fontFamily: 'monospace', fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-          <h2 style={{ color: '#ff6666' }}>⚠️ Clavus Error</h2>
+          <h2 style={{ color: '#ff6666', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertTriangle size={20} strokeWidth={1.75} aria-hidden="true" />
+            Clavus Error
+          </h2>
           <p>{this.state.error.message}</p>
           <pre style={{ marginTop: 12, fontSize: 11, color: '#888' }}>{this.state.error.stack}</pre>
           <button onClick={() => location.reload()} style={{ marginTop: 16, padding: '8px 16px', background: '#333', color: '#fff', border: 'none', borderRadius: 8 }}>Reload</button>

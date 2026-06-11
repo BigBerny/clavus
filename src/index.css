@@ -169,9 +169,12 @@ body {
   overscroll-behavior: none;
   background-color: var(--color-background, #1c1c1e);
   scrollbar-width: none;
-  isolation: isolate;
-  /* Limit reflow scope: height changes don't propagate outside #root. */
-  contain: layout style paint;
+  /* Limit reflow scope to layout/style only. `paint` containment would make
+     #root a backdrop-root, which on iOS 26 WebKit breaks backdrop-filter
+     (composer bar loses its blur ~0.5s after first paint, restored on any
+     layer-tree rebuild like a tab swipe). `isolation: isolate` was paired
+     with paint containment and is no longer needed once it's gone. */
+  contain: layout style;
 }
 #root::before {
   content: '';

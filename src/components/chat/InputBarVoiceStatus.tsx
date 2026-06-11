@@ -56,14 +56,3 @@ export function FailedDictationPrompt({
     </div>
   )
 }
-
-export function TranscribingRow({ visible }: { visible: boolean }) {
-  if (!visible) return null
-
-  return (
-    <div className="flex items-center justify-center mb-2 gap-2 animate-[fadeSlideIn_0.2s_ease-out]" role="status">
-      <div className="voice-spinner" />
-      <span className="text-xs text-text-light-muted dark:text-text-dark-muted">Transcribing...</span>
-    </div>
-  )
-}

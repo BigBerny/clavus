@@ -122,8 +122,20 @@ export function responsesProxyPlugin() {
       : typeof req.headers['x-openclaw-session-key'] === 'string' ? req.headers['x-openclaw-session-key']
       : undefined
 
-    // Note: model overrides via x-openclaw-model are not supported for
-    // backend/gateway-client connections. The agent uses its default model.
+    const headerModel = typeof req.headers['x-openclaw-model'] === 'string'
+      ? req.headers['x-openclaw-model'].trim()
+      : ''
+    const bodyModel = typeof parsed.model === 'string' ? parsed.model.trim() : ''
+    const modelOverride = headerModel
+      || (bodyModel && bodyModel !== 'openclaw/default' && !bodyModel.startsWith('openclaw/') ? bodyModel : undefined)
+
+    const headerAgentId = typeof req.headers['x-openclaw-agent-id'] === 'string'
+      ? req.headers['x-openclaw-agent-id'].trim()
+      : ''
+    const agentId = headerAgentId && headerAgentId !== 'default' && headerAgentId !== 'openclaw/default'
+      ? headerAgentId.replace(/^openclaw\//, '')
+      : undefined
+
     const reasoning = parsed.reasoning as { effort?: string } | undefined
 
     // Generate a synthetic response ID for the buffer system
@@ -138,7 +150,7 @@ export function responsesProxyPlugin() {
     // Emit response.created
     const createdEvent = JSON.stringify({
       type: 'response.created',
-      response: { id: responseId, object: 'response', created_at: Math.floor(Date.now() / 1000), status: 'in_progress', model: parsed.model || 'openclaw/default', output: [], usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } },
+      response: { id: responseId, object: 'response', created_at: Math.floor(Date.now() / 1000), status: 'in_progress', model: modelOverride || parsed.model || 'openclaw/default', output: [], usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } },
     })
     bufferAppendEvent(responseId, 'response.created', createdEvent)
 
@@ -152,8 +164,9 @@ export function responsesProxyPlugin() {
         {
           message: input,
           sessionKey,
+          model: modelOverride,
           thinking: reasoning?.effort,
-          agentId: req.headers['x-openclaw-agent-id'] || undefined,
+          agentId,
         },
         {
           onThinking: (delta) => {
@@ -193,7 +206,7 @@ export function responsesProxyPlugin() {
               response: {
                 id: responseId,
                 status: 'completed',
-                model: usage.model || parsed.model || 'openclaw/default',
+                model: usage.model || modelOverride || parsed.model || 'openclaw/default',
                 usage: {
                   input_tokens: usage.inputTokens,
                   output_tokens: usage.outputTokens,

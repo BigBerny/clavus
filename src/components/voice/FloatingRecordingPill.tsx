@@ -30,7 +30,7 @@ export function FloatingRecordingPill({ visible }: Props) {
 
   return (
     <button
-      onClick={isTranscribing ? undefined : stop}
+      onClick={isTranscribing ? undefined : () => stop()}
       disabled={isTranscribing}
       className="fixed z-50 right-4 flex items-center gap-2.5 px-3.5 py-2.5 rounded-full glass-heavy border border-red-500/30 shadow-lg shadow-red-500/15 active:scale-95 transition-transform"
       style={{

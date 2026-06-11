@@ -774,45 +774,48 @@ export function App() {
     return panelIndex >= sortedTabs.length
   }, [sortedTabs, visiblePanel])
 
+  const createConversationFromHome = useCallback((title = 'New conversation') => {
+    // Capture the model/reasoning the user selected on the home screen before
+    // switching threads, since switchThread restores per-thread settings.
+    const homeModelId = useModelStore.getState().selectedModelId
+    const homeReasoning = useChatSettingsStore.getState().globalReasoning
+    const newThreadId = useThreadsStore.getState().createThread()
+
+    useThreadsStore.getState().updateThreadModel(newThreadId, homeModelId)
+    if (homeReasoning) {
+      useThreadsStore.getState().updateThreadReasoning(newThreadId, homeReasoning)
+    }
+    useModelStore.getState().setSelectedModelId(homeModelId)
+    useChatSettingsStore.getState().setGlobalReasoning(homeReasoning)
+
+    switchThread(newThreadId)
+    ensureChatTab(newThreadId, title)
+    setVisiblePanel(newThreadId)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const panel = panelRefs.current.get(newThreadId)
+        if (panel) {
+          panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+        }
+      })
+    })
+
+    return newThreadId
+  }, [switchThread, setVisiblePanel])
+
+  const ensureVoiceThread = useCallback(() => {
+    if (isHomeVisible()) return createConversationFromHome()
+    if (visiblePanel === 'home') return null
+    const tab = sortedTabs.find(t => t.id === visiblePanel)
+    return tab?.type === 'chat' ? visiblePanel : null
+  }, [createConversationFromHome, isHomeVisible, sortedTabs, visiblePanel])
+
   // Handle sending from any panel — thread-scoped
   const handleSend = useCallback((text: string, images?: string[], files?: import('./state/chat').PendingFile[]) => {
     if (isHomeVisible()) {
-      // Capture the model/reasoning the user selected on the home screen
-      // BEFORE creating the thread (which triggers switchThread and resets state).
-      const homeModelId = useModelStore.getState().selectedModelId
-      const homeReasoning = useChatSettingsStore.getState().globalReasoning
-
-      // Create a NEW thread, send to it directly
-      const createThread = useThreadsStore.getState().createThread
-      const newThreadId = createThread()
-
-      // Persist the home-screen model/reasoning onto the new thread
-      useThreadsStore.getState().updateThreadModel(newThreadId, homeModelId)
-      if (homeReasoning) {
-        useThreadsStore.getState().updateThreadReasoning(newThreadId, homeReasoning)
-      }
-      // Restore model/reasoning so switchThread doesn't clobber them
-      useModelStore.getState().setSelectedModelId(homeModelId)
-      useChatSettingsStore.getState().setGlobalReasoning(homeReasoning)
-
-      switchThread(newThreadId)
-
-      // Ensure a tab exists for the new thread
-      ensureChatTab(newThreadId, 'New conversation')
-
-      // Send immediately targeting the new thread
+      const newThreadId = createConversationFromHome()
       send(newThreadId, text, images, files)
-      setVisiblePanel(newThreadId)
-
-      // Scroll to the new thread panel once it renders
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          const panel = panelRefs.current.get(newThreadId)
-          if (panel) {
-            panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
-          }
-        })
-      })
     } else {
       // Send to the visible thread directly (only for chat tabs)
       if (visiblePanel !== 'home') {
@@ -834,7 +837,7 @@ export function App() {
         console.warn('[Clavus] handleSend dropped — visiblePanel is home but isHomeVisible() was false')
       }
     }
-  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs, setVisiblePanel])
+  }, [createConversationFromHome, isHomeVisible, visiblePanel, send, switchThread, sortedTabs])
 
   useEffect(() => {
     const handleInteractiveSend = (event: Event) => {
@@ -1267,6 +1270,7 @@ export function App() {
                     onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
                     onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
                     threadId={visiblePanel !== 'home' ? visiblePanel : null}
+                    onVoiceThreadNeeded={ensureVoiceThread}
                     draftKey={visiblePanel}
                     onRetry={visiblePanel !== 'home' ? () => {
                       const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
@@ -1427,6 +1431,7 @@ export function App() {
               onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
               onClear={visiblePanel !== 'home' ? () => useChatStore.getState().clearMessages(visiblePanel) : undefined}
               threadId={visiblePanel !== 'home' ? visiblePanel : null}
+              onVoiceThreadNeeded={ensureVoiceThread}
               draftKey={visiblePanel}
               onRetry={visiblePanel !== 'home' ? () => {
                 const msgs = useChatStore.getState().getThreadState(visiblePanel).messages

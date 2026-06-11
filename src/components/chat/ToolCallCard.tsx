@@ -1,33 +1,51 @@
-import { memo, useState, useEffect, useMemo } from 'react'
+import { memo, useState, useEffect, useMemo, useRef } from 'react'
+import {
+  Camera,
+  ChevronRight,
+  Code2,
+  FilePlus,
+  FileSearch,
+  FileText,
+  Folder,
+  Globe,
+  Image as ImageIcon,
+  Mic,
+  Pencil,
+  Search,
+  Terminal,
+  Workflow,
+  Wrench,
+  type LucideIcon,
+} from 'lucide-react'
 import type { ToolCall } from '../../state/chat.ts'
 import { normalizeToolCalls } from '../../lib/toolCalls.ts'
 
-const TOOL_ICONS: Record<string, { icon: string; label: string }> = {
-  web_search: { icon: '🔍', label: 'Searching web' },
-  web_extract: { icon: '🌐', label: 'Reading web page' },
-  search: { icon: '🔍', label: 'Searching' },
-  search_files: { icon: '🔍', label: 'Searching files' },
-  grep: { icon: '🔍', label: 'Searching files' },
-  glob: { icon: '🔍', label: 'Finding files' },
-  ls: { icon: '📁', label: 'Listing directory' },
-  read: { icon: '📄', label: 'Reading file' },
-  read_file: { icon: '📄', label: 'Reading file' },
-  write: { icon: '✏️', label: 'Writing file' },
-  write_file: { icon: '✏️', label: 'Writing file' },
-  edit: { icon: '✏️', label: 'Editing file' },
-  patch: { icon: '✏️', label: 'Editing file' },
-  exec: { icon: '🖥️', label: 'Running command' },
-  bash: { icon: '🖥️', label: 'Running command' },
-  run: { icon: '🖥️', label: 'Running command' },
-  execute: { icon: '🖥️', label: 'Running command' },
-  shell: { icon: '🖥️', label: 'Running command' },
-  terminal: { icon: '🖥️', label: 'Running command' },
-  execute_code: { icon: '🐍', label: 'Running code' },
-  delegate_task: { icon: '⚙️', label: 'Delegating task' },
-  browser: { icon: '🌐', label: 'Browsing' },
-  screenshot: { icon: '📸', label: 'Taking screenshot' },
-  transcribe: { icon: '🎤', label: 'Transcribing' },
-  image_gen: { icon: '🎨', label: 'Generating image' },
+const TOOL_ICONS: Record<string, { icon: LucideIcon; label: string }> = {
+  web_search: { icon: Search, label: 'Searching web' },
+  web_extract: { icon: Globe, label: 'Reading web page' },
+  search: { icon: Search, label: 'Searching' },
+  search_files: { icon: Search, label: 'Searching files' },
+  grep: { icon: Search, label: 'Searching files' },
+  glob: { icon: FileSearch, label: 'Finding files' },
+  ls: { icon: Folder, label: 'Listing directory' },
+  read: { icon: FileText, label: 'Reading file' },
+  read_file: { icon: FileText, label: 'Reading file' },
+  write: { icon: FilePlus, label: 'Writing file' },
+  write_file: { icon: FilePlus, label: 'Writing file' },
+  edit: { icon: Pencil, label: 'Editing file' },
+  patch: { icon: Pencil, label: 'Editing file' },
+  exec: { icon: Terminal, label: 'Running command' },
+  bash: { icon: Terminal, label: 'Running command' },
+  run: { icon: Terminal, label: 'Running command' },
+  execute: { icon: Terminal, label: 'Running command' },
+  shell: { icon: Terminal, label: 'Running command' },
+  terminal: { icon: Terminal, label: 'Running command' },
+  execute_code: { icon: Code2, label: 'Running code' },
+  delegate_task: { icon: Workflow, label: 'Delegating task' },
+  browser: { icon: Globe, label: 'Browsing' },
+  screenshot: { icon: Camera, label: 'Taking screenshot' },
+  transcribe: { icon: Mic, label: 'Transcribing' },
+  image_gen: { icon: ImageIcon, label: 'Generating image' },
 }
 
 /** Extract a short detail string from tool args for inline display */
@@ -87,15 +105,15 @@ function getToolDetail(name: string, args: Record<string, unknown>): string | nu
   return null
 }
 
-function getToolDisplay(name: string, args?: Record<string, unknown>): { icon: string; label: string; detail: string | null } {
-  const base = TOOL_ICONS[name] || { icon: '⚙️', label: name }
+function getToolDisplay(name: string, args?: Record<string, unknown>): { icon: LucideIcon; label: string; detail: string | null } {
+  const base = TOOL_ICONS[name] || { icon: Wrench, label: name }
   const detail = args ? getToolDetail(name, args) : null
   return { ...base, detail }
 }
 
 function ToolCallDetail({ toolCall }: { toolCall: ToolCall }) {
   const [expanded, setExpanded] = useState(false)
-  const { icon, label, detail } = getToolDisplay(toolCall.name, toolCall.args)
+  const { icon: Icon, label, detail } = getToolDisplay(toolCall.name, toolCall.args)
   const isRunning = toolCall.status === 'running'
   const isError = toolCall.status === 'error'
   const hasArgs = toolCall.args && Object.keys(toolCall.args).length > 0
@@ -112,7 +130,7 @@ function ToolCallDetail({ toolCall }: { toolCall: ToolCall }) {
           hasDetails ? 'hover:bg-surface-light-3/30 dark:hover:bg-surface-dark-3/30' : 'cursor-default'
         }`}
       >
-        <span className="shrink-0 text-[10px] leading-none">{icon}</span>
+        <Icon className="shrink-0 w-3 h-3 text-text-light-muted/60 dark:text-text-dark-muted/60" strokeWidth={1.75} aria-hidden="true" />
         <span className={`flex-1 truncate leading-none ${isRunning ? 'animate-pulse' : ''} text-text-light-muted/70 dark:text-text-dark-muted/70`}>
           {isRunning ? `${label}...` : label}
           {detail && <span className="ml-1 text-text-light-muted/45 dark:text-text-dark-muted/45 italic">{detail}</span>}
@@ -121,13 +139,11 @@ function ToolCallDetail({ toolCall }: { toolCall: ToolCall }) {
           <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
         )}
         {!isRunning && hasDetails && (
-          <svg
-            xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className={`shrink-0 text-text-light-muted/30 dark:text-text-dark-muted/30 transition-transform ${expanded ? 'rotate-90' : ''}`}
-          >
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
+          <ChevronRight
+            className={`shrink-0 w-2.5 h-2.5 text-text-light-muted/30 dark:text-text-dark-muted/30 transition-transform ${expanded ? 'rotate-90' : ''}`}
+            strokeWidth={2}
+            aria-hidden="true"
+          />
         )}
       </button>
       {expanded && (
@@ -172,18 +188,23 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
     if (isStreaming) setExpanded(true)
   }, [isStreaming])
 
-  // Auto-collapse when streaming ends
+  // Auto-collapse once, on the streaming → not-streaming transition.
+  // Tracking the prior value with a ref keeps user-driven expand clicks
+  // from re-arming the timer (which would collapse the panel right back).
+  const wasStreamingRef = useRef(!!isStreaming)
   useEffect(() => {
-    if (!isStreaming && expanded) {
+    if (wasStreamingRef.current && !isStreaming) {
       const timer = setTimeout(() => setExpanded(false), 300)
+      wasStreamingRef.current = !!isStreaming
       return () => clearTimeout(timer)
     }
-  }, [isStreaming, expanded])
+    wasStreamingRef.current = !!isStreaming
+  }, [isStreaming])
 
   if (!normalizedToolCalls.length) return null
 
   const lastCall = normalizedToolCalls[normalizedToolCalls.length - 1]
-  const { icon, label } = getToolDisplay(lastCall.name, lastCall.args)
+  const { icon: Icon, label } = getToolDisplay(lastCall.name, lastCall.args)
   const isRunning = lastCall.status === 'running'
   const totalCount = normalizedToolCalls.length
 
@@ -195,13 +216,8 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
           onClick={() => setExpanded(true)}
           className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className="shrink-0 transition-transform"
-          >
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-          <span className="text-[10px] leading-none">{icon}</span>
+          <ChevronRight className="shrink-0 w-2.5 h-2.5 transition-transform" strokeWidth={2} aria-hidden="true" />
+          {totalCount === 1 && <Icon className="shrink-0 w-3 h-3" strokeWidth={1.75} aria-hidden="true" />}
           <span className="truncate leading-none">{totalCount === 1 ? label : `${totalCount} actions`}</span>
         </button>
       </div>
@@ -216,13 +232,8 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
           onClick={() => setExpanded(false)}
           className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors mb-0.5"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            className="shrink-0 transition-transform rotate-90"
-          >
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
-          <span className="text-[10px] leading-none">{icon}</span>
+          <ChevronRight className="shrink-0 w-2.5 h-2.5 transition-transform rotate-90" strokeWidth={2} aria-hidden="true" />
+          <Icon className="shrink-0 w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
           <span className="truncate leading-none">{label}</span>
           {isRunning && (
             <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />
@@ -239,12 +250,7 @@ export function ToolCallCards({ toolCalls, isStreaming, className }: { toolCalls
         onClick={() => setExpanded(false)}
         className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/60 dark:text-text-dark-muted/60 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors mb-0.5"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className="shrink-0 transition-transform rotate-90"
-        >
-          <polyline points="9 18 15 12 9 6"/>
-        </svg>
+        <ChevronRight className="shrink-0 w-2.5 h-2.5 transition-transform rotate-90" strokeWidth={2} aria-hidden="true" />
         <span className="leading-none">{normalizedToolCalls.length} actions</span>
         {isRunning && (
           <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse shrink-0" />

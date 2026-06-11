@@ -50,13 +50,13 @@ interface RecordingStore {
   error: string | null
   levels: number[]
   hasFailedAudio: boolean
-  /** Thread the recording was started for. Locked at start time so the user
-   *  can navigate away mid-recording without retargeting the transcript. */
+  /** Thread the recording belongs to. Usually locked at start time; home-screen
+   *  recordings can be assigned when the user stops and sends them. */
   targetThreadId: string | null
 
   start: (threadId: string | null) => Promise<void>
-  stop: () => void
-  stopAndInsert: () => void
+  stop: (threadId?: string | null) => void
+  stopAndInsert: (threadId?: string | null) => void
   cancel: () => void
   retryLastTranscription: () => void
   clearLastFailedAudio: () => void
@@ -331,13 +331,15 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
     }
   },
 
-  stop: () => {
+  stop: (threadId) => {
     insertMode = false
+    if (threadId !== undefined) set({ targetThreadId: threadId })
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
   },
 
-  stopAndInsert: () => {
+  stopAndInsert: (threadId) => {
     insertMode = true
+    if (threadId !== undefined) set({ targetThreadId: threadId })
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop()
   },
 

@@ -133,6 +133,12 @@ function openClawAgentTarget(config: GatewayConfig): string {
   return `openclaw/${id}`
 }
 
+function backendAgentId(config: GatewayConfig): string | null {
+  const id = (config.agentId || '').trim()
+  if (!id || id === 'default' || id === 'openclaw/default') return null
+  return id.startsWith('openclaw/') ? id.slice('openclaw/'.length) : id
+}
+
 function isOpenClawModelTarget(model: string): boolean {
   return model === 'openclaw' || model.startsWith('openclaw/')
 }
@@ -158,7 +164,8 @@ function backendHeaders(
     ...authHeaders(config),
   }
   if (isOpenClaw(config)) {
-    headers['x-openclaw-agent-id'] = config.agentId || 'default'
+    const agentId = backendAgentId(config)
+    if (agentId) headers['x-openclaw-agent-id'] = agentId
     const modelOverride = backendModelOverride(config)
     if (modelOverride) headers['x-openclaw-model'] = modelOverride
     const key = sessionKey(options.conversationId)
