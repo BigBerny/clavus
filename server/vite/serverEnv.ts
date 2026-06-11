@@ -1,5 +1,6 @@
 import fs from 'fs'
 import nodePath from 'path'
+import os from 'node:os'
 import { execSync } from 'node:child_process'
 import webpush from 'web-push'
 
@@ -70,8 +71,11 @@ export const phoneServerOptions = {
   port: 5173,
   strictPort: true,
   https: {
-    cert: './mac-mini-von-janis.taild2ad59.ts.net.crt',
-    key: './mac-mini-von-janis.taild2ad59.ts.net.key',
+    // Read straight from tailscaled's cert store — it auto-renews there. The
+    // old project-root copies went stale (expired May 30) and broke local
+    // HTTPS while the central copy was already fresh.
+    cert: nodePath.join(os.homedir(), '.local/share/tailscale/certs/mac-mini-von-janis.taild2ad59.ts.net.crt'),
+    key: nodePath.join(os.homedir(), '.local/share/tailscale/certs/mac-mini-von-janis.taild2ad59.ts.net.key'),
   },
   allowedHosts: ['mac-mini-von-janis.taild2ad59.ts.net', 'localhost', 'openclaw.random-hamster.win', 'clavus.random-hamster.win'],
   proxy: {
