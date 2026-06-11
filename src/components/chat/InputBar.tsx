@@ -867,7 +867,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
                 threadId={threadId}
               />
               {/* Reasoning picker */}
-              <ReasoningPill threadId={threadId ?? null} />
+              <ReasoningPill threadId={threadId ?? null} modelId={selectedModelId} />
               <div className="w-px h-4 bg-border mx-1.5 hidden sm:block" />
               {/* Attach file */}
               <IconBtn

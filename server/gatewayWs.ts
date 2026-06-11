@@ -56,6 +56,10 @@ export interface AgentRunCallbacks {
 class GatewayWsClient {
   private ws: WebSocket | null = null
   private pending = new Map<string, PendingRequest>()
+  /** The gateway answers the `agent` RPC twice with the same id: an immediate
+   *  accept ack, then a final response when the run ends. Handlers here catch
+   *  that second response (the only place a pre-stream run error surfaces). */
+  private lateResponseHandlers = new Map<string, (msg: WsResponse) => void>()
   private eventHandlers = new Set<EventHandler>()
   private connected = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -81,7 +85,18 @@ class GatewayWsClient {
     this.ws = null
     this.pending.forEach(p => p.reject(new Error('Client disposed')))
     this.pending.clear()
+    this.failLateHandlers('Client disposed')
     this.connected = false
+  }
+
+  private failLateHandlers(message: string): void {
+    const handlers = [...this.lateResponseHandlers.values()]
+    this.lateResponseHandlers.clear()
+    for (const h of handlers) {
+      try {
+        h({ type: 'res', id: '', ok: false, error: { code: 'CONNECTION_LOST', message } })
+      } catch { /* handler already settled */ }
+    }
   }
 
   private doConnect(): void {
@@ -110,6 +125,9 @@ class GatewayWsClient {
     this.ws.on('close', () => {
       this.ws = null
       this.connected = false
+      // In-flight agent runs can never finish on a dead connection — fail
+      // them now instead of leaving the client request hanging.
+      this.failLateHandlers('Gateway connection lost')
       if (!this.disposed) this.scheduleReconnect()
     })
 
@@ -129,6 +147,12 @@ class GatewayWsClient {
         } else {
           p.reject(new Error(msg.error?.message || 'RPC error'))
         }
+        return
+      }
+      const late = this.lateResponseHandlers.get(msg.id)
+      if (late) {
+        this.lateResponseHandlers.delete(msg.id)
+        late(msg)
       }
       return
     }
@@ -195,14 +219,14 @@ class GatewayWsClient {
 
   // --- RPC ---
 
-  rpc(method: string, params: Record<string, unknown> = {}, timeout = 15000): Promise<unknown> {
+  rpc(method: string, params: Record<string, unknown> = {}, timeout = 15000, requestId?: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         reject(new Error('Not connected'))
         return
       }
 
-      const id = crypto.randomUUID()
+      const id = requestId ?? crypto.randomUUID()
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(new Error(`RPC timeout: ${method}`))
@@ -240,8 +264,22 @@ class GatewayWsClient {
     if (params.thinking) rpcParams.thinking = params.thinking
     if (params.agentId) rpcParams.agentId = params.agentId
 
+    // Register the late-response handler before sending: the gateway answers
+    // the agent RPC a second time (same id) when the run finishes, and that
+    // second response is the only signal for pre-stream failures (e.g. an
+    // unsupported thinking level).
+    const requestId = crypto.randomUUID()
+    let onLateResponse: (msg: { ok: boolean; error?: { message?: string } }) => void = () => {}
+    this.lateResponseHandlers.set(requestId, (msg) => onLateResponse(msg))
+
     // Start the agent run (generous timeout since it's long-running)
-    const result = await this.rpc('agent', rpcParams, 300_000) as Record<string, unknown>
+    let result: Record<string, unknown>
+    try {
+      result = await this.rpc('agent', rpcParams, 300_000, requestId) as Record<string, unknown>
+    } catch (e) {
+      this.lateResponseHandlers.delete(requestId)
+      throw e
+    }
     const runId = String(result.runId ?? result.id ?? '')
 
     // Provide abort function
@@ -253,6 +291,18 @@ class GatewayWsClient {
     return new Promise<void>((resolve, reject) => {
       let thinkingDoneFired = false
       let done = false
+
+      const failRun = (err: Error) => {
+        if (done) return
+        done = true
+        this.eventHandlers.delete(handler)
+        this.lateResponseHandlers.delete(requestId)
+        callbacks.onError?.(err)
+        reject(err)
+      }
+      onLateResponse = (msg) => {
+        if (!msg.ok) failRun(new Error(msg.error?.message || 'Agent run failed'))
+      }
 
       const handler: EventHandler = (_event, payload) => {
         if (done) return
@@ -301,6 +351,7 @@ class GatewayWsClient {
             }
             done = true
             this.eventHandlers.delete(handler)
+            this.lateResponseHandlers.delete(requestId)
             callbacks.onDone?.()
             resolve()
             return
@@ -308,10 +359,7 @@ class GatewayWsClient {
           if (phase === 'error') {
             const msg = typeof data.message === 'string' ? data.message
               : typeof data.error === 'string' ? data.error : 'Agent run failed'
-            done = true
-            this.eventHandlers.delete(handler)
-            callbacks.onError?.(new Error(msg))
-            reject(new Error(msg))
+            failRun(new Error(msg))
             return
           }
           return

@@ -281,7 +281,10 @@ export function useChat() {
         controller.signal,
         {
           conversationId: threadId,
-          reasoningEffort,
+          // The gateway's thinking level for "no reasoning" is "off"; our UI
+          // calls it "none", which the gateway doesn't recognize (it would
+          // silently fall back to the default level).
+          reasoningEffort: reasoningEffort === 'none' ? 'off' : reasoningEffort,
         },
       )
     } catch (error) {

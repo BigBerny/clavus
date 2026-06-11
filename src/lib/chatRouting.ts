@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_ID, MODEL_OPTIONS, type ModelOption } from '../gateway/presets'
+import { clampReasoningToModel, DEFAULT_MODEL_ID, MODEL_OPTIONS, type ModelOption } from '../gateway/presets'
 import type { AutoClassification } from '../state/autoClassify'
 import type { ReasoningLevel } from '../state/chatSettings'
 
@@ -26,10 +26,11 @@ export function resolveChatRoutingSelection({
     ?? MODEL_OPTIONS.find((m) => m.id === DEFAULT_MODEL_ID)
     ?? MODEL_OPTIONS[0]
 
-  const reasoningEffort = modelOption.supportsReasoning
-    ? autoClassification?.reasoning
-      ?? manualReasoning
-      ?? (requestedModelId === 'auto' ? 'medium' : undefined)
+  const requestedReasoning = autoClassification?.reasoning
+    ?? manualReasoning
+    ?? (requestedModelId === 'auto' ? 'medium' as const : undefined)
+  const reasoningEffort = requestedReasoning
+    ? clampReasoningToModel(requestedReasoning, modelOption)
     : undefined
 
   return {

@@ -49,4 +49,38 @@ describe('resolveChatRoutingSelection', () => {
     expect(result.reasoningEffort).toBeUndefined()
     expect(result.shouldPinAutoReasoning).toBe(false)
   })
+
+  it('clamps unsupported levels down to the nearest supported one', () => {
+    // flash tops out at high — xhigh would be rejected by the gateway
+    const flash = resolveChatRoutingSelection({
+      autoClassification: null,
+      selectedModelId: 'flash',
+      manualReasoning: 'xhigh',
+    })
+    expect(flash.reasoningEffort).toBe('high')
+
+    // gpt has no 'none'/'minimal' — clamp up to its lowest supported level
+    const gpt = resolveChatRoutingSelection({
+      autoClassification: null,
+      selectedModelId: 'gpt',
+      manualReasoning: 'none',
+    })
+    expect(gpt.reasoningEffort).toBe('low')
+  })
+
+  it('passes xhigh and max through for opus', () => {
+    const xhigh = resolveChatRoutingSelection({
+      autoClassification: { modelId: 'opus', reasoning: 'xhigh', label: 'Deep thinking' },
+      selectedModelId: 'auto',
+      manualReasoning: null,
+    })
+    expect(xhigh.reasoningEffort).toBe('xhigh')
+
+    const max = resolveChatRoutingSelection({
+      autoClassification: null,
+      selectedModelId: 'opus',
+      manualReasoning: 'max',
+    })
+    expect(max.reasoningEffort).toBe('max')
+  })
 })

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type ReasoningLevel = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+export type ReasoningLevel = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 const STORAGE_KEY = 'clavus-chat-settings'
 
@@ -75,7 +75,7 @@ export const useChatSettingsStore = create<ChatSettingsState>((set, get) => {
   }
 })
 
-export const VALID_REASONING_LEVELS: ReasoningLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
+export const VALID_REASONING_LEVELS: ReasoningLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 export function isValidReasoningLevel(value: string): value is ReasoningLevel {
   return (VALID_REASONING_LEVELS as string[]).includes(value)

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 
-import { MODEL_OPTIONS } from '../../gateway/presets'
+import { DEFAULT_MODEL_ID, MODEL_OPTIONS } from '../../gateway/presets'
 import { useAutoClassifyStore } from '../../state/autoClassify'
 import { useChatSettingsStore, type ReasoningLevel } from '../../state/chatSettings'
 import { useThreadsStore } from '../../state/threads'
@@ -204,16 +204,24 @@ const REASONING_DESCRIPTIONS: Record<string, string> = {
   low: 'Low — light deliberation',
   medium: 'Medium — balanced',
   high: 'High — careful thinking',
-  xhigh: 'X-high — maximum reasoning',
+  xhigh: 'X-high — extended reasoning',
+  max: 'Max — deepest reasoning',
 }
 
-export function ReasoningPill({ threadId }: { threadId: string | null }) {
+export function ReasoningPill({ threadId, modelId }: { threadId: string | null; modelId: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const effective = useChatSettingsStore((s) => s.getEffectiveReasoning(threadId))
   const autoEnabled = useAutoClassifyStore((s) => s.autoEnabled)
   const autoClassification = useAutoClassifyStore((s) => threadId ? s.classifications[threadId] ?? null : null)
   const isAutoLocked = autoEnabled && autoClassification !== null
+
+  const activeModelId = isAutoLocked
+    ? autoClassification.modelId
+    : (modelId === 'auto' || autoEnabled ? DEFAULT_MODEL_ID : modelId)
+  const activeModel = MODEL_OPTIONS.find((m) => m.id === activeModelId)
+    ?? MODEL_OPTIONS.find((m) => m.id === DEFAULT_MODEL_ID)
+    ?? MODEL_OPTIONS[0]
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
@@ -272,7 +280,7 @@ export function ReasoningPill({ threadId }: { threadId: string | null }) {
             Reasoning
           </div>
           <div className="py-1">
-            {(['auto','none','minimal','low','medium','high','xhigh'] as const).map((level) => {
+            {(['auto', ...activeModel.reasoningLevels] as const).map((level) => {
               const isActive = level === 'auto' ? displayReasoning === null : displayReasoning === level
               return (
                 <button
