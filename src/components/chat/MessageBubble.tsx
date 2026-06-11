@@ -1,12 +1,13 @@
-import { memo, useState, useCallback, useEffect, useRef, useMemo, lazy, Suspense } from 'react'
+import { memo, useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react'
 import { FileText, Paperclip, Volume2 } from 'lucide-react'
 import type { Message, MessageUsage } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
 import { ButtonGroup, SelectBlock, ConfirmBlock, FormBlock, parseButtonsLine, parseSelectLine, parseFormBlock, type ButtonAction, type SelectOption, type FormBlockData } from './InteractiveBlock.tsx'
 import { haptic } from '../../lib/native'
 import { normalizeToolCalls } from '../../lib/toolCalls.ts'
+import { lazyWithRetry } from '../../lib/lazyWithRetry.ts'
 
-const RichMessageRenderer = lazy(() => import('./RichMessageRenderer.tsx').then(m => ({ default: m.RichMessageRenderer })))
+const RichMessageRenderer = lazyWithRetry('RichMessageRenderer', () => import('./RichMessageRenderer.tsx'), m => m.RichMessageRenderer)
 
 // ─── Thinking Block ─────────────────────────────────────────────────────────
 

@@ -1,0 +1,66 @@
+import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
+
+const RETRY_DELAYS_MS = [500, 1500]
+
+function reloadGuardKey(name: string) {
+  return `clavus-lazy-reload:${name}`
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Chrome/Firefox include the module URL in the import error message; we need
+// it to retry with a cache-busting query because browsers cache the *failed*
+// module in the module map — re-importing the same specifier rejects
+// instantly without hitting the network again.
+function moduleUrlFromError(err: unknown): string | null {
+  const msg = err instanceof Error ? err.message : String(err)
+  const match = msg.match(/(https?:\/\/\S+)/)
+  return match ? match[1].replace(/[.,;)]+$/, '') : null
+}
+
+// Recovers from transient "Failed to fetch dynamically imported module" errors
+// (dev-server restarts behind the Cloudflare tunnel, brief tunnel drops):
+// retry with backoff + cache-bust, then reload the page once to re-sync the
+// module graph.
+export function lazyWithRetry<T extends ComponentType<unknown>>(
+  name: string,
+  importFn: () => Promise<Record<string, unknown>>,
+  pick: (mod: Record<string, unknown>) => T,
+): LazyExoticComponent<T> {
+  return lazy(async () => {
+    let lastError: unknown
+    let moduleUrl: string | null = null
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      if (attempt > 0) await sleep(RETRY_DELAYS_MS[attempt - 1])
+      try {
+        const mod = moduleUrl
+          ? await import(/* @vite-ignore */ `${moduleUrl}${moduleUrl.includes('?') ? '&' : '?'}retry=${Date.now()}`)
+          : await importFn()
+        try { sessionStorage.removeItem(reloadGuardKey(name)) } catch { /* ignore */ }
+        return { default: pick(mod as Record<string, unknown>) }
+      } catch (err) {
+        lastError = err
+        moduleUrl = moduleUrl ?? moduleUrlFromError(err)
+        console.warn(`[Clavus] Lazy import "${name}" failed (attempt ${attempt + 1})`, err)
+      }
+    }
+
+    let alreadyReloaded = false
+    try {
+      alreadyReloaded = sessionStorage.getItem(reloadGuardKey(name)) === '1'
+      if (!alreadyReloaded) sessionStorage.setItem(reloadGuardKey(name), '1')
+    } catch { /* sessionStorage unavailable — fall through to throw */ alreadyReloaded = true }
+
+    if (!alreadyReloaded) {
+      console.warn(`[Clavus] Lazy import "${name}" still failing — reloading page once`)
+      location.reload()
+      // Keep the suspense fallback up until the reload happens
+      await sleep(10_000)
+    } else {
+      try { sessionStorage.removeItem(reloadGuardKey(name)) } catch { /* ignore */ }
+    }
+    throw lastError
+  })
+}

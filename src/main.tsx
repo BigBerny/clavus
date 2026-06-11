@@ -77,6 +77,12 @@ requestAnimationFrame(() => {
   document.documentElement.classList.add('theme-ready')
 })
 
+// Warm the chat-critical lazy chunk early so a later dev-server restart or
+// tunnel blip can't break its first dynamic import mid-session.
+setTimeout(() => {
+  void import('./components/chat/RichMessageRenderer.tsx').catch(() => { /* lazyWithRetry handles real loads */ })
+}, 1500)
+
 // Configure native status bar / keyboard accessory bar / lifecycle hooks.
 // Fires after first render so the user sees the UI immediately even if a
 // plugin import is slow.

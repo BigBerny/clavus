@@ -1,9 +1,9 @@
-import { lazy } from 'react'
+import { lazyWithRetry } from '../lib/lazyWithRetry.ts'
 
-export const DebugOverlay = lazy(() => import('./DebugOverlay.tsx').then(m => ({ default: m.DebugOverlay })))
-export const MarksensePanel = lazy(() => import('./marksense/MarksensePanel.tsx').then(m => ({ default: m.MarksensePanel })))
-export const FileViewerPanel = lazy(() => import('./files/FileViewerPanel.tsx').then(m => ({ default: m.FileViewerPanel })))
-export const FinderPanel = lazy(() => import('./files/FinderPanel.tsx').then(m => ({ default: m.FinderPanel })))
-export const ComposeFlow = lazy(() => import('./compose/ComposeFlow.tsx').then(m => ({ default: m.ComposeFlow })))
-export const RealtimeChat = lazy(() => import('./realtime/RealtimeChat.tsx').then(m => ({ default: m.RealtimeChat })))
-export const TranscriptsPanel = lazy(() => import('./transcripts/TranscriptsPanel.tsx').then(m => ({ default: m.TranscriptsPanel })))
+export const DebugOverlay = lazyWithRetry('DebugOverlay', () => import('./DebugOverlay.tsx'), m => m.DebugOverlay)
+export const MarksensePanel = lazyWithRetry('MarksensePanel', () => import('./marksense/MarksensePanel.tsx'), m => m.MarksensePanel)
+export const FileViewerPanel = lazyWithRetry('FileViewerPanel', () => import('./files/FileViewerPanel.tsx'), m => m.FileViewerPanel)
+export const FinderPanel = lazyWithRetry('FinderPanel', () => import('./files/FinderPanel.tsx'), m => m.FinderPanel)
+export const ComposeFlow = lazyWithRetry('ComposeFlow', () => import('./compose/ComposeFlow.tsx'), m => m.ComposeFlow)
+export const RealtimeChat = lazyWithRetry('RealtimeChat', () => import('./realtime/RealtimeChat.tsx'), m => m.RealtimeChat)
+export const TranscriptsPanel = lazyWithRetry('TranscriptsPanel', () => import('./transcripts/TranscriptsPanel.tsx'), m => m.TranscriptsPanel)
