@@ -153,6 +153,10 @@ export default defineConfig({
       filename: 'sw.ts',
       registerType: 'autoUpdate',
       injectRegister: 'auto',
+      // Manifest <link> requests are cookie-less by default, which bounces
+      // them off Cloudflare Access into a CORS-blocked login redirect.
+      // use-credentials makes the browser send the CF_Authorization cookie.
+      useCredentials: true,
       injectManifest: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB — increased for Marksense editor chunk
       },
