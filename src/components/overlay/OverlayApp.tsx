@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, X } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import './overlay.css'
 import { useThreadsStore, archiveStaleThreads, refreshThreadsMetadata, syncFromServer, type Thread } from '../../state/threads'
 import { useChatStore, type PendingFile } from '../../state/chat'
@@ -47,11 +47,32 @@ function nextTick(cb: () => void) {
   setTimeout(run, 32)
 }
 
-/* ---------- swipe-back gesture: rightward drag pages back to home ---------- */
+/* ---------- swipe-back gesture: rightward drag (or trackpad pan) pages
+   back to home, mirroring the window-mode feel ---------- */
 function useSwipeBack(enabled: boolean, onBack: () => void) {
   const [dragFrac, setDragFrac] = useState(0) // 0 = chat front, 1 = home front
   const [dragging, setDragging] = useState(false)
   const st = useRef<{ x: number; y: number; lock: 'x' | 'y' | null; id: number; el: HTMLElement; w: number } | null>(null)
+  const wheelEnd = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Trackpad two-finger pans arrive as wheel events. Natural scrolling:
+  // fingers moving right = negative deltaX = paging back toward home.
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!enabled) return
+    if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return
+    const w = e.currentTarget.offsetWidth || 1
+    setDragging(true)
+    setDragFrac((f) => Math.max(0, Math.min(1, f - e.deltaX / w)))
+    if (wheelEnd.current) clearTimeout(wheelEnd.current)
+    wheelEnd.current = setTimeout(() => {
+      wheelEnd.current = null
+      setDragging(false)
+      setDragFrac((f) => {
+        if (f > 0.22) onBack()
+        return 0
+      })
+    }, 140)
+  }
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!enabled) return
@@ -91,7 +112,7 @@ function useSwipeBack(enabled: boolean, onBack: () => void) {
     st.current = null
   }
 
-  return { dragFrac, dragging, handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp } }
+  return { dragFrac, dragging, handlers: { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp, onWheel } }
 }
 
 const EMPTY_STREAMING = false
@@ -102,9 +123,12 @@ export function OverlayApp() {
   const [chatOpen, setChatOpen] = useState(false)
   const [entering, setEntering] = useState(false)
   const [threadId, setThreadId] = useState<string | null>(null)
+  // Frosted desktop screenshot from the shell — rendered (CSS-blurred)
+  // inside the matte so the whole frost fades with the content. The native
+  // NSVisualEffectView couldn't fade: window alpha doesn't touch the
+  // window-server's backdrop blur, which popped on close.
+  const [backdrop, setBackdrop] = useState<string | null>(null)
 
-  const threads = useThreadsStore((s) => s.threads)
-  const thread: Thread | undefined = threads.find((t) => t.id === threadId)
   const isStreaming = useChatStore((s) => (threadId ? s.threadStates[threadId]?.isStreaming ?? EMPTY_STREAMING : EMPTY_STREAMING))
   const { send, abort } = useChat()
 
@@ -149,14 +173,16 @@ export function OverlayApp() {
     setTimeout(() => focusInput(resumeId && exists ? 'chat' : 'home'), 480)
   }, [focusInput])
 
-  /* ----- close: start the content fade and hand off to the native shell,
-     which fades the whole window (frost included) and hides it ----- */
+  /* ----- close: fade everything (frost included — it's all web content
+     now), then ask the shell to order the window out ----- */
   const requestClose = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
     setOpen(false)
-    window.dispatchEvent(new CustomEvent('clavus:overlay-hide'))
-    setTimeout(() => { closingRef.current = false }, 600)
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('clavus:overlay-hide'))
+      closingRef.current = false
+    }, 440)
   }, [])
 
   /* ----- pager ----- */
@@ -187,11 +213,17 @@ export function OverlayApp() {
   useEffect(() => {
     const onOpen = () => openOverlay()
     const onCloseRequest = () => requestClose()
+    const onBackdrop = (e: Event) => {
+      const url = (e as CustomEvent).detail?.dataUrl
+      if (typeof url === 'string' && url.startsWith('data:image/')) setBackdrop(url)
+    }
     window.addEventListener('clavus:overlay-open', onOpen)
     window.addEventListener('clavus:overlay-close-request', onCloseRequest)
+    window.addEventListener('clavus:overlay-backdrop', onBackdrop)
     return () => {
       window.removeEventListener('clavus:overlay-open', onOpen)
       window.removeEventListener('clavus:overlay-close-request', onCloseRequest)
+      window.removeEventListener('clavus:overlay-backdrop', onBackdrop)
     }
   }, [openOverlay, requestClose])
 
@@ -250,6 +282,9 @@ export function OverlayApp() {
 
   return (
     <div className={'ovl-matte' + (open ? ' is-open' : '')} onMouseDown={onMatteMouseDown}>
+      {backdrop && (
+        <div className="ovl-backdrop" style={{ backgroundImage: `url(${backdrop})` }} />
+      )}
       <div className="ovl-stage">
 
         {/* ---------- HOME pane ---------- */}
@@ -258,10 +293,6 @@ export function OverlayApp() {
           className={'ovl-pane ovl-pane--home' + (swipe.dragging ? ' is-dragging' : '')}
           style={{ transform: homeTx }}
         >
-          <div className="ovl-top">
-            <span className="ovl-top__spacer" />
-            <button className="ovl-gcircle" onClick={requestClose} title="Dismiss (Esc)"><X /></button>
-          </div>
           <div className="ovl-scroll">
             <OverlayHome onOpenThread={openThread} onCompose={compose} />
           </div>
@@ -289,13 +320,9 @@ export function OverlayApp() {
             style={{ transform: chatTx }}
             {...swipe.handlers}
           >
-            <div className="ovl-top">
-              <button className="ovl-gcircle" onClick={popChat} title="Back to home (swipe right)"><ArrowLeft /></button>
-              <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
-                <div className="ovl-top__title">{thread?.title ?? 'New conversation'}</div>
-              </div>
-              <button className="ovl-gcircle" onClick={requestClose} title="Dismiss (Esc)"><X /></button>
-            </div>
+            {/* Back affordance — in the pane (slides with it), vertically
+                centered, hugging the conversation column. Same as window mode. */}
+            <button className="ovl-gcircle ovl-back" onClick={popChat} title="Back to home (Esc)"><ArrowLeft /></button>
             <div className="ovl-chatwrap">
               <ChatViewPanel threadId={threadId} />
             </div>

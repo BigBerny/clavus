@@ -1439,10 +1439,23 @@ export function App() {
                 <div
                   key={paneTab.id}
                   ref={setPanelRef(paneTab.id)}
-                  className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
+                  className="relative w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
                   style={{ touchAction: 'pan-x pan-y' }}
                   {...(!isActive ? { inert: true } : {})}
                 >
+                  {/* Back affordance — lives IN the pane (slides away with it),
+                      vertically centered, hugging the conversation column. */}
+                  {isDesktop && (
+                    <button
+                      onClick={() => scrollToTab('home')}
+                      className="absolute top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full glass flex items-center justify-center text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors"
+                      style={{ left: 'max(8px, calc(50% - 494px))' }}
+                      aria-label="Back to home"
+                      title="Back to home (Esc)"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    </button>
+                  )}
                   <PullDownDismissable tabId={paneTab.id} onDismiss={handleArchiveTab}>
                     <Suspense fallback={<PanelLoading />}>
                       {paneTab.type === 'chat' && (
@@ -1485,18 +1498,6 @@ export function App() {
         </div>
         )}
 
-        {/* Window-mode back affordance — floating circle, vertically centered
-            on the left edge. Swipe/trackpad works too; Esc as well. */}
-        {pagerMode && isDesktop && visiblePanel !== 'home' && (
-          <button
-            onClick={() => scrollToTab('home')}
-            className="fixed left-3 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full glass flex items-center justify-center text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors"
-            aria-label="Back to home"
-            title="Back to home (Esc)"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          </button>
-        )}
 
         {/* InputBar floating over content with glass effect (skip when split view has its own) */}
         {isVisibleChat && !(isDesktop && splitDocPath) && (
