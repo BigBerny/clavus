@@ -25,3 +25,7 @@ dist-ssr
 
 # Environment
 .env
+
+# TLS certs live in ~/.local/share/tailscale/certs — never in the repo
+*.crt
+*.key
