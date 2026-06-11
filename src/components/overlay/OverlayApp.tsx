@@ -20,7 +20,6 @@ import { OverlayHome } from './OverlayHome'
 
 const RESUME_KEY = 'clavus-overlay-last-chat'
 const RESUME_MS = 15 * 60 * 1000
-const CLOSE_ANIM_MS = 440
 
 function loadResumeThreadId(): string | null {
   try {
@@ -143,19 +142,21 @@ export function OverlayApp() {
       setEntering(false)
       setThreadId(null)
     }
+    // The window may have hidden without us noticing (Cmd-Tab deactivate),
+    // leaving is-open stale — drop it so the entrance transition replays.
+    setOpen(false)
     nextTick(() => setOpen(true))
     setTimeout(() => focusInput(resumeId && exists ? 'chat' : 'home'), 480)
   }, [focusInput])
 
-  /* ----- close: animate out, then ask the native shell to hide ----- */
+  /* ----- close: start the content fade and hand off to the native shell,
+     which fades the whole window (frost included) and hides it ----- */
   const requestClose = useCallback(() => {
     if (closingRef.current) return
     closingRef.current = true
     setOpen(false)
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('clavus:overlay-hide'))
-      closingRef.current = false
-    }, CLOSE_ANIM_MS)
+    window.dispatchEvent(new CustomEvent('clavus:overlay-hide'))
+    setTimeout(() => { closingRef.current = false }, 600)
   }, [])
 
   /* ----- pager ----- */

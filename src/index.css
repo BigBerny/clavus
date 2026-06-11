@@ -817,3 +817,21 @@ html:not(.dark) .home-screen {
 html:not(.dark) .home-group-row-border {
   border-top-color: oklch(0 0 0 / 0.06);
 }
+
+/* Pager: never show scrollbars. The horizontal container's bar flashes
+   along the bottom during swipes, and the home pane's vertical bar spoils
+   the slide-back. (Chat keeps its scrollbar.) */
+.pager-container {
+  scrollbar-width: none;
+}
+.pager-container::-webkit-scrollbar {
+  display: none;
+}
+.pager-home-panel,
+.pager-home-panel * {
+  scrollbar-width: none;
+}
+.pager-home-panel::-webkit-scrollbar,
+.pager-home-panel *::-webkit-scrollbar {
+  display: none;
+}

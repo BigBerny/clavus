@@ -277,6 +277,10 @@ export function App() {
 
   const pinVisiblePanelIfNeeded = useCallback((reason: string) => {
     if (isUserHorizontalGesture.current || gestureStartPoint.current) return false
+    // A programmatic smooth scroll (scrollToTab / scrollIntoView) is in
+    // flight — pinning now would teleport to the target and kill the slide
+    // animation.
+    if (isProgrammaticScroll.current) return false
 
     const container = scrollContainerRef.current
     const panel = panelRefs.current.get(visiblePanel)
@@ -1390,7 +1394,7 @@ export function App() {
              or trackpad-pan right to go back home. */
           <div
             ref={scrollContainerRef}
-            className="row-start-1 col-start-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto relative z-[1]"
+            className="pager-container row-start-1 col-start-1 min-h-0 w-full max-w-full flex flex-row overflow-x-auto relative z-[1]"
             onPointerDown={markHorizontalGestureStart}
             onPointerMove={markHorizontalGestureMove}
             onPointerUp={markHorizontalGestureEnd}
@@ -1409,7 +1413,7 @@ export function App() {
           {/* Home panel — leftmost, the place you start */}
           <div
             ref={setPanelRef('home')}
-            className="w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 overflow-hidden box-border"
+            className="pager-home-panel w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 overflow-hidden box-border"
             {...(visiblePanel !== 'home' ? { inert: true } : {})}
           >
           <HomeScreen
@@ -1481,13 +1485,12 @@ export function App() {
         </div>
         )}
 
-        {/* Window-mode back affordance — floating circle, like the design's
-            back button. Swipe/trackpad works too; Esc as well. */}
+        {/* Window-mode back affordance — floating circle, vertically centered
+            on the left edge. Swipe/trackpad works too; Esc as well. */}
         {pagerMode && isDesktop && visiblePanel !== 'home' && (
           <button
             onClick={() => scrollToTab('home')}
-            className="fixed left-3 z-30 w-8 h-8 rounded-full glass flex items-center justify-center text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors"
-            style={{ top: 'calc(env(safe-area-inset-top, 0px) + 40px)' }}
+            className="fixed left-3 top-1/2 -translate-y-1/2 z-30 w-8 h-8 rounded-full glass flex items-center justify-center text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors"
             aria-label="Back to home"
             title="Back to home (Esc)"
           >
