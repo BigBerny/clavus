@@ -247,10 +247,10 @@ html[data-tauri] body {
   background-image: none !important;
 }
 html[data-tauri] #root {
-  /* Frameless window — no traffic lights / title bar to clear anymore,
-     just a hint of breathing room above the pager top bar. */
-  padding-top: 10px;
-  padding-bottom: 12px;
+  /* Full-bleed overlay window (covers menu bar + Dock) — breathing room so
+     content doesn't kiss the screen edges (mockup pane padding). */
+  padding-top: 24px;
+  padding-bottom: 16px;
   background: oklch(0.10 0.006 50 / 0.35);
   background-image: none;
 }
