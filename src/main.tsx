@@ -9,34 +9,64 @@ import { isNative, nativePlatform, setupNativeShell } from './lib/native'
 // When the dev server restarts (every deploy), pages that are already open
 // hold the old module graph; the next lazy-loaded chunk then 404s/504s and
 // the import throws ("Importing a module script failed" on iOS WebKit,
-// "Failed to fetch dynamically imported module" on Chromium). A reload always
-// fixes it, so do that automatically — at most once per 15s to avoid a loop
-// if the server is genuinely down.
+// "Failed to fetch dynamically imported module" on Chromium). A reload fixes
+// it — but the reload itself can land inside the server's restart window, so
+// we retry up to 3 times with backoff (0s, 3s, 6s) before giving up. The
+// attempt counter clears after the app has been alive for 20s.
 function isStaleModuleError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? '')
   return /Importing a module script failed|Failed to fetch dynamically imported module|error loading dynamically imported module|Outdated Optimize Dep/i.test(msg)
 }
 
+const RELOAD_KEY = 'clavus:stale-module-reload'
+const MAX_RELOAD_ATTEMPTS = 3
+let reloadPending = false
+
+/** Schedule a recovery reload. Returns false when attempts are exhausted
+ *  (server likely down — let the error screen show). */
 function reloadForStaleModules(): boolean {
-  const KEY = 'clavus:stale-module-reload'
+  if (reloadPending) return true
+  let info = { ts: 0, count: 0 }
   try {
-    const last = Number(sessionStorage.getItem(KEY) || 0)
-    if (Date.now() - last < 15_000) return false
-    sessionStorage.setItem(KEY, String(Date.now()))
-  } catch { /* private mode — reload anyway */ }
-  console.warn('[Clavus] Stale module graph detected — reloading')
-  location.reload()
+    const parsed = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || '')
+    if (parsed && typeof parsed.ts === 'number' && typeof parsed.count === 'number') info = parsed
+  } catch { /* fresh start */ }
+  const now = Date.now()
+  if (now - info.ts > 60_000) info = { ts: now, count: 0 }
+  if (info.count >= MAX_RELOAD_ATTEMPTS) return false
+  const delay = info.count * 3000 // 0s, 3s, 6s — gives a restarting server time to come back
+  try { sessionStorage.setItem(RELOAD_KEY, JSON.stringify({ ts: now, count: info.count + 1 })) } catch { /* private mode */ }
+  reloadPending = true
+  console.warn(`[Clavus] Stale module graph detected — reloading${delay ? ` in ${delay / 1000}s` : ''} (attempt ${info.count + 1}/${MAX_RELOAD_ATTEMPTS})`)
+  setTimeout(() => location.reload(), delay)
   return true
 }
 
+// The page survived 20s — consider it healthy and reset the retry budget.
+setTimeout(() => {
+  try { sessionStorage.removeItem(RELOAD_KEY) } catch { /* private mode */ }
+}, 20_000)
+
 // Global error handler — show errors visibly instead of white screen
-class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
-  state = { error: null as Error | null }
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null; recovering: boolean }> {
+  state = { error: null as Error | null, recovering: false }
   static getDerivedStateFromError(error: Error) { return { error } }
   componentDidCatch(error: Error) {
-    if (isStaleModuleError(error)) reloadForStaleModules()
+    if (isStaleModuleError(error) && reloadForStaleModules()) {
+      this.setState({ recovering: true })
+    }
   }
   render() {
+    if (this.state.recovering) {
+      // Stale deploy artifact, recovery reload is scheduled — show a calm
+      // updating screen instead of the red error.
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, minHeight: '100vh', background: '#110e0c', color: 'oklch(0.86 0.008 60)', fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 14 }}>
+          <div style={{ width: 18, height: 18, border: '2px solid oklch(1 0 0 / 0.15)', borderTopColor: '#ef7f5b', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+          Updating Clavus…
+        </div>
+      )
+    }
     if (this.state.error) {
       return (
         <div style={{ padding: 24, color: '#ff4444', background: '#111', minHeight: '100vh', fontFamily: 'monospace', fontSize: 14, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
