@@ -16,23 +16,34 @@ interface Props {
   onBranch?: (messageId: string) => void
 }
 
-// Cache scroll positions per thread (in-memory + sessionStorage for reload survival)
-const scrollPositionCache = new Map<string, number>()
+// Cache scroll positions per thread. localStorage (NOT sessionStorage) so the
+// position is shared between the app window and the assistant overlay — both
+// webviews share the same store — and survives restarts. `atBottom` is stored
+// as a flag rather than a pixel value because content heights drift as the
+// lazy markdown renderer loads; "bottom" must mean bottom, not an old offset.
+type ScrollRecord = { top: number; atBottom: boolean }
+const scrollPositionCache = new Map<string, ScrollRecord>()
 const SCROLL_STORAGE_PREFIX = 'clavus-scroll-'
 
-function persistScrollPosition(threadId: string, scrollTop: number) {
-  scrollPositionCache.set(threadId, scrollTop)
-  try { sessionStorage.setItem(SCROLL_STORAGE_PREFIX + threadId, String(scrollTop)) } catch { /* full */ }
+function persistScrollPosition(threadId: string, el: HTMLElement) {
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
+  const rec: ScrollRecord = { top: el.scrollTop, atBottom }
+  scrollPositionCache.set(threadId, rec)
+  try { localStorage.setItem(SCROLL_STORAGE_PREFIX + threadId, JSON.stringify(rec)) } catch { /* full */ }
 }
 
-function getScrollPosition(threadId: string): number | undefined {
-  const mem = scrollPositionCache.get(threadId)
-  if (mem !== undefined) return mem
+function getScrollPosition(threadId: string): ScrollRecord | undefined {
+  // localStorage first — the OTHER surface may have scrolled this thread
+  // more recently than our in-memory cache knows.
   try {
-    const stored = sessionStorage.getItem(SCROLL_STORAGE_PREFIX + threadId)
-    if (stored !== null) return Number(stored)
+    const stored = localStorage.getItem(SCROLL_STORAGE_PREFIX + threadId)
+    if (stored !== null) {
+      const parsed = JSON.parse(stored) as ScrollRecord | number
+      if (typeof parsed === 'number') return { top: parsed, atBottom: false }
+      if (parsed && typeof parsed.top === 'number') return parsed
+    }
   } catch { /* unavailable */ }
-  return undefined
+  return scrollPositionCache.get(threadId)
 }
 
 function getLatestUserMessageId(messages: Message[]): string | null {
@@ -161,27 +172,45 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
     const container = containerRef.current
     return () => {
       if (container && threadId) {
-        persistScrollPosition(threadId, container.scrollTop)
+        persistScrollPosition(threadId, container)
       }
     }
   }, [threadId])
 
-  // Restore scroll position on mount, or scroll to bottom by default
+  // Restore scroll position on open — the last place the user was (in EITHER
+  // surface), or the bottom (newest answer). Never the start: content
+  // inflates while messages hydrate and the lazy markdown renderer loads, so
+  // a single mount-time scroll can end up at the top. Re-apply the target
+  // until layout settles or the user takes over.
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const savedPos = getScrollPosition(threadId)
-    if (savedPos !== undefined) {
-      container.scrollTop = savedPos
-      setAutoScroll(container.scrollHeight - savedPos - container.clientHeight < 50)
-    } else {
-      // Default: scroll to bottom (latest messages)
-      requestAnimationFrame(() => {
-        if (containerRef.current) {
-          containerRef.current.scrollTop = containerRef.current.scrollHeight
-          setAutoScroll(true)
-        }
-      })
+    const rec = getScrollPosition(threadId)
+    const wantBottom = !rec || rec.atBottom
+    let cancelled = false
+    let userTookOver = false
+    const markUser = () => { userTookOver = true }
+    container.addEventListener('wheel', markUser, { once: true, passive: true })
+    container.addEventListener('pointerdown', markUser, { once: true, passive: true })
+
+    const apply = () => {
+      const c = containerRef.current
+      if (cancelled || userTookOver || !c) return
+      if (wantBottom) {
+        c.scrollTop = c.scrollHeight
+        setAutoScroll(true)
+      } else if (rec) {
+        c.scrollTop = rec.top
+        setAutoScroll(c.scrollHeight - rec.top - c.clientHeight < 50)
+      }
+    }
+    apply()
+    const timers = [60, 200, 450, 900, 1500].map((ms) => setTimeout(apply, ms))
+    return () => {
+      cancelled = true
+      timers.forEach(clearTimeout)
+      container.removeEventListener('wheel', markUser)
+      container.removeEventListener('pointerdown', markUser)
     }
   }, [threadId])
 
@@ -336,7 +365,7 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
     if (scrollSaveTimer.current) clearTimeout(scrollSaveTimer.current)
     scrollSaveTimer.current = setTimeout(() => {
       if (containerRef.current && threadId) {
-        persistScrollPosition(threadId, containerRef.current.scrollTop)
+        persistScrollPosition(threadId, containerRef.current)
       }
     }, 300)
   }, [threadId, activeStreamingAssistantId])
