@@ -127,6 +127,13 @@ export default defineConfig({
       'use-sync-external-store/shim/index.js',
       'use-sync-external-store/shim/with-selector.js',
       'workbox-precaching',
+      // RichMessageRenderer's stack. Without these the optimizer only
+      // discovers them when the renderer lazy-loads, re-bundles mid-session,
+      // and in-flight clients get "Failed to fetch dynamically imported
+      // module" on the first chat open after every restart/edit.
+      'react-markdown',
+      'remark-gfm',
+      'rehype-highlight',
     ],
   },
   server: devServerOptions,

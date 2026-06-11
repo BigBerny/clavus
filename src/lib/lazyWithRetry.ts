@@ -77,7 +77,21 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
     } catch { /* sessionStorage unavailable — fall through to throw */ alreadyReloaded = true }
 
     if (!alreadyReloaded) {
-      console.warn(`[Clavus] Lazy import "${name}" still failing — reloading page once`)
+      console.warn(`[Clavus] Lazy import "${name}" still failing — clearing caches and reloading page once`)
+      // The PWA service worker precaches the app shell; reloading without
+      // clearing it re-serves the STALE shell (old /deps ?v= hashes) and the
+      // import fails identically. Drop the caches + nudge the SW first so
+      // the reload actually fetches a fresh module graph.
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys()
+          await Promise.all(keys.map((k) => caches.delete(k)))
+        }
+      } catch { /* ignore */ }
+      try {
+        const regs = await navigator.serviceWorker?.getRegistrations()
+        await Promise.all((regs ?? []).map((r) => r.update().catch(() => {})))
+      } catch { /* ignore */ }
       location.reload()
       // Keep the suspense fallback up until the reload happens
       await sleep(10_000)
