@@ -1,9 +1,14 @@
-import { StrictMode, Component, type ReactNode } from 'react'
+import { StrictMode, Component, Suspense, lazy, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AlertTriangle } from 'lucide-react'
 import './index.css'
 import { App } from './App.tsx'
 import { isNative, nativePlatform, setupNativeShell } from './lib/native'
+
+// Desktop overlay mode — the Tauri assistant window loads the app with
+// ?overlay=1 and gets the frameless liquid-glass surface instead of the
+// normal layout. Lazy so the normal app pays no cost for it.
+const OverlayApp = lazy(() => import('./components/overlay/OverlayApp.tsx').then((m) => ({ default: m.OverlayApp })))
 
 // Global error handler — show errors visibly instead of white screen
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -45,6 +50,8 @@ document.documentElement.setAttribute('data-platform', nativePlatform)
 if (isNative) document.documentElement.setAttribute('data-native', 'true')
 const isTauriShell = /Clavus\/[\d.]+ \(Tauri/.test(navigator.userAgent)
 if (isTauriShell) document.documentElement.setAttribute('data-tauri', 'true')
+const isOverlayMode = new URLSearchParams(window.location.search).get('overlay') === '1'
+if (isOverlayMode) document.documentElement.setAttribute('data-overlay', 'true')
 
 // In the Capacitor WKWebView (and the Tauri macOS shell, which sets its UA to
 // "Clavus/<ver> (Tauri; …)") we don't want a service worker: precached chunks
@@ -67,7 +74,9 @@ if ((isNative || isTauri) && 'serviceWorker' in navigator) {
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      {isOverlayMode
+        ? <Suspense fallback={null}><OverlayApp /></Suspense>
+        : <App />}
     </ErrorBoundary>
   </StrictMode>,
 )

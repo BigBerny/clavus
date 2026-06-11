@@ -1,0 +1,481 @@
+/* ============================================================
+   Clavus Desktop overlay mode (?overlay=1)
+   Liquid-glass system from the Claude Design handoff (iOS 26 /
+   macOS 26). Dark tone is the base; light tone under :not(.dark).
+
+   In the Tauri assistant window the REAL frost comes from a native
+   NSVisualEffectView behind the transparent webview — the matte here
+   only adds scrim + vignette. In a plain browser (preview) a fallback
+   backdrop-filter + wallpaper approximates it.
+   ============================================================ */
+
+html[data-overlay] {
+  /* Accent — single coral, everything derives from it. */
+  --ovl-accent: #ef7f5b;
+  --ovl-accent-soft: color-mix(in oklab, var(--ovl-accent) 16%, transparent);
+  --ovl-accent-line: color-mix(in oklab, var(--ovl-accent) 34%, transparent);
+  --ovl-accent-glow: color-mix(in oklab, var(--ovl-accent) 50%, transparent);
+
+  /* Thread-dot palette */
+  --ovl-dot-1: oklch(0.75 0.12 145);
+  --ovl-dot-2: var(--ovl-accent);
+  --ovl-dot-3: oklch(0.78 0.10 270);
+  --ovl-dot-4: oklch(0.72 0.13 250);
+
+  /* ---- DARK glass (base): a faint light film over the darkened blur;
+     legibility comes from rims + highlights, not opacity ---- */
+  --glass-bg: oklch(0.78 0.01 60 / 0.07);
+  --glass-bg-heavy: oklch(0.80 0.01 60 / 0.11);
+  --ovl-glass-bg-strong: oklch(0.82 0.01 60 / 0.16);
+  --ovl-glass-inner-glow: oklch(1 0 0 / 0.16);
+  --ovl-glass-inner-strong: oklch(1 0 0 / 0.26);
+  --glass-border: oklch(1 0 0 / 0.20);
+  --glass-border-strong: oklch(1 0 0 / 0.34);
+  --glass-shadow: oklch(0 0 0 / 0.42);
+  --ovl-glass-sheen: oklch(1 0 0 / 0.12);
+  --glass-inner-glow: var(--ovl-glass-inner-glow);
+  --glass-blur: 28px;
+  --glass-saturate: 200%;
+
+  --ovl-text: oklch(0.98 0.006 60);
+  --ovl-text-muted: oklch(0.86 0.008 60);
+  --ovl-text-faint: oklch(0.74 0.010 60);
+  --ovl-text-dim: oklch(0.62 0.010 60);
+
+  --ovl-hairline: oklch(0.98 0.008 50 / 0.10);
+  --ovl-bubble-ai: oklch(0.80 0.01 60 / 0.09);
+  --ovl-bubble-me: color-mix(in oklab, var(--ovl-accent) 30%, transparent);
+  --ovl-text-glow: 0 1px 10px oklch(0 0 0 / 0.32);
+  --ovl-pop-bg: oklch(0.26 0.006 60 / 0.74);
+  --ovl-scrim: oklch(0.10 0.006 50 / 0.42);
+}
+
+/* ---- LIGHT glass variant — a bright frosted-white pane ---- */
+html[data-overlay]:not(.dark) {
+  --glass-bg: oklch(1 0 0 / 0.44);
+  --glass-bg-heavy: oklch(1 0 0 / 0.60);
+  --ovl-glass-bg-strong: oklch(1 0 0 / 0.74);
+  --ovl-glass-inner-glow: oklch(1 0 0 / 0.80);
+  --ovl-glass-inner-strong: oklch(1 0 0 / 1);
+  --glass-border: oklch(0.45 0.02 275 / 0.14);
+  --glass-border-strong: oklch(0.45 0.02 275 / 0.22);
+  --glass-shadow: oklch(0.35 0.03 275 / 0.22);
+  --ovl-glass-sheen: oklch(1 0 0 / 0.65);
+  --glass-inner-glow: var(--ovl-glass-inner-glow);
+
+  --ovl-text: oklch(0.22 0.012 275);
+  --ovl-text-muted: oklch(0.36 0.014 275);
+  --ovl-text-faint: oklch(0.47 0.014 275);
+  --ovl-text-dim: oklch(0.57 0.012 275);
+
+  --ovl-hairline: oklch(0.30 0.02 275 / 0.12);
+  --ovl-bubble-ai: oklch(1 0 0 / 0.68);
+  --ovl-bubble-me: color-mix(in oklab, var(--ovl-accent) 22%, oklch(1 0 0 / 0.62));
+  --ovl-text-glow: none;
+  --ovl-pop-bg: oklch(1 0 0 / 0.88);
+  --ovl-scrim: oklch(0.97 0.008 275 / 0.55);
+}
+
+/* ---- transparency: the native material must show through ---- */
+html[data-overlay],
+html[data-overlay] body {
+  background: transparent !important;
+}
+html[data-overlay] #root {
+  background: none !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+/* The app paints its gradient on #root::before — not on the glass. */
+html[data-overlay] #root::before {
+  display: none;
+}
+/* index.css forces `#root > * { position: relative; z-index: 1 }` (id
+   specificity) — restore the matte's fixed full-screen geometry. */
+html[data-overlay] #root > .ovl-matte {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+/* ---- browser preview fallback (no native frost available) ---- */
+html[data-overlay]:not([data-tauri]) body {
+  background:
+    radial-gradient(110% 90% at 80% 10%, oklch(0.40 0.07 250 / 0.9), transparent 55%),
+    radial-gradient(120% 110% at 15% 95%, oklch(0.36 0.06 280 / 0.9), transparent 60%),
+    linear-gradient(155deg, oklch(0.30 0.04 260), oklch(0.16 0.02 260)) !important;
+}
+html[data-overlay]:not([data-tauri]) .ovl-matte {
+  backdrop-filter: blur(var(--glass-blur)) saturate(125%) brightness(0.78);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(125%) brightness(0.78);
+}
+
+/* ============================================================
+   Matte — scrim + legibility vignette over the native frost.
+   backdrop-filter is never transitioned (it repaints nested glass
+   and flickers the input bar); only opacity fades.
+   ============================================================ */
+.ovl-matte {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  background: var(--ovl-scrim);
+  color: var(--ovl-text);
+  opacity: 0;
+  transition: opacity 0.42s ease;
+}
+.ovl-matte.is-open { opacity: 1; }
+.ovl-matte::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, oklch(0 0 0 / 0.24) 0%, transparent 16%, transparent 70%, oklch(0 0 0 / 0.34) 100%);
+}
+html[data-overlay]:not(.dark) .ovl-matte::after {
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.30) 0%, transparent 16%, transparent 70%, oklch(1 0 0 / 0.34) 100%);
+}
+
+/* The stage — full-screen clip container; panes travel to the screen edge. */
+.ovl-stage {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(16px) scale(0.985);
+  transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ovl-matte.is-open .ovl-stage { opacity: 1; transform: none; }
+
+/* Panes fill the screen and page in lockstep. */
+.ovl-pane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 0 24px;
+  transition: transform 0.46s cubic-bezier(0.4, 0.8, 0.2, 1);
+  will-change: transform;
+}
+.ovl-pane.is-dragging { transition: none; }
+.ovl-pane--chat { touch-action: pan-y; }
+
+/* Centered content column inside each pane */
+.ovl-pane > * {
+  width: min(var(--ovl-stage-w, 720px), calc(100% - 72px));
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Floating top bar — no container */
+.ovl-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 2px 6px 14px;
+  flex-shrink: 0;
+}
+.ovl-top__title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ovl-text);
+  letter-spacing: -0.01em;
+  text-shadow: var(--ovl-text-glow);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ovl-top__spacer { flex: 1; }
+.ovl-gcircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ovl-text-muted);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--ovl-glass-inner-glow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: all 0.14s ease;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.ovl-gcircle:hover {
+  background: var(--glass-bg-heavy);
+  color: var(--ovl-text);
+  border-color: var(--glass-border-strong);
+}
+.ovl-gcircle svg { width: 16px; height: 16px; }
+
+/* Scroll region — transparent, content floats directly on the glass */
+.ovl-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px 8px 8px;
+  min-height: 0;
+}
+.ovl-scroll::-webkit-scrollbar { width: 6px; }
+.ovl-scroll::-webkit-scrollbar-thumb { background: var(--glass-border-strong); border-radius: 3px; }
+
+/* Enter stagger via transitions (robust under reload/capture) */
+.ovl-stagger > * {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ovl-matte.is-open .ovl-stagger > * { opacity: 1; transform: none; }
+.ovl-matte.is-open .ovl-stagger > *:nth-child(1) { transition-delay: 0.06s; }
+.ovl-matte.is-open .ovl-stagger > *:nth-child(2) { transition-delay: 0.12s; }
+.ovl-matte.is-open .ovl-stagger > *:nth-child(3) { transition-delay: 0.18s; }
+.ovl-matte.is-open .ovl-stagger > *:nth-child(4) { transition-delay: 0.24s; }
+
+/* ============================================================
+   Home pane
+   ============================================================ */
+.ovl-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ovl-text-faint);
+  text-transform: uppercase;
+  margin: 10px 0 10px;
+  text-shadow: var(--ovl-text-glow);
+}
+.ovl-eyebrow svg { width: 14px; height: 14px; color: var(--ovl-accent); }
+.ovl-hero {
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  margin-bottom: 30px;
+  color: var(--ovl-text);
+  text-shadow: var(--ovl-text-glow);
+}
+
+.ovl-compose-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 9px;
+}
+.ovl-compose-card {
+  border-radius: 16px;
+  padding: 16px 10px 13px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--ovl-glass-inner-glow);
+  transition: all 0.16s ease;
+  cursor: pointer;
+  color: var(--ovl-text);
+  font: inherit;
+}
+.ovl-compose-card:hover {
+  background: var(--glass-bg-heavy);
+  border-color: var(--glass-border-strong);
+  transform: translateY(-2px);
+}
+.ovl-compose-card svg { width: 21px; height: 21px; }
+.ovl-compose-card span {
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: var(--ovl-text-glow);
+}
+.ovl-compose-card.c-msg svg { color: var(--ovl-dot-4); }
+.ovl-compose-card.c-slack svg { color: var(--ovl-dot-1); }
+.ovl-compose-card.c-mail svg { color: var(--ovl-accent); }
+
+.ovl-threads { display: flex; flex-direction: column; margin-top: 22px; }
+.ovl-thread {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 12px;
+  border-radius: 14px;
+  transition: background 0.14s ease;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+}
+.ovl-thread:hover { background: var(--glass-bg); }
+.ovl-thread__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+.ovl-thread__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ovl-thread__title {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--ovl-text);
+  letter-spacing: -0.01em;
+  margin-bottom: 3px;
+  text-shadow: var(--ovl-text-glow);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ovl-thread__preview {
+  display: block;
+  font-size: 13px;
+  color: var(--ovl-text-faint);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-shadow: var(--ovl-text-glow);
+}
+.ovl-thread__time {
+  font-size: 11.5px;
+  color: var(--ovl-text-dim);
+  flex-shrink: 0;
+  margin-top: 2px;
+  text-shadow: var(--ovl-text-glow);
+}
+
+.ovl-archive-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin: 10px 0 0 12px;
+  padding: 4px 4px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ovl-text-dim);
+  text-shadow: var(--ovl-text-glow);
+  transition: color 0.14s ease;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+.ovl-archive-link svg { width: 13px; height: 13px; opacity: 0.7; }
+.ovl-archive-link:hover { color: var(--ovl-text-muted); }
+
+/* ============================================================
+   Chat pane — restyle the reused ChatView for glass
+   ============================================================ */
+/* ChatView brings its own scroller — the wrapper is a plain flex column. */
+.ovl-chatwrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 8px;
+}
+html[data-overlay] .ovl-chatwrap .chat-bg { background: transparent !important; }
+
+/* The chat column normally pads for the floating input bar (it's in-flow
+   here) and for a mobile title pill that doesn't exist in the overlay. */
+html[data-overlay] .ovl-chatwrap [role="log"] > div:first-child {
+  padding-top: 8px !important;
+  padding-bottom: 12px !important;
+}
+
+/* User bubble → coral-tinted glass */
+html[data-overlay] .ovl-chatwrap .glass-user {
+  background: var(--ovl-bubble-me) !important;
+  border: 1px solid var(--ovl-accent-line) !important;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 10px 30px -16px oklch(0 0 0 / 0.5), inset 0 1px 0 var(--ovl-glass-inner-strong);
+}
+html[data-overlay].dark .ovl-chatwrap .prose,
+html[data-overlay].dark .ovl-chatwrap .glass-user {
+  text-shadow: var(--ovl-text-glow);
+}
+
+/* ============================================================
+   Input zone — restyle the reused InputBar card + keycap hints
+   ============================================================ */
+.ovl-inputzone { flex-shrink: 0; margin: 10px auto 0; position: relative; }
+
+/* The InputBar's own inline hint row duplicates the overlay keycap hints. */
+html[data-overlay] .ovl-inputzone .glass-heavy + .hidden { display: none !important; }
+html[data-overlay] .ovl-inputzone .glass-heavy {
+  border-radius: 24px;
+  background: var(--glass-bg-heavy);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--ovl-glass-inner-strong), 0 16px 44px -16px oklch(0 0 0 / 0.5);
+}
+html[data-overlay] .ovl-inputzone .glass-heavy:focus-within {
+  border-color: var(--ovl-accent-line);
+  box-shadow: inset 0 1px 0 var(--ovl-glass-inner-strong), 0 16px 44px -16px oklch(0 0 0 / 0.5), 0 0 0 3px var(--ovl-accent-soft);
+}
+
+/* Keycap hints — outside the card, visible only while composing */
+.ovl-hints {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  padding: 11px 16px 2px;
+  font-size: 11.5px;
+  color: var(--ovl-text-faint);
+  text-shadow: var(--ovl-text-glow);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.ovl-inputzone:focus-within + .ovl-hints { opacity: 1; }
+.ovl-hints span {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.ovl-hints b {
+  font-weight: 600;
+  color: var(--ovl-text-faint);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+}
+
+/* Frosted popovers — model picker / reasoning / palettes use bg-popover */
+html[data-overlay] .ovl-inputzone .bg-popover {
+  background: var(--ovl-pop-bg) !important;
+  backdrop-filter: blur(34px) saturate(190%);
+  -webkit-backdrop-filter: blur(34px) saturate(190%);
+  border-color: var(--glass-border-strong) !important;
+  box-shadow: 0 24px 60px -12px oklch(0 0 0 / 0.55), inset 0 1px 0 var(--ovl-glass-inner-glow);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-overlay] *,
+  html[data-overlay] *::before,
+  html[data-overlay] *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.06s !important;
+  }
+}

@@ -56,6 +56,10 @@ interface Props {
   onEditSubmit?: (newContent: string) => void
   /** Called when the user cancels the edit (X button or Escape). */
   onEditCancel?: () => void
+  /** Whether this bar consumes global `clavus-screenshot` events (default true).
+   *  The desktop overlay mounts two bars (home + chat panes) — only the
+   *  visible one should attach incoming screenshots. */
+  acceptScreenshots?: boolean
 }
 
 const MAX_IMAGES = 4
@@ -76,7 +80,7 @@ async function uploadFile(file: File, threadId?: string | null): Promise<{ path:
   }
 }
 
-export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onVoiceThreadNeeded, onRetry, talkMode, draftKey, editingMessage, onEditSubmit, onEditCancel }: Props) {
+export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingChange, isHome, onFocusInput, onClear, threadId, onVoiceThreadNeeded, onRetry, talkMode, draftKey, editingMessage, onEditSubmit, onEditCancel, acceptScreenshots = true }: Props) {
   // Initialize with the persisted draft for this column (or empty if none).
   const [value, setValue] = useState(() => (draftKey ? useDraftsStore.getState().getDraft(draftKey) : ''))
 
@@ -301,6 +305,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
 
   // Listen for screenshots from the Clavus desktop dictation overlay.
   useEffect(() => {
+    if (!acceptScreenshots) return
     const handler = (e: Event) => {
       const images = (e as CustomEvent).detail?.images as string[] | undefined
       if (!images || images.length === 0) return
@@ -311,7 +316,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     }
     window.addEventListener('clavus-screenshot', handler)
     return () => window.removeEventListener('clavus-screenshot', handler)
-  }, [])
+  }, [acceptScreenshots])
 
   // Toast (slash command feedback)
   const [toast, setToast] = useState<string | null>(null)
