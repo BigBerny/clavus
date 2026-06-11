@@ -9,6 +9,9 @@ type ChatViewPanelProps = {
   onStartEdit?: (threadId: string, messageId: string, content: string) => void
   editingMessageId?: string | null
   onBranch?: (threadId: string, messageId: string) => void
+  /** Whether this panel is the one the user is actually looking at — drives
+   *  the cross-device "seen" marker. Defaults to true. */
+  isActivePane?: boolean
 }
 
 // Stable empty-messages reference so the selector below does not return a
@@ -21,6 +24,7 @@ export function ChatViewPanel({
   onStartEdit,
   editingMessageId,
   onBranch,
+  isActivePane = true,
 }: ChatViewPanelProps) {
   const threads = useThreadsStore((s) => s.threads)
   const thread = threads.find(t => t.id === threadId)
@@ -33,6 +37,14 @@ export function ChatViewPanel({
     // on another device opens empty here until SSE eventually fires.
     refreshThreadMessages(threadId)
   }, [threadId])
+
+  // Mark the thread seen (synced across devices) while the user is actually
+  // looking at it — on open and as new messages land.
+  useEffect(() => {
+    if (!isActivePane) return
+    if (document.visibilityState !== 'visible') return
+    useThreadsStore.getState().markThreadSeen(threadId)
+  }, [threadId, isActivePane, messages.length])
 
   return (
     <ChatView

@@ -26,6 +26,9 @@ export interface Thread {
   reasoningLevel?: ReasoningLevel
   /** Whether this thread is pinned as a favorite (shown at top, never auto-archived). */
   favorite?: boolean
+  /** Last time the user actually looked at this thread (any device — synced).
+   *  updatedAt > lastSeenAt with an assistant last-message ⇒ unseen answer. */
+  lastSeenAt?: number
 }
 
 interface ThreadsState {
@@ -39,6 +42,7 @@ interface ThreadsState {
   updateThreadPreview: (id: string, preview: string, updatedAt?: number) => void
   archiveThread: (id: string) => void
   unarchiveThread: (id: string) => void
+  markThreadSeen: (id: string) => void
   updateThreadModel: (id: string, modelId: string) => void
   updateThreadReasoning: (id: string, level: ReasoningLevel | null) => void
   toggleFavorite: (id: string) => void
@@ -226,13 +230,17 @@ export async function syncFromServer(): Promise<boolean> {
     const localThreads = loadThreads()
     const serverThreads: Thread[] = data.threads || []
     
-    // Merge: for each thread, keep the one with newer updatedAt
+    // Merge: for each thread, keep the one with newer updatedAt. lastSeenAt
+    // merges as max independently — seen-markers don't bump updatedAt.
     const merged = new Map<string, Thread>()
     for (const t of localThreads) merged.set(t.id, t)
     for (const t of serverThreads) {
       const existing = merged.get(t.id)
       if (!existing || t.updatedAt > existing.updatedAt) {
-        merged.set(t.id, t)
+        const lastSeenAt = Math.max(existing?.lastSeenAt ?? 0, t.lastSeenAt ?? 0) || undefined
+        merged.set(t.id, { ...t, lastSeenAt })
+      } else if ((t.lastSeenAt ?? 0) > (existing.lastSeenAt ?? 0)) {
+        merged.set(t.id, { ...existing, lastSeenAt: t.lastSeenAt })
       }
     }
     
@@ -371,8 +379,14 @@ export function mergeThreadsFromServer(serverThreads: Thread[]): boolean {
         ...incoming,
         modelId: local.modelId ?? incoming.modelId,
         reasoningLevel: local.reasoningLevel ?? incoming.reasoningLevel,
+        lastSeenAt: Math.max(local.lastSeenAt ?? 0, incoming.lastSeenAt ?? 0) || undefined,
       }
       localById.set(incoming.id, merged)
+      changed = true
+    } else if ((incoming.lastSeenAt ?? 0) > (local.lastSeenAt ?? 0)) {
+      // Seen-markers don't bump updatedAt, so adopt them independently —
+      // an answer read on another device must clear "unseen" here.
+      localById.set(incoming.id, { ...local, lastSeenAt: incoming.lastSeenAt })
       changed = true
     }
   }
@@ -549,6 +563,23 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     set((state) => {
       const threads = state.threads.map((t) =>
         t.id === id ? { ...t, archived: false } : t,
+      )
+      saveThreads(threads)
+      return { threads }
+    })
+  },
+
+  // Deliberately does NOT bump updatedAt — seeing isn't activity.
+  markThreadSeen: (id) => {
+    const cur = get().threads
+    const target = cur.find((t) => t.id === id)
+    if (!target) return
+    const now = Date.now()
+    // Skip no-op writes (called on every message-count change while viewing).
+    if (target.lastSeenAt && now - target.lastSeenAt < 1000 && target.lastSeenAt >= target.updatedAt) return
+    set((state) => {
+      const threads = state.threads.map((t) =>
+        t.id === id ? { ...t, lastSeenAt: now } : t,
       )
       saveThreads(threads)
       return { threads }

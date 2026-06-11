@@ -25,6 +25,7 @@ import {
   StopMini,
 } from './InputBarControls'
 import { InputBarTalkMode, type InputBarTalkModeState } from './InputBarTalkMode'
+import { CaptureMenu } from './CaptureMenu'
 import { InputBarAttachments } from './InputBarAttachments'
 import { EditingMessageRow, QueuedMessageRow } from './InputBarStatusRows'
 import { FailedDictationPrompt, VoiceErrorRow } from './InputBarVoiceStatus'
@@ -906,6 +907,11 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
               >
                 <AtSignMini />
               </IconBtn>
+              {/* Screenshot capture (Clavus desktop only) */}
+              <CaptureMenu
+                disabled={pendingImages.length >= MAX_IMAGES}
+                onCaptured={(dataUrl) => setPendingImages((prev) => [...prev, dataUrl].slice(0, MAX_IMAGES))}
+              />
             </div>
 
             <div className="flex items-center gap-1 flex-none">

@@ -7,6 +7,7 @@ import { useChat } from '../../hooks/useChat'
 import { ChatViewPanel } from '../chat/ChatViewPanel'
 import { InputBar } from '../chat/InputBar'
 import { OverlayHome } from './OverlayHome'
+import { decideOpenTarget, recordLastChat, recordVisiblePanel, readVisiblePanel } from '../../lib/openTarget'
 
 /**
  * Desktop overlay mode (?overlay=1) — the frameless liquid-glass surface
@@ -17,26 +18,6 @@ import { OverlayHome } from './OverlayHome'
  *   clavus:overlay-close-request → `<` pressed again, animate out then hide
  * and we dispatch `clavus:overlay-hide` once the close animation finished.
  */
-
-const RESUME_KEY = 'clavus-overlay-last-chat'
-const RESUME_MS = 15 * 60 * 1000
-
-function loadResumeThreadId(): string | null {
-  try {
-    const raw = localStorage.getItem(RESUME_KEY)
-    if (!raw) return null
-    const d = JSON.parse(raw) as { threadId?: string; ts?: number }
-    if (d.threadId && typeof d.ts === 'number' && Date.now() - d.ts < RESUME_MS) return d.threadId
-  } catch { /* ignore */ }
-  return null
-}
-
-function saveResume(threadId: string | null) {
-  try {
-    if (threadId) localStorage.setItem(RESUME_KEY, JSON.stringify({ threadId, ts: Date.now() }))
-    else localStorage.removeItem(RESUME_KEY)
-  } catch { /* ignore */ }
-}
 
 /** Fire on the next paint, with a timer fallback for backgrounded webviews
  *  (rAF is paused while the window is hidden). */
@@ -146,17 +127,26 @@ export function OverlayApp() {
     pane?.querySelector<HTMLTextAreaElement>('.ovl-inputzone textarea')?.focus()
   }, [])
 
-  /* ----- open: refresh data, resume the last chat if it's fresh ----- */
-  const openOverlay = useCallback(() => {
+  /* ----- open: refresh data, then land on the shared open-target —
+     the window's current conversation (sync), an unseen answer, the
+     15-minute resume, or home ----- */
+  const openOverlay = useCallback((detail?: { mainVisible?: boolean }) => {
     closingRef.current = false
     archiveStaleThreads()
     void refreshThreadsMetadata()
 
-    const resumeId = loadResumeThreadId()
-    const exists = resumeId && useThreadsStore.getState().threads.some((t) => t.id === resumeId)
-    if (resumeId && exists) {
-      useThreadsStore.getState().switchThread(resumeId)
-      setThreadId(resumeId)
+    // Sync with the main window: if it's open and showing a conversation,
+    // the overlay opens on that conversation.
+    let windowThread: string | null = null
+    if (detail?.mainVisible) {
+      const vp = readVisiblePanel()
+      if (vp && vp.by === 'window' && vp.panel.startsWith('thread-')) windowThread = vp.panel
+    }
+
+    const target = decideOpenTarget({ preferThreadId: windowThread })
+    if (target !== 'home') {
+      useThreadsStore.getState().switchThread(target)
+      setThreadId(target)
       setHasChat(true)
       setEntering(false)
       setChatOpen(true)
@@ -170,7 +160,7 @@ export function OverlayApp() {
     // leaving is-open stale — drop it so the entrance transition replays.
     setOpen(false)
     nextTick(() => setOpen(true))
-    setTimeout(() => focusInput(resumeId && exists ? 'chat' : 'home'), 480)
+    setTimeout(() => focusInput(target !== 'home' ? 'chat' : 'home'), 480)
   }, [focusInput])
 
   /* ----- close: fade everything (frost included — it's all web content
@@ -189,7 +179,8 @@ export function OverlayApp() {
   const pushChat = useCallback((id: string) => {
     useThreadsStore.getState().switchThread(id)
     setThreadId(id)
-    saveResume(id)
+    recordLastChat(id)
+    recordVisiblePanel(id, 'overlay')
     setHasChat(true)
     setEntering(true)
     nextTick(() => {
@@ -203,7 +194,8 @@ export function OverlayApp() {
     setChatOpen(false)
     // Going back home is a deliberate exit — don't bounce back into the
     // chat on the next summon.
-    saveResume(null)
+    recordLastChat(null)
+    recordVisiblePanel('home', 'overlay')
     setTimeout(() => focusInput('home'), 480)
   }, [focusInput])
 
@@ -211,7 +203,7 @@ export function OverlayApp() {
 
   /* ----- native lifecycle events ----- */
   useEffect(() => {
-    const onOpen = () => openOverlay()
+    const onOpen = (e: Event) => openOverlay((e as CustomEvent).detail)
     const onCloseRequest = () => requestClose()
     const onBackdrop = (e: Event) => {
       const url = (e as CustomEvent).detail?.dataUrl
@@ -247,7 +239,7 @@ export function OverlayApp() {
   /* ----- sends ----- */
   const sendInChat = useCallback((text: string, images?: string[], files?: PendingFile[]) => {
     if (!threadId) return
-    saveResume(threadId)
+    recordLastChat(threadId)
     void send(threadId, text, images, files)
   }, [send, threadId])
 
@@ -324,7 +316,7 @@ export function OverlayApp() {
                 centered, hugging the conversation column. Same as window mode. */}
             <button className="ovl-gcircle ovl-back" onClick={popChat} title="Back to home (Esc)"><ArrowLeft /></button>
             <div className="ovl-chatwrap">
-              <ChatViewPanel threadId={threadId} />
+              <ChatViewPanel threadId={threadId} isActivePane={open && chatOpen} />
             </div>
             <div className="ovl-inputzone">
               <InputBar

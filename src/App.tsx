@@ -35,6 +35,7 @@ import {
 } from './components/AppLazyPanels.ts'
 import { ChatViewPanel } from './components/chat/ChatViewPanel.tsx'
 import { waitForScrollSettle } from './lib/scrollSettle.ts'
+import { decideOpenTarget, recordLastChat, recordVisiblePanel, readVisiblePanel } from './lib/openTarget.ts'
 
 export function App() {
   useVisualViewport()
@@ -76,6 +77,11 @@ export function App() {
       useModelStore.getState().setSelectedModelId('auto')
       useChatSettingsStore.getState().setGlobalReasoning(null)
     }
+
+    // Cross-surface sync: the assistant overlay opens on the conversation
+    // the window currently shows (and the 15-min resume rule feeds off it).
+    recordVisiblePanel(next, 'window')
+    if (next !== 'home' && next.startsWith('thread-')) recordLastChat(next)
 
     // Reflect the visible panel in the URL hash so it can be deep-linked.
     const tabs = useTabsStore.getState().tabs
@@ -480,6 +486,20 @@ export function App() {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         checkPendingNavigation()
+        // Follow the assistant overlay's navigation: if the user opened a
+        // conversation there, the window shows it when it comes back.
+        const vp = readVisiblePanel()
+        if (vp && vp.by === 'overlay' && vp.panel.startsWith('thread-') && vp.panel !== visiblePanelRef.current) {
+          const t = useThreadsStore.getState().threads.find((th) => th.id === vp.panel)
+          if (t) {
+            if (t.archived) useThreadsStore.getState().unarchiveThread(t.id)
+            const tabId = applyRoute({ kind: 'chat', threadId: vp.panel })
+            if (tabId) {
+              setVisiblePanel(tabId)
+              if (pagerMode) requestAnimationFrame(() => scrollToTabRef.current(tabId))
+            }
+          }
+        }
         // Re-run idle auto-archive in case the tab was left open across the cutoff
         archiveStaleThreads()
         // Recover interrupted responses when app becomes visible
@@ -556,7 +576,18 @@ export function App() {
     const routeTabId = initialRoute && initialRoute.kind !== 'home' && initialRoute.kind !== 'transcripts'
       ? applyRoute(initialRoute)
       : null
-    const targetPanelId = routeTabId ?? 'home'
+    // No deep link → shared open-target rule: home, unless there's an
+    // unseen assistant answer or a conversation from the last 15 minutes.
+    let decidedTabId: string | null = null
+    if (!routeTabId) {
+      const decided = decideOpenTarget()
+      if (decided !== 'home') {
+        const t = useThreadsStore.getState().threads.find((th) => th.id === decided)
+        if (t?.archived) useThreadsStore.getState().unarchiveThread(decided)
+        decidedTabId = applyRoute({ kind: 'chat', threadId: decided })
+      }
+    }
+    const targetPanelId = routeTabId ?? decidedTabId ?? 'home'
     // A deep-linked tab must be mounted as the pager's right pane before we
     // can scroll to it.
     if (targetPanelId !== 'home') setVisiblePanel(targetPanelId)
@@ -1465,6 +1496,7 @@ export function App() {
                           onStartEdit={handleStartEditMessage}
                           editingMessageId={editingMessage?.threadId === (paneTab as ChatTab).threadId ? editingMessage.messageId : null}
                           onBranch={handleBranch}
+                          isActivePane={isActive}
                         />
                       )}
                       {paneTab.type === 'marksense' && (
