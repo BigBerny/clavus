@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { useChatStore, type Message, type PendingFile } from '../state/chat.ts'
+import { useChatStore, refreshThreadMessages, type Message, type PendingFile } from '../state/chat.ts'
 import { recoverResponse, resumeChatStream } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
+import { markStreamActivity, recentStreamActivity } from '../lib/streamActivity.ts'
 
 type RecoveryResult = 'recovered' | 'no-buffer' | 'skipped'
 
@@ -26,6 +27,9 @@ let autoRetryHandler: AutoRetryCallback | null = null
 function needsRecovery(threadId: string): boolean {
   const ts = useChatStore.getState().getThreadState(threadId)
   if (ts.isStreaming) return false // active stream, don't interfere
+  // The OTHER surface (window vs overlay) is streaming or just streamed this
+  // thread — our local list is simply behind, not abandoned.
+  if (recentStreamActivity(threadId, 12_000)) return false
   if (ts.messages.length === 0) return false
 
   const last = ts.messages[ts.messages.length - 1]
@@ -114,10 +118,18 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   // event. Until then, the buffer endpoint may still 404 (no buffer for this
   // thread) — in which case we never create a bubble.
   let resumeReceivedEvent = false
+  let lastActivityMark = 0
+  const markThrottled = () => {
+    const now = Date.now()
+    if (now - lastActivityMark > 2000) {
+      lastActivityMark = now
+      markStreamActivity(threadId)
+    }
+  }
   const resumeCallbacks = {
-    onThinking: (token: string) => useChatStore.getState().appendThinking(threadId, ensureSlot(), token),
+    onThinking: (token: string) => { markThrottled(); useChatStore.getState().appendThinking(threadId, ensureSlot(), token) },
     onThinkingDone: () => useChatStore.getState().setThinkingDone(threadId, ensureSlot()),
-    onToken: (token: string) => useChatStore.getState().appendToMessage(threadId, ensureSlot(), token),
+    onToken: (token: string) => { markThrottled(); useChatStore.getState().appendToMessage(threadId, ensureSlot(), token) },
     onToolCall: (tc: import('../gateway/chat.ts').ToolCallEvent) => {
       const id = ensureSlot()
       const cur = useChatStore.getState().getThreadState(threadId).messages.find(m => m.id === id)
@@ -246,6 +258,10 @@ function maybeAutoRetry(threadId: string, result: RecoveryResult) {
   if (result !== 'no-buffer') return
   if (!autoRetryHandler) return
   if (autoRetriedThreads.has(threadId)) return
+  // Any surface streamed this thread within the last two minutes — the
+  // answer exists (or is on its way) even if our list hasn't synced yet.
+  // Ghost-resending here is how duplicate answers were born.
+  if (recentStreamActivity(threadId, 120_000)) return
   const pending = pendingUserMessage(threadId)
   if (!pending) return
   autoRetriedThreads.add(threadId)
@@ -266,12 +282,20 @@ export function checkAllThreadsRecovery() {
   const processNext = () => {
     if (i >= candidates.length) return
     const thread = candidates[i++]
-    console.log('[Recovery] Thread needs recovery:', thread.id)
-    attemptRecovery(thread.id).then((result) => {
-      maybeAutoRetry(thread.id, result)
-    }).finally(() => {
-      // Stagger recovery attempts to avoid main-thread congestion
-      setTimeout(processNext, 300)
+    // Pull the latest messages first — the "missing" answer may simply have
+    // been produced by the other surface / another device and not synced yet.
+    refreshThreadMessages(thread.id).catch(() => false).then(() => {
+      if (!needsRecovery(thread.id)) {
+        setTimeout(processNext, 150)
+        return
+      }
+      console.log('[Recovery] Thread needs recovery:', thread.id)
+      attemptRecovery(thread.id).then((result) => {
+        maybeAutoRetry(thread.id, result)
+      }).finally(() => {
+        // Stagger recovery attempts to avoid main-thread congestion
+        setTimeout(processNext, 300)
+      })
     })
   }
   processNext()
@@ -293,12 +317,17 @@ export function useResponseRecovery(options: { onAutoRetry?: AutoRetryCallback }
     if (!threadId) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      if (needsRecovery(threadId)) {
-        console.log('[Recovery] Thread needs recovery:', threadId)
-        attemptRecovery(threadId).then((result) => {
-          maybeAutoRetry(threadId, result)
-        })
-      }
+      if (!needsRecovery(threadId)) return
+      // Sync first — the answer may exist on the server already (streamed by
+      // the other surface or another device) and just not be in OUR list.
+      refreshThreadMessages(threadId).catch(() => false).then(() => {
+        if (needsRecovery(threadId)) {
+          console.log('[Recovery] Thread needs recovery:', threadId)
+          attemptRecovery(threadId).then((result) => {
+            maybeAutoRetry(threadId, result)
+          })
+        }
+      })
     }, 500)
   }, [])
 

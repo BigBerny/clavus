@@ -12,6 +12,7 @@ import { resolveChatRoutingSelection } from '../lib/chatRouting.ts'
 import type { ChatCompletionMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
+import { markStreamActivity } from '../lib/streamActivity.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
@@ -222,10 +223,22 @@ export function useChat() {
       }
     }
 
+    // Tell the other surface (window vs overlay share localStorage) that this
+    // thread is actively streaming HERE, so its recovery sweep stands down.
+    markStreamActivity(threadId)
+    let lastActivityMark = Date.now()
+    const markThrottled = () => {
+      const now = Date.now()
+      if (now - lastActivityMark > 2000) {
+        lastActivityMark = now
+        markStreamActivity(threadId)
+      }
+    }
+
     const streamCallbacks = {
-      onThinking: (token: string) => store.getState().appendThinking(threadId, assistantId, token),
+      onThinking: (token: string) => { markThrottled(); store.getState().appendThinking(threadId, assistantId, token) },
       onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
-      onToken: (token: string) => store.getState().appendToMessage(threadId, assistantId, token),
+      onToken: (token: string) => { markThrottled(); store.getState().appendToMessage(threadId, assistantId, token) },
       onToolCall: handleToolCall,
       onResponseId: (responseId: string) => {
         store.getState().setBackendResponseId(threadId, assistantId, responseId)
@@ -246,6 +259,7 @@ export function useChat() {
         }
       },
       onDone: () => {
+        markStreamActivity(threadId)
         store.getState().finalizeMessage(threadId, assistantId)
         // Fallback: set model from selection if onUsage didn't fire
         const msg = store.getState().getThreadState(threadId).messages.find(m => m.id === assistantId)

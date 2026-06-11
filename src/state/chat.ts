@@ -580,9 +580,20 @@ export function mergeMessagesFromServer(threadId: string, serverMessages: Messag
   })
 
   // Preserve any local-only messages (e.g. just-sent that haven't reached the
-  // server yet) by appending them at the end.
+  // server yet) by appending them at the end — EXCEPT when the same backend
+  // response already arrived from the server under a different message id
+  // (a recovery replay racing the other surface's stream). Appending that
+  // copy is how answers showed up twice.
+  const serverResponseIds = new Set(
+    normalizedServerMessages
+      .map((m) => m.backendResponseId ?? m.hermesResponseId)
+      .filter((rid): rid is string => !!rid),
+  )
   for (const local of ts.messages) {
-    if (!serverIds.has(local.id)) merged.push(local)
+    if (serverIds.has(local.id)) continue
+    const rid = local.backendResponseId ?? local.hermesResponseId
+    if (rid && serverResponseIds.has(rid)) continue
+    merged.push(local)
   }
 
   try {
