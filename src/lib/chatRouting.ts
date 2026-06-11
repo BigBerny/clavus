@@ -26,9 +26,11 @@ export function resolveChatRoutingSelection({
     ?? MODEL_OPTIONS.find((m) => m.id === DEFAULT_MODEL_ID)
     ?? MODEL_OPTIONS[0]
 
-  const reasoningEffort = autoClassification?.reasoning
-    ?? manualReasoning
-    ?? (requestedModelId === 'auto' ? 'medium' : undefined)
+  const reasoningEffort = modelOption.supportsReasoning
+    ? autoClassification?.reasoning
+      ?? manualReasoning
+      ?? (requestedModelId === 'auto' ? 'medium' : undefined)
+    : undefined
 
   return {
     modelOption,
