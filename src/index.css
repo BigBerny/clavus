@@ -942,6 +942,18 @@ html:not(.dark) .home-screen {
   }
 }
 
+/* Home content column top spacing — mobile hugs the safe area; on desktop
+   the column drops ~10% down the screen so the hero doesn't kiss the top
+   edge of the full-bleed overlay (the home felt top-heavy without it). */
+.home-content {
+  padding-top: max(env(safe-area-inset-top, 0px), 2rem);
+}
+@media (min-width: 768px) {
+  .home-content {
+    padding-top: 10vh;
+  }
+}
+
 /* Grouped card container (iOS Settings style) */
 .home-group {
   background: var(--glass-bg);

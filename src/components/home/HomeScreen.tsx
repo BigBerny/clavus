@@ -244,7 +244,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
 
   return (
     <div className="home-screen flex-1 overflow-y-auto overscroll-y-contain min-h-0 scrollbar-fine" style={{ WebkitOverflowScrolling: 'touch' }}>
-      <div className="max-w-[720px] mx-auto px-6 pt-8 relative" style={{ paddingTop: 'max(env(safe-area-inset-top, 0px), 2rem)', paddingBottom: 'calc(var(--input-bar-h, 72px) + 0.5rem)' }}>
+      <div className="home-content max-w-[720px] mx-auto px-6 relative" style={{ paddingBottom: 'calc(var(--input-bar-h, 72px) + 0.5rem)' }}>
 
         {/* Theme toggle */}
         <button
