@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Bell, ChevronRight } from 'lucide-react'
+import { Bell, ChevronRight, Star } from 'lucide-react'
 import { useThreadsStore } from '../../state/threads'
 import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab, type MarksenseTab } from '../../state/tabs'
 import { ThreadSearch } from './ThreadSearch.tsx'
@@ -128,6 +128,12 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
 }) {
   const tabs = useTabsStore((s) => s.tabs)
   const threads = useThreadsStore((s) => s.threads)
+  const toggleFavorite = useThreadsStore((s) => s.toggleFavorite)
+
+  const favoriteThreads = useMemo(
+    () => threads.filter((t) => t.favorite).sort((a, b) => b.updatedAt - a.updatedAt),
+    [threads],
+  )
   const resolvedTheme = useUIStore((s) => s.resolvedTheme)
   const setThemeChoice = useUIStore((s) => s.setThemeChoice)
 
@@ -253,6 +259,48 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
           </div>
         </section>
 
+        {/* Favorites — pinned conversations, never auto-archived */}
+        {favoriteThreads.length > 0 && (
+          <section className="mb-6">
+            <h2 className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground mb-2.5">
+              Favorites
+            </h2>
+            <div className="home-group">
+              {favoriteThreads.map((thread, i) => {
+                const preview = thread.lastMessagePreview ? stripMarkdown(thread.lastMessagePreview) : ''
+                return (
+                  <div key={thread.id} className="relative">
+                    <button
+                      onClick={() => handleSelectThread(thread.id)}
+                      className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
+                      style={{ paddingRight: '2.75rem' }}
+                    >
+                      <Star size={11} className="shrink-0 text-amber-500" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13.5px] font-medium truncate text-foreground">{thread.title || 'Untitled'}</div>
+                        {preview && (
+                          <div className="text-[12px] text-muted-foreground truncate mt-0.5 leading-snug">{preview}</div>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
+                        {relativeTime(thread.updatedAt)}
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => toggleFavorite(thread.id)}
+                      className="inline-btn absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-amber-500 hover:bg-foreground/[0.06] transition-colors"
+                      title="Remove from favorites"
+                      aria-label="Remove from favorites"
+                    >
+                      <Star size={13} fill="currentColor" strokeWidth={0} aria-hidden="true" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Pick up where you left off */}
         {(recentTabs.length > 0 || allConversationCount > 0) && (
           <section className="mb-6">
@@ -279,7 +327,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                       : ''
                     const linkedDocs = thread?.linkedDocs
                     return (
-                      <div key={tab.id}>
+                      <div key={tab.id} className="relative group/row">
                         <button
                           onClick={() => {
                             // For chat tabs, route via handleSelectThread so a
@@ -288,6 +336,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                             else onSelectTab?.(tab.id)
                           }}
                           className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
+                          style={tab.type === 'chat' ? { paddingRight: '2.75rem' } : undefined}
                         >
                           <span
                             className="w-[5px] h-[5px] rounded-full shrink-0"
@@ -303,6 +352,21 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                             {relativeTime(tab.updatedAt)}
                           </div>
                         </button>
+                        {/* Favorite toggle — chat rows only, shown on hover */}
+                        {tab.type === 'chat' && (
+                          <button
+                            onClick={() => toggleFavorite((tab as ChatTab).threadId)}
+                            className={`inline-btn absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+                              thread?.favorite
+                                ? 'text-amber-500 opacity-100'
+                                : 'text-muted-foreground/60 hover:text-amber-500 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100'
+                            } hover:bg-foreground/[0.06]`}
+                            title={thread?.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                            aria-label={thread?.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                          >
+                            <Star size={13} fill={thread?.favorite ? 'currentColor' : 'none'} strokeWidth={1.8} aria-hidden="true" />
+                          </button>
+                        )}
                         {/* LinkedDocs sub-entries beneath their parent conversation */}
                         {linkedDocs && linkedDocs.length > 0 && (
                           <div className="ml-[24px] mr-3 pl-[7px] -mt-2 mb-1 space-y-px">

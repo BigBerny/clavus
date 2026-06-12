@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Star } from 'lucide-react'
 import { useThreadsStore, type Thread } from '../../state/threads'
 import { greeting, formatDateLabel, relativeTime, stripMarkdown } from '../../lib/homeText'
 
@@ -42,28 +42,53 @@ interface Props {
 
 export function OverlayHome({ onOpenThread, onCompose }: Props) {
   const threads = useThreadsStore((s) => s.threads)
+  const toggleFavorite = useThreadsStore((s) => s.toggleFavorite)
   const [showArchived, setShowArchived] = useState(false)
 
+  const favorites = useMemo(
+    () => threads.filter((t) => t.favorite).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6),
+    [threads],
+  )
   const recent = useMemo(
-    () => threads.filter((t) => !t.archived).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4),
+    () => threads
+      .filter((t) => !t.archived && !t.favorite)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 4),
     [threads],
   )
   const archived = useMemo(
-    () => threads.filter((t) => t.archived).sort((a, b) => b.updatedAt - a.updatedAt),
+    () => threads.filter((t) => t.archived && !t.favorite).sort((a, b) => b.updatedAt - a.updatedAt),
     [threads],
   )
 
   const now = new Date()
 
   const renderThread = (t: Thread) => (
-    <button key={t.id} className="ovl-thread" onClick={() => onOpenThread(t)}>
-      <span className="ovl-thread__dot" style={{ background: dotVar(t.id) }} />
-      <span className="ovl-thread__main">
-        <span className="ovl-thread__title">{t.title}</span>
-        <span className="ovl-thread__preview">{stripMarkdown(t.lastMessagePreview) || '—'}</span>
-      </span>
-      <span className="ovl-thread__time">{relativeTime(t.updatedAt)}</span>
-    </button>
+    <div key={t.id} className="ovl-thread-wrap">
+      <button className="ovl-thread" onClick={() => onOpenThread(t)}>
+        {t.favorite ? (
+          <Star size={11} className="ovl-thread__favdot" fill="currentColor" strokeWidth={0} aria-hidden="true" />
+        ) : (
+          <span className="ovl-thread__dot" style={{ background: dotVar(t.id) }} />
+        )}
+        <span className="ovl-thread__main">
+          <span className="ovl-thread__title">{t.title}</span>
+          <span className="ovl-thread__preview">{stripMarkdown(t.lastMessagePreview) || '—'}</span>
+        </span>
+        <span className="ovl-thread__time">{relativeTime(t.updatedAt)}</span>
+      </button>
+      <button
+        className={'ovl-fav-btn' + (t.favorite ? ' is-fav' : '')}
+        onClick={(e) => {
+          e.stopPropagation()
+          toggleFavorite(t.id)
+        }}
+        title={t.favorite ? 'Remove from favorites' : 'Add to favorites'}
+        aria-label={t.favorite ? 'Remove from favorites' : 'Add to favorites'}
+      >
+        <Star size={13} fill={t.favorite ? 'currentColor' : 'none'} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+    </div>
   )
 
   return (
@@ -81,6 +106,7 @@ export function OverlayHome({ onOpenThread, onCompose }: Props) {
       </div>
       <div>
         <div className="ovl-threads">
+          {favorites.map(renderThread)}
           {recent.map(renderThread)}
           {showArchived && archived.map(renderThread)}
         </div>

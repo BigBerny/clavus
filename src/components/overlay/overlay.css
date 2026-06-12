@@ -316,6 +316,41 @@ html[data-overlay]:not(.dark) .ovl-backdrop {
 .ovl-compose-card.c-mail svg { color: var(--ovl-accent); }
 
 .ovl-threads { display: flex; flex-direction: column; margin-top: 22px; }
+
+/* Row wrapper — hosts the hover star OUTSIDE the row button (buttons can't
+   nest). Rows reserve right padding so the star never collides with the
+   timestamp. */
+.ovl-thread-wrap { position: relative; }
+.ovl-thread-wrap .ovl-thread { padding-right: 44px; }
+.ovl-fav-btn {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ovl-text-dim);
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.14s ease, color 0.14s ease, background 0.14s ease;
+}
+.ovl-thread-wrap:hover .ovl-fav-btn { opacity: 1; }
+.ovl-fav-btn:hover { color: var(--ovl-text); background: var(--glass-bg); }
+.ovl-fav-btn.is-fav { opacity: 1; color: var(--ovl-accent); }
+
+/* Favorited rows lead with a small filled star instead of the colored dot */
+.ovl-thread__favdot {
+  color: var(--ovl-accent);
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
 .ovl-thread {
   display: flex;
   align-items: flex-start;
