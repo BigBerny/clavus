@@ -107,6 +107,12 @@ function cleanupHardware() {
   useRecordingStore.setState({ duration: 0, warning: false, levels: [] })
 }
 
+// Rolling volume history shown by the recording waveforms (InputBar,
+// ComposeFlow, FloatingRecordingPill): one bucket per ~90 ms, newest at the
+// end — the same volume-over-time look as the desktop dictation pill.
+const LEVEL_HISTORY = 24
+const LEVEL_INTERVAL_MS = 90
+
 function startAnalyser(s: MediaStream) {
   const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
   if (!AudioCtx) return
@@ -117,18 +123,60 @@ function startAnalyser(s: MediaStream) {
 
   const source = ctx.createMediaStreamSource(s)
   const an = ctx.createAnalyser()
-  an.fftSize = 64
+  an.fftSize = 2048
   source.connect(an)
+  // Pull the graph from the destination through a muted gain — WebKit can
+  // leave an analyser-only branch silent (all-zero buffers), which made the
+  // bars sit flat in Safari and the Tauri shell.
+  const mute = ctx.createGain()
+  mute.gain.value = 0
+  an.connect(mute)
+  mute.connect(ctx.destination)
   analyser = an
 
-  const dataArray = new Uint8Array(an.frequencyBinCount)
+  // Loudness over time, not frequency bins: sampling the spectrum left the
+  // bars flat because speech energy lives below ~4 kHz while the bins spread
+  // to 24 kHz. RMS in decibels tracks what the ear hears at any mic gain.
+  const data = new Float32Array(an.fftSize)
+  const byteData = new Uint8Array(an.fftSize)
+  const useFloat = typeof an.getFloatTimeDomainData === 'function'
+  let history: number[] = new Array(LEVEL_HISTORY).fill(0)
+  let meanSqAccum = 0
+  let frameCount = 0
+  let lastPush = performance.now()
+
   const update = () => {
     if (!analyser) return
-    analyser.getByteFrequencyData(dataArray)
-    const bars: number[] = []
-    const step = Math.max(1, Math.floor(dataArray.length / 8))
-    for (let i = 0; i < 8; i++) bars.push(dataArray[i * step] / 255)
-    useRecordingStore.setState({ levels: bars })
+    let sumSq = 0
+    if (useFloat) {
+      analyser.getFloatTimeDomainData(data)
+      for (let i = 0; i < data.length; i++) sumSq += data[i] * data[i]
+    } else {
+      analyser.getByteTimeDomainData(byteData)
+      for (let i = 0; i < byteData.length; i++) {
+        const v = (byteData[i] - 128) / 128
+        sumSq += v * v
+      }
+    }
+    meanSqAccum += sumSq / an.fftSize
+    frameCount++
+
+    const now = performance.now()
+    if (now - lastPush >= LEVEL_INTERVAL_MS && frameCount > 0) {
+      const rms = Math.sqrt(meanSqAccum / frameCount)
+      meanSqAccum = 0
+      frameCount = 0
+      lastPush = now
+      // −50 dB (silence floor) … −10 dB (loud speech) → 0…1, matching the
+      // desktop dictation pill's meter.
+      let norm = 0
+      if (rms > 0.0001) {
+        const db = 20 * Math.log10(rms)
+        norm = Math.min(Math.max((db + 50) / 40, 0), 1)
+      }
+      history = [...history.slice(1), norm]
+      useRecordingStore.setState({ levels: history })
+    }
     animFrameId = requestAnimationFrame(update)
   }
   update()
