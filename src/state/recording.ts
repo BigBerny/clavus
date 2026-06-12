@@ -83,6 +83,10 @@ let wakeLock: WakeLockSentinel | null = null
 let errorTimerId: ReturnType<typeof setTimeout> | null = null
 let insertMode = false
 let lastFailedBlob: Blob | null = null
+// Duration of the most recent recording — the failed-dictation retry prompt
+// only appears when the audio plausibly contains something worth retrying.
+let lastRecordingMs = 0
+const RETAIN_FAILED_MIN_MS = 3000
 let handlers: TranscriptionHandlers | null = null
 
 function setErrorWithAutoDismiss(msg: string) {
@@ -177,9 +181,11 @@ async function transcribe(blob: Blob) {
     const rawText: string | undefined = data.text?.trim()
     const text = rawText ? cleanTranscription(rawText) : ''
     if (!text) {
-      lastFailedBlob = blob
-      useRecordingStore.setState({ hasFailedAudio: true })
-      setErrorWithAutoDismiss('Transcription returned empty. Tap to retry.')
+      // Nothing in the audio — a retry would return empty again, so don't
+      // keep the blob or surface the failed-dictation prompt.
+      lastFailedBlob = null
+      useRecordingStore.setState({ hasFailedAudio: false })
+      setErrorWithAutoDismiss('No speech detected')
       return
     }
     if (text) {
@@ -201,8 +207,15 @@ async function transcribe(blob: Blob) {
       useRecordingStore.setState({ hasFailedAudio: false })
     }
   } catch (err) {
-    lastFailedBlob = blob
-    useRecordingStore.setState({ hasFailedAudio: true })
+    // Only offer retry/recovery when the recording is long enough to
+    // plausibly contain real content — a 2s blip isn't worth the prompt.
+    if (lastRecordingMs >= RETAIN_FAILED_MIN_MS) {
+      lastFailedBlob = blob
+      useRecordingStore.setState({ hasFailedAudio: true })
+    } else {
+      lastFailedBlob = null
+      useRecordingStore.setState({ hasFailedAudio: false })
+    }
     setErrorWithAutoDismiss(err instanceof Error ? err.message : 'Transcription failed')
   } finally {
     useRecordingStore.setState({ state: 'idle' })
@@ -283,6 +296,7 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
           return
         }
         if (blob.size > 0) {
+          lastRecordingMs = elapsed
           void transcribe(blob)
         } else {
           set({ state: 'idle' })
