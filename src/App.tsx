@@ -454,6 +454,9 @@ export function App() {
         setVisiblePanel('home')
         if (pagerMode) requestAnimationFrame(() => scrollToTabRef.current('home'))
       } else {
+        // Restore the thread's model/reasoning pills on every navigation
+        // path — the grid-mode/deep-link path otherwise skips switchThread.
+        if (route.kind === 'chat') useThreadsStore.getState().switchThread(route.threadId)
         setVisiblePanel(tabId)
         if (pagerMode) {
           // External/PWA deep links can arrive while the app is already open.
@@ -585,6 +588,8 @@ export function App() {
         const t = useThreadsStore.getState().threads.find((th) => th.id === decided)
         if (t?.archived) useThreadsStore.getState().unarchiveThread(decided)
         decidedTabId = applyRoute({ kind: 'chat', threadId: decided })
+        // Restore the launch target's model/reasoning pills.
+        useThreadsStore.getState().switchThread(decided)
       }
     }
     const targetPanelId = routeTabId ?? decidedTabId ?? 'home'

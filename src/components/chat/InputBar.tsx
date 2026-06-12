@@ -4,6 +4,7 @@ import { haptic } from '../../lib/native'
 import { useModelStore } from '../../state/preset'
 import { useChatSettingsStore } from '../../state/chatSettings'
 import { useChatStore, type PendingFile } from '../../state/chat'
+import { useAutoClassifyStore } from '../../state/autoClassify'
 import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspaceApi'
 import { useThreadsStore } from '../../state/threads'
 import { useDraftsStore } from '../../state/drafts'
@@ -359,7 +360,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       threadId: threadId ?? null,
       setReasoningOverride: (tid, level) => { useChatSettingsStore.getState().setReasoningOverride(tid, level); useThreadsStore.getState().updateThreadReasoning(tid, level) },
       getReasoningOverride: (tid) => useChatSettingsStore.getState().getReasoningOverride(tid),
-      setModelId: (id) => { useModelStore.getState().setSelectedModelId(id); if (threadId) useThreadsStore.getState().updateThreadModel(threadId, id) },
+      setModelId: (id) => { useModelStore.getState().setSelectedModelId(id); if (threadId) { useThreadsStore.getState().updateThreadModel(threadId, id); useAutoClassifyStore.getState().clearClassification(threadId) } },
       getModelId: () => useModelStore.getState().selectedModelId,
       setGlobalReasoning: (level) => useChatSettingsStore.getState().setGlobalReasoning(level),
       clearChat: () => onClear?.(),
@@ -663,7 +664,13 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
   const { selectedModelId, setSelectedModelId: setGlobalModelId } = useModelStore()
   const setSelectedModelId = useCallback((id: string) => {
     setGlobalModelId(id)
-    if (threadId) useThreadsStore.getState().updateThreadModel(threadId, id)
+    if (threadId) {
+      useThreadsStore.getState().updateThreadModel(threadId, id)
+      // A manual pick (including back to Auto) overrides the auto-routing
+      // decision — routing and the pill both prefer the classification, so
+      // a stale one would silently ignore the user's choice.
+      useAutoClassifyStore.getState().clearClassification(threadId)
+    }
   }, [setGlobalModelId, threadId])
 
   // Queued message for this thread (set when the user submits while streaming).

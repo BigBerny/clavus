@@ -127,14 +127,18 @@ export function ModelPill({ modelId, onChange, threadId }: { modelId: string; on
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const isAuto = modelId === 'auto' || autoEnabled
+  // "Auto · X" only when an actual auto-routing decision exists for this
+  // thread. A concrete selection (pinned or manual) shows as itself — the
+  // global Auto toggle alone must not mask it behind a bare "Auto".
+  const autoRouted = !!classification && (autoEnabled || modelId === 'auto')
+  const isAuto = autoRouted || modelId === 'auto'
   const current = MODEL_OPTIONS.find((m) => m.id === modelId) || MODEL_OPTIONS[0]
 
   let pillLabel: string
-  if (isAuto && classification) {
-    const classifiedModel = MODEL_OPTIONS.find((m) => m.id === classification.modelId)
-    pillLabel = `Auto · ${classifiedModel?.shortLabel ?? classification.modelId}`
-  } else if (isAuto) {
+  if (autoRouted) {
+    const classifiedModel = MODEL_OPTIONS.find((m) => m.id === classification!.modelId)
+    pillLabel = `Auto · ${classifiedModel?.shortLabel ?? classification!.modelId}`
+  } else if (modelId === 'auto') {
     pillLabel = 'Auto'
   } else {
     pillLabel = current.shortLabel

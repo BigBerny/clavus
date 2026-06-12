@@ -4,6 +4,7 @@ import { useTabsStore } from './tabs'
 import { useModelStore } from './preset'
 import { useChatSettingsStore, type ReasoningLevel } from './chatSettings'
 import { normalizeToolCalls } from '../lib/toolCalls'
+import { MODEL_OPTIONS } from '../gateway/presets'
 
 export interface LinkedDoc {
   path: string
@@ -74,6 +75,37 @@ export function getClientId(): string {
 
 function generateThreadId(): string {
   return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** Map a message's model marker (shortLabel like "Opus", or a raw API id
+ *  like "anthropic/claude-opus-4-8") back to a MODEL_OPTIONS id. */
+function matchModelOption(label: string): string | null {
+  const norm = label.trim().toLowerCase()
+  if (!norm) return null
+  const exact = MODEL_OPTIONS.find((o) =>
+    o.shortLabel.toLowerCase() === norm
+    || o.label.toLowerCase() === norm
+    || o.id === norm
+    || o.model.toLowerCase() === norm,
+  )
+  if (exact) return exact.id
+  const fuzzy = MODEL_OPTIONS.find((o) => {
+    const tail = (o.model.split('/').pop() || '').toLowerCase()
+    return tail.length > 2 && (norm.includes(tail) || tail.includes(norm))
+  })
+  return fuzzy?.id ?? null
+}
+
+/** The model that actually produced the thread's last assistant answer. */
+function inferModelIdFromMessages(threadId: string): string | null {
+  const msgs = loadThreadMessages(threadId)
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    const m = msgs[i]
+    if (m.role === 'assistant' && m.model) {
+      return matchModelOption(m.model)
+    }
+  }
+  return null
 }
 
 function loadThreads(): Thread[] {
@@ -499,8 +531,19 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     if (!thread) return
     saveActiveThreadId(id)
     set({ activeThreadId: id })
-    // Restore the per-thread model selection (default to auto if none saved).
-    useModelStore.getState().setSelectedModelId(thread.modelId || 'auto')
+    // Restore the per-thread model selection. When nothing is pinned (thread
+    // last used on another device, or predates pinning), derive it from the
+    // last assistant message so the pill shows what was actually used — an
+    // existing conversation must never open as bare "Auto".
+    let modelId = thread.modelId
+    if (!modelId || modelId === 'auto') {
+      const derived = inferModelIdFromMessages(id)
+      if (derived) {
+        modelId = derived
+        get().updateThreadModel(id, derived)
+      }
+    }
+    useModelStore.getState().setSelectedModelId(modelId || 'auto')
     // Restore the per-thread reasoning level.
     useChatSettingsStore.getState().setGlobalReasoning(thread.reasoningLevel ?? null)
   },
