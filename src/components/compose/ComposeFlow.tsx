@@ -6,6 +6,7 @@ import { useModelStore } from '../../state/preset'
 import { MODEL_OPTIONS } from '../../gateway/presets'
 import { haptic } from '../../lib/native'
 import { useThreadsStore, loadThreadMessages } from '../../state/threads'
+import { VoiceWaveform } from '../voice/VoiceWaveform'
 
 type ComposeChannel = 'messaging' | 'slack' | 'email'
 
@@ -275,21 +276,8 @@ export function ComposeFlow({ channel, onClose }: Props) {
         {composeState === 'recording' && (
           <div className="flex flex-col items-center gap-6 animate-[fadeSlideIn_0.3s_ease-out]">
             {/* Recording waveform */}
-            <div className="flex items-center justify-center gap-[4px] h-16">
-              {Array.from({ length: 20 }, (_, i) => {
-                const idx = (i / 20) * (voice.levels.length - 1)
-                const lo = Math.floor(idx)
-                const hi = Math.min(lo + 1, voice.levels.length - 1)
-                const frac = idx - lo
-                const val = (voice.levels[lo] || 0) * (1 - frac) + (voice.levels[hi] || 0) * frac
-                return (
-                  <div
-                    key={i}
-                    className="w-[4px] rounded-full bg-accent transition-all duration-75 ease-out"
-                    style={{ height: `${Math.max(4, val * 60)}px`, opacity: 0.6 + val * 0.4 }}
-                  />
-                )
-              })}
+            <div className="flex items-center justify-center h-16">
+              <VoiceWaveform bars={20} maxPx={60} minPx={4} barWidthPx={4} gapPx={4} barClassName="bg-accent" fadeOpacity className="h-full" />
             </div>
             <p className="text-sm text-text-dark-muted">
               {allTranscriptions.length > 0 ? 'Add more context...' : 'Speak your message...'}

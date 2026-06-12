@@ -1,4 +1,5 @@
 import { useRecordingStore, formatRecordingDuration } from '../../state/recording'
+import { VoiceWaveform } from './VoiceWaveform'
 
 /**
  * Persistent recording indicator shown when the user has navigated away from
@@ -21,7 +22,6 @@ interface Props {
 export function FloatingRecordingPill({ visible }: Props) {
   const state = useRecordingStore((s) => s.state)
   const duration = useRecordingStore((s) => s.duration)
-  const levels = useRecordingStore((s) => s.levels)
   const stop = useRecordingStore((s) => s.stop)
 
   if (!visible || (state !== 'recording' && state !== 'transcribing')) return null
@@ -47,22 +47,7 @@ export function FloatingRecordingPill({ visible }: Props) {
         <>
           <span className="w-2.5 h-2.5 rounded-full bg-red-500 recording-pulse flex-shrink-0" />
           <span className="text-[13px] font-medium text-foreground">Recording</span>
-          <div className="flex items-center gap-[2px] h-3.5">
-            {Array.from({ length: 6 }, (_, i) => {
-              const idx = (i / 6) * Math.max(0, levels.length - 1)
-              const lo = Math.floor(idx)
-              const hi = Math.min(lo + 1, levels.length - 1)
-              const frac = idx - lo
-              const val = (levels[lo] || 0) * (1 - frac) + (levels[hi] || 0) * frac
-              return (
-                <div
-                  key={i}
-                  className="w-[2px] rounded-full bg-red-400/80 transition-all duration-75 ease-out"
-                  style={{ height: `${Math.max(2, val * 14)}px` }}
-                />
-              )
-            })}
-          </div>
+          <VoiceWaveform bars={6} maxPx={14} minPx={2} gapPx={2} className="h-3.5" />
           <span className="text-[11.5px] text-muted-foreground font-mono tabular-nums">
             {formatRecordingDuration(duration)}
           </span>

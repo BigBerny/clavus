@@ -32,6 +32,7 @@ import { EditingMessageRow, QueuedMessageRow } from './InputBarStatusRows'
 import { FailedDictationPrompt, VoiceErrorRow } from './InputBarVoiceStatus'
 import { AtMentionPalette, SlashCommandPalette, ToastRow } from './InputBarPalettes'
 import { SlashCommandsModal } from './SlashCommandsModal'
+import { VoiceWaveform } from '../voice/VoiceWaveform'
 
 interface Props {
   onSend: (message: string, images?: string[], files?: PendingFile[]) => void
@@ -805,21 +806,8 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
             <div className="flex items-center gap-3 px-4 py-3">
               <div className="w-2 h-2 rounded-full bg-red-500 recording-pulse flex-shrink-0" />
               <span className="text-[13px] text-foreground/85">Recording</span>
-              <div className="flex-1 flex items-center justify-center gap-[3px] h-5">
-                {Array.from({ length: 32 }, (_, i) => {
-                  const idx = (i / 32) * (voice.levels.length - 1)
-                  const lo = Math.floor(idx)
-                  const hi = Math.min(lo + 1, voice.levels.length - 1)
-                  const frac = idx - lo
-                  const val = (voice.levels[lo] || 0) * (1 - frac) + (voice.levels[hi] || 0) * frac
-                  return (
-                    <div
-                      key={i}
-                      className="w-[2px] rounded-full bg-red-400/80 transition-all duration-75 ease-out"
-                      style={{ height: `${Math.max(3, val * 20)}px` }}
-                    />
-                  )
-                })}
+              <div className="flex-1 flex items-center justify-center h-5">
+                <VoiceWaveform bars={32} maxPx={20} minPx={3} className="h-full" />
               </div>
               <span className="text-[12px] text-muted-foreground font-mono tabular-nums flex-shrink-0">
                 {voice.formattedDuration}

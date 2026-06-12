@@ -49,6 +49,9 @@ interface RecordingStore {
   warning: boolean
   error: string | null
   levels: number[]
+  /** Monotonic count of level buckets pushed — lets the waveform key bars by
+   *  absolute bucket index so a bar's height never changes once created. */
+  levelBucket: number
   hasFailedAudio: boolean
   /** Thread the recording belongs to. Usually locked at start time; home-screen
    *  recordings can be assigned when the user stops and sends them. */
@@ -110,8 +113,15 @@ function cleanupHardware() {
 // Rolling volume history shown by the recording waveforms (InputBar,
 // ComposeFlow, FloatingRecordingPill): one bucket per ~90 ms, newest at the
 // end — the same volume-over-time look as the desktop dictation pill.
-const LEVEL_HISTORY = 24
-const LEVEL_INTERVAL_MS = 90
+const LEVEL_HISTORY = 40
+export const LEVEL_INTERVAL_MS = 90
+
+// When the newest bucket landed — drives the waveform conveyor's sub-bucket
+// scroll offset (translate between bucket pushes instead of morphing bars).
+let lastLevelPushTs = 0
+export function getLastLevelPushTs(): number {
+  return lastLevelPushTs
+}
 
 function startAnalyser(s: MediaStream) {
   const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -175,7 +185,8 @@ function startAnalyser(s: MediaStream) {
         norm = Math.min(Math.max((db + 50) / 40, 0), 1)
       }
       history = [...history.slice(1), norm]
-      useRecordingStore.setState({ levels: history })
+      lastLevelPushTs = now
+      useRecordingStore.setState((s) => ({ levels: history, levelBucket: s.levelBucket + 1 }))
     }
     animFrameId = requestAnimationFrame(update)
   }
@@ -276,6 +287,7 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
   warning: false,
   error: null,
   levels: [],
+  levelBucket: 0,
   hasFailedAudio: false,
   targetThreadId: null,
 
