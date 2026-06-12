@@ -167,7 +167,9 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
     const tabByThreadId = new Map<string, ChatTab>()
     for (const t of tabs) if (t.type === 'chat') tabByThreadId.set((t as ChatTab).threadId, t as ChatTab)
     const chatEntries: ChatTab[] = threads
-      .filter((th) => !th.archived && th.updatedAt > dayAgo)
+      // Favorites live in their own section above — same de-duplication the
+      // sidebar and overlay home apply.
+      .filter((th) => !th.archived && !th.favorite && th.updatedAt > dayAgo)
       .map((th) => {
         const existing = tabByThreadId.get(th.id)
         if (existing) return { ...existing, title: th.title || existing.title, updatedAt: th.updatedAt }
