@@ -316,7 +316,7 @@ export function OverlayApp() {
           >
             {/* Back affordance — in the pane (slides with it), vertically
                 centered, hugging the conversation column. Same as window mode. */}
-            <button className="ovl-gcircle ovl-back" onClick={popChat} title="Back to home (Esc)"><ArrowLeft /></button>
+            <button className="ovl-gcircle ovl-back" onClick={popChat} aria-label="Back to home"><ArrowLeft /></button>
             <div className="ovl-chatwrap">
               <ChatViewPanel threadId={threadId} isActivePane={open && chatOpen} />
             </div>

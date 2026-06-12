@@ -1482,7 +1482,6 @@ export function App() {
                       className="absolute top-1/2 -translate-y-1/2 z-20 w-8 h-8 rounded-full glass flex items-center justify-center text-text-light-muted dark:text-text-dark-muted hover:text-text-light dark:hover:text-text-dark transition-colors"
                       style={{ left: 'max(8px, calc(50% - 494px))' }}
                       aria-label="Back to home"
-                      title="Back to home (Esc)"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                     </button>
