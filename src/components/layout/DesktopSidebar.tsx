@@ -371,7 +371,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
             <button
               onClick={() => onSplitReturn?.()}
               className="inline-btn w-full pl-2 pr-2 py-1 rounded-lg flex items-center gap-1.5 text-left text-[12px] transition-colors text-primary font-medium bg-primary/12"
-              title="Return to split view"
+              aria-label="Return to split view"
             >
               <span className="shrink-0" style={{ color: 'var(--color-cat-doc)' }}>{FileIcon}</span>
               <span className="truncate">{splitDocTitle}</span>
@@ -392,7 +392,6 @@ export const DesktopSidebar = memo(function DesktopSidebar({
         onClick={onGoHome}
         className="inline-btn flex items-center justify-between w-full px-4 pt-3 pb-2 rounded-none cursor-pointer"
         aria-label="Go to home"
-        title="Home"
       >
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary to-[var(--color-cat-violet)] flex items-center justify-center text-primary-foreground text-sm font-semibold">

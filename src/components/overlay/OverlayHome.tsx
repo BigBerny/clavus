@@ -83,7 +83,6 @@ export function OverlayHome({ onOpenThread, onCompose }: Props) {
           e.stopPropagation()
           toggleFavorite(t.id)
         }}
-        title={t.favorite ? 'Remove from favorites' : 'Add to favorites'}
         aria-label={t.favorite ? 'Remove from favorites' : 'Add to favorites'}
       >
         <Star size={13} fill={t.favorite ? 'currentColor' : 'none'} strokeWidth={1.8} aria-hidden="true" />

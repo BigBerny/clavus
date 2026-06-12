@@ -291,7 +291,6 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     <button
                       onClick={() => toggleFavorite(thread.id)}
                       className="inline-btn absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg flex items-center justify-center text-amber-500 hover:bg-foreground/[0.06] transition-colors"
-                      title="Remove from favorites"
                       aria-label="Remove from favorites"
                     >
                       <Star size={13} fill="currentColor" strokeWidth={0} aria-hidden="true" />
@@ -363,7 +362,6 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                                 ? 'text-amber-500 opacity-100'
                                 : 'text-muted-foreground/60 hover:text-amber-500 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100'
                             } hover:bg-foreground/[0.06]`}
-                            title={thread?.favorite ? 'Remove from favorites' : 'Add to favorites'}
                             aria-label={thread?.favorite ? 'Remove from favorites' : 'Add to favorites'}
                           >
                             <Star size={13} fill={thread?.favorite ? 'currentColor' : 'none'} strokeWidth={1.8} aria-hidden="true" />

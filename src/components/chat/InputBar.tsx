@@ -757,7 +757,6 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
               onClick={handleAbortClick}
               className="inline-btn h-9 px-3 rounded-full glass flex items-center gap-2 text-[12px] font-medium text-red-400 hover:bg-red-500/10 active:scale-95 transition-all"
               aria-label="Stop generating"
-              title="Stop generating"
             >
               <StopMini />
               <span>Stop</span>

@@ -1401,7 +1401,6 @@ export function App() {
                     onClick={() => { setSplitDocPath(null); setSplitExpanded(null) }}
                     className="inline-btn p-1.5 rounded-lg text-text-light-muted/50 dark:text-text-dark-muted/50 hover:text-text-light dark:hover:text-text-dark hover:bg-surface-light-3/30 dark:hover:bg-surface-dark-3/30 transition-colors"
                     aria-label="Close document"
-                    title="Close"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </button>

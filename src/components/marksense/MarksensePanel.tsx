@@ -147,7 +147,6 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
         {/* Browse files — re-open the Finder/file explorer without leaving this doc */}
         <button
           onClick={openBrowser}
-          title="Browse files"
           aria-label="Browse files"
           className="inline-btn h-7 px-2 rounded-md flex items-center gap-1.5 text-[11.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
         >

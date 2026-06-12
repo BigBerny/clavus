@@ -81,7 +81,6 @@ export function IconBtn({
     : 'text-muted-foreground hover:text-foreground hover:bg-foreground/[0.06]'
   return (
     <button
-      title={title}
       aria-label={title}
       onClick={onClick}
       onPointerDown={onPointerDown}
