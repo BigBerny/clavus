@@ -125,7 +125,8 @@ html[data-overlay]:not([data-tauri]) .ovl-matte {
   background: var(--ovl-scrim);
   color: var(--ovl-text);
   opacity: 0;
-  transition: opacity 0.42s ease;
+  /* Apple-ish ease — fast start, long soft tail. Same fade out. */
+  transition: opacity 0.55s cubic-bezier(0.32, 0.72, 0, 1);
 }
 .ovl-matte.is-open { opacity: 1; }
 .ovl-matte::after {
@@ -147,8 +148,8 @@ html[data-overlay]:not(.dark) .ovl-matte::after {
   height: 100%;
   overflow: hidden;
   opacity: 0;
-  transform: translateY(16px) scale(0.985);
-  transition: opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  transform: translateY(20px) scale(0.982);
+  transition: opacity 0.55s cubic-bezier(0.32, 0.72, 0, 1), transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .ovl-matte.is-open .ovl-stage { opacity: 1; transform: none; }
 

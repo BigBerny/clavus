@@ -169,10 +169,12 @@ export function OverlayApp() {
     if (closingRef.current) return
     closingRef.current = true
     setOpen(false)
+    // Matches the matte's 0.55s fade — order the window out only once the
+    // fade has fully played.
     setTimeout(() => {
       window.dispatchEvent(new CustomEvent('clavus:overlay-hide'))
       closingRef.current = false
-    }, 440)
+    }, 580)
   }, [])
 
   /* ----- pager ----- */
