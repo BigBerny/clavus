@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore, composeMessageText, type Message } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse } from '../gateway/chat.ts'
+import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse, cancelActiveResponse } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import { useModelStore } from '../state/preset.ts'
@@ -399,12 +399,23 @@ export function useChat() {
     sendRef.current = send
   }, [send])
 
-  const abort = useCallback((threadId: string) => {
+  /** Stop the local stream AND the server-side gateway run. The proxy keeps a
+   *  run alive when the client detaches (that's what recovery relies on), so
+   *  only aborting the fetch leaves the agent generating — and its session
+   *  context then contains an answer the user never saw. The by-thread cancel
+   *  also catches orphaned runs from before a reload, when this client never
+   *  learned the responseId. */
+  const stopActiveRun = useCallback((threadId: string) => {
     const ts = store.getState().getThreadState(threadId)
     ts.abortController?.abort()
     store.getState().setStreaming(threadId, false)
     store.getState().setAbortController(threadId, null)
+    cancelActiveResponse({ threadId })
   }, [store])
+
+  const abort = useCallback((threadId: string) => {
+    stopActiveRun(threadId)
+  }, [stopActiveRun])
 
   /** Drain a queued message after a stream completes normally. */
   const drainQueueIfAny = useCallback((threadId: string) => {
@@ -426,12 +437,9 @@ export function useChat() {
   const sendNow = useCallback((threadId: string) => {
     const queued = store.getState().pullQueuedMessage(threadId)
     if (!queued) return
-    const ts = store.getState().getThreadState(threadId)
-    ts.abortController?.abort()
-    store.getState().setStreaming(threadId, false)
-    store.getState().setAbortController(threadId, null)
+    stopActiveRun(threadId)
     sendRef.current?.(threadId, queued.content, queued.images, queued.files)
-  }, [store])
+  }, [store, stopActiveRun])
 
   /** Regenerate: remove the target assistant message and its preceding user
    *  message, then re-send the original user content. */
@@ -451,19 +459,26 @@ export function useChat() {
     }
     if (!userMsg) return
 
+    // Kill any in-flight run first — otherwise it keeps generating into the
+    // agent's session context and the regenerated answer references a reply
+    // the user never saw.
+    stopActiveRun(threadId)
+
     // Remove from the user message onward (inclusive)
     store.getState().truncateMessagesFrom(threadId, userMsg.id)
 
     // Re-send the user message content (including any file attachments)
     sendRef.current?.(threadId, userMsg.content, userMsg.images, userMsg.attachments)
-  }, [store])
+  }, [store, stopActiveRun])
 
   /** Edit a user message: truncate from that message onward and re-send with
-   *  new content. */
+   *  new content. Cancels any in-flight run for the thread first (same reason
+   *  as regenerate). */
   const editAndResend = useCallback((threadId: string, messageId: string, newContent: string) => {
+    stopActiveRun(threadId)
     store.getState().truncateMessagesFrom(threadId, messageId)
     sendRef.current?.(threadId, newContent)
-  }, [store])
+  }, [store, stopActiveRun])
 
   return { send, abort, sendNow, regenerate, editAndResend }
 }

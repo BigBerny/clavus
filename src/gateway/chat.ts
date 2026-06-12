@@ -586,6 +586,20 @@ export async function resumeChatStream(
   }
 }
 
+/**
+ * Cancel the server-side gateway run feeding a response buffer. Without this,
+ * a run keeps generating after Stop/edit/regenerate and the agent's session
+ * context silently accumulates an answer the user never saw.
+ *
+ * Fire-and-forget: 404 (nothing running) is the common, harmless case.
+ */
+export function cancelActiveResponse(opts: { responseId?: string; threadId: string }): void {
+  const path = opts.responseId
+    ? `/v1/responses/${encodeURIComponent(opts.responseId)}/cancel`
+    : `/v1/responses/by-thread/${encodeURIComponent(opts.threadId)}/cancel`
+  fetch(path, { method: 'POST' }).catch(() => {})
+}
+
 async function sendChatCompletionsStream(
   config: GatewayConfig,
   messages: ChatCompletionMessage[],

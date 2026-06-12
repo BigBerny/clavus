@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef, Suspense, lazy, Component, type ReactNode } from 'react'
+import { useEffect, useState, useRef, Suspense, Component, type ReactNode } from 'react'
 import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
 import { openOrFocusFinderTab } from '../../state/tabs'
+import { lazyWithRetry } from '../../lib/lazyWithRetry'
 
 class EditorErrorBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
@@ -16,8 +17,13 @@ class EditorErrorBoundary extends Component<
   }
 }
 
-const MarksenseEditorInstance = lazy(() =>
-  import('@clavus/marksense-core').then(m => ({ default: m.MarksenseEditorInstance }))
+// The marksense-core graph is the heaviest lazy import in the app (Tiptap,
+// ProseMirror, CodeMirror) — in the Tauri webview behind the tunnel its
+// import flakes occasionally, so it gets the retry + cache-bust treatment.
+const MarksenseEditorInstance = lazyWithRetry(
+  'MarksenseEditorInstance',
+  () => import('@clavus/marksense-core'),
+  m => (m as typeof import('@clavus/marksense-core')).MarksenseEditorInstance,
 )
 
 export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {

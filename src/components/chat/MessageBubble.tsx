@@ -75,6 +75,45 @@ function ThinkingBlock({ thinking, isStreaming, defaultExpanded, toolCalls, isSt
   )
 }
 
+// ─── Pending-response indicator ──────────────────────────────────────────────
+// Shown while an assistant message is streaming but no tokens have arrived.
+// Reasoning models (Opus on high) can think for minutes without emitting
+// anything — bare dots read as "dead" and users give up and resend. After a
+// few seconds the dots gain a "Thinking…" label, and from 30 s an elapsed
+// counter proves the run is still alive.
+
+function PendingResponseIndicator({ since }: { since: number }) {
+  const [elapsedS, setElapsedS] = useState(() => Math.max(0, Math.round((Date.now() - since) / 1000)))
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setElapsedS(Math.max(0, Math.round((Date.now() - since) / 1000)))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [since])
+
+  const showLabel = elapsedS >= 4
+  const showElapsed = elapsedS >= 30
+  const mm = Math.floor(elapsedS / 60)
+  const ss = (elapsedS % 60).toString().padStart(2, '0')
+
+  return (
+    <div className="flex items-center gap-2 py-0.5">
+      <div className="flex items-center gap-[3px]">
+        <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_infinite]" />
+        <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_0.2s_infinite]" />
+        <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_0.4s_infinite]" />
+      </div>
+      {showLabel && (
+        <span className="text-[12px] text-text-light-muted/50 dark:text-text-dark-muted/50 animate-[fadeSlideIn_0.3s_ease-out]">
+          Thinking…
+          {showElapsed && <span className="ml-1.5 tabular-nums text-text-light-muted/35 dark:text-text-dark-muted/35">{mm}:{ss}</span>}
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ─── Copyable Block ─────────────────────────────────────────────────────────
 // Renders content inside :::copy fences as a styled card with a copy button.
 // Copies as rich text (HTML) so formatting (links, lists, etc.) is preserved
@@ -604,11 +643,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
               <p className="whitespace-pre-wrap text-[15px] leading-[1.55]" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>{message.content}</p>
             ) : null
           ) : message.streaming && !message.content && !message.thinking && !message.toolCalls?.length ? (
-            <div className="flex items-center gap-[3px] py-0.5">
-              <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_infinite]" />
-              <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_0.2s_infinite]" />
-              <span className="w-[3.5px] h-[3.5px] rounded-full bg-text-light-muted/30 dark:bg-text-dark-muted/30 animate-[pulse_1.6s_ease-in-out_0.4s_infinite]" />
-            </div>
+            <PendingResponseIndicator since={message.timestamp} />
           ) : (
             <>
             {/* Thinking/Reasoning block (includes actions when present) */}

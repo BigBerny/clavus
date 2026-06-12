@@ -1,15 +1,12 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useFileExplorer } from '../../hooks/useFileExplorer'
 import { useTabsStore, type FinderTab } from '../../state/tabs'
 import { getFileTypeInfo } from '../../lib/fileTypes'
 import type { FileEntry } from '../../lib/workspaceApi'
+import { lazyWithRetry } from '../../lib/lazyWithRetry'
 
-const MarksensePanel = lazy(() =>
-  import('../marksense/MarksensePanel').then(m => ({ default: m.MarksensePanel }))
-)
-const FileViewerPanel = lazy(() =>
-  import('./FileViewerPanel').then(m => ({ default: m.FileViewerPanel }))
-)
+const MarksensePanel = lazyWithRetry('FinderMarksensePanel', () => import('../marksense/MarksensePanel'), m => (m as typeof import('../marksense/MarksensePanel')).MarksensePanel)
+const FileViewerPanel = lazyWithRetry('FinderFileViewerPanel', () => import('./FileViewerPanel'), m => (m as typeof import('./FileViewerPanel')).FileViewerPanel)
 
 function isMarkdownFile(name: string): boolean {
   return getFileTypeInfo(name).kind === 'markdown'

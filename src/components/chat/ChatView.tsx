@@ -587,21 +587,30 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
       </div>
 
       {!autoScroll && (
-        <button
-          onTouchStart={(e) => e.preventDefault()}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={(e) => { e.stopPropagation(); scrollToLatestMessageStart() }}
-          className="absolute right-3 z-20 flex items-center justify-center w-11 h-11 rounded-full glass text-muted-foreground active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+        /* Anchored to the same centered 900px column as the composer, so the
+           button floats just above the input field's right corner instead of
+           hugging the far edge of a wide window. */
+        <div
+          className="absolute left-0 right-0 z-20 pointer-events-none"
           style={{ bottom: 'calc(var(--input-bar-h, 72px) + 0.5rem)' }}
-          aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to latest message'}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
-          {unseenCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-accent text-white text-[11px] font-bold shadow-sm shadow-accent/30">
-              {unseenCount > 99 ? '99+' : unseenCount}
-            </span>
-          )}
-        </button>
+          <div className="max-w-[900px] mx-auto px-3 flex justify-end">
+            <button
+              onTouchStart={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={(e) => { e.stopPropagation(); scrollToLatestMessageStart() }}
+              className="pointer-events-auto relative flex items-center justify-center w-11 h-11 rounded-full glass text-muted-foreground active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+              aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to latest message'}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>
+              {unseenCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full bg-accent text-white text-[11px] font-bold shadow-sm shadow-accent/30">
+                  {unseenCount > 99 ? '99+' : unseenCount}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )

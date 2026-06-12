@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useCallback, useRef, Suspense } from 'react'
+import { PanelErrorBoundary } from './components/PanelErrorBoundary.tsx'
 import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
@@ -226,6 +227,19 @@ export function App() {
   } | null>(null)
 
   const sortedTabs = useSortedTabs()
+  const allTabs = useTabsStore((s) => s.tabs)
+
+  // Linked-doc marksense tabs are intentionally hidden from sortedTabs (Home
+  // and the sidebar nest them under their parent thread) — but they are still
+  // real, openable panels. Resolving the ACTIVE panel must therefore check the
+  // raw tab store too: with sortedTabs alone, opening a mentioned document set
+  // visiblePanel to a tab the pager could never mount — the pane unmounted to
+  // Home, which (being inert while visiblePanel ≠ 'home') ignored every click
+  // until an app restart.
+  const findTabById = useCallback((id: string | null | undefined) => {
+    if (!id) return undefined
+    return sortedTabs.find(t => t.id === id) ?? allTabs.find(t => t.id === id)
+  }, [sortedTabs, allTabs])
 
   const logKeyboardScroll = useCallback((event: string, details: Record<string, unknown> = {}) => {
     const container = scrollContainerRef.current
@@ -746,7 +760,7 @@ export function App() {
           setVisiblePanel('home')
         } else {
           const paneId = paneTabIdRef.current
-          const tab = paneId ? sortedTabs.find(t => t.id === paneId) : undefined
+          const tab = findTabById(paneId)
           if (tab) {
             logKeyboardScroll('scroll-accept-tab', { panelIndex, rawPanelIndex, nextPanel: tab.id })
             setVisiblePanel(tab.id)
@@ -763,7 +777,7 @@ export function App() {
       container.removeEventListener('scroll', handleScroll)
       if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [logKeyboardScroll, pinVisiblePanelIfNeeded, sortedTabs, switchThread, setVisiblePanel])
+  }, [logKeyboardScroll, pinVisiblePanelIfNeeded, findTabById, switchThread, setVisiblePanel])
 
   // When tabs load/sync or reorder by activity, the active panel's DOM position
   // can move while scrollLeft still points at the old column index. Pin in the
@@ -1028,7 +1042,7 @@ export function App() {
   }, [closeTab, scrollToTab, setVisiblePanel, pagerMode])
 
   // Determine if the visible tab is a chat tab (to show InputBar)
-  const visibleTab = sortedTabs.find(t => t.id === visiblePanel)
+  const visibleTab = findTabById(visiblePanel)
   const isVisibleChat = visiblePanel === 'home' || visibleTab?.type === 'chat'
 
   // The pager's right-hand pane. Sticky: going back to Home keeps the last
@@ -1039,9 +1053,24 @@ export function App() {
     if (visiblePanel !== 'home') setStickyPaneId(visiblePanel)
   }, [visiblePanel])
   const paneTabId = visiblePanel !== 'home' ? visiblePanel : stickyPaneId
-  const paneTab = paneTabId ? sortedTabs.find(t => t.id === paneTabId) : undefined
+  const paneTab = findTabById(paneTabId)
   const paneTabIdRef = useRef<string | null>(null)
   paneTabIdRef.current = paneTab?.id ?? null
+
+  // Pager: make sure the container actually reaches a newly-opened pane.
+  // scrollToTab waits a handful of frames for the pane to mount, but under
+  // load (e.g. the marksense editor module graph importing) React commits the
+  // pane later than that — the route then says "file"/"chat" while the pager
+  // still shows Home. Re-assert the scroll once the pane really is in the DOM.
+  useEffect(() => {
+    if (!pagerMode || !paneTab || visiblePanel !== paneTab.id) return
+    const container = scrollContainerRef.current
+    const target = panelRefs.current.get(paneTab.id)
+    if (!container || !target) return
+    if (isProgrammaticScroll.current) return // a scroll is already in flight
+    if (Math.abs(container.scrollLeft - target.offsetLeft) < 8) return
+    scrollToTab(paneTab.id)
+  }, [pagerMode, paneTab, visiblePanel, scrollToTab])
 
   // Desktop sidebar: select tab by setting visiblePanel directly.
   // The sidebar synthesizes ChatTab entries from synced thread state, so the
@@ -1305,7 +1334,7 @@ export function App() {
                   </button>
                 </div>
               )}
-              {visiblePanel === 'home' || !sortedTabs.find(t => t.id === visiblePanel) ? (
+              {visiblePanel === 'home' || !visibleTab ? (
                 <HomeScreen
                   onCompose={(channel) => setComposeChannel(channel)}
                   onSelectTab={handleDesktopSelectTab}
@@ -1318,6 +1347,7 @@ export function App() {
                   }}
                 />
               ) : (
+                <PanelErrorBoundary key={`peb-${visiblePanel}`} label={visibleTab?.type}>
                 <Suspense fallback={<PanelLoading />}>
                   {visibleTab?.type === 'chat' && (
                     <ChatViewPanel
@@ -1352,6 +1382,7 @@ export function App() {
                     />
                   )}
                 </Suspense>
+                </PanelErrorBoundary>
               )}
               </div>
               {/* InputBar inside chat column when split view is active */}
@@ -1411,14 +1442,16 @@ export function App() {
                   </button>
                 </div>
                 <div className="flex-1 min-h-0">
-                  <Suspense fallback={<PanelLoading />}>
-                    <MarksensePanel
-                      path={splitDocPath}
-                      title={splitDocTitle}
-                      isVisible={true}
-                      onOpenFinder={handleOpenFinder}
-                    />
-                  </Suspense>
+                  <PanelErrorBoundary key={`peb-split-${splitDocPath}`} label="split-doc">
+                    <Suspense fallback={<PanelLoading />}>
+                      <MarksensePanel
+                        path={splitDocPath}
+                        title={splitDocTitle}
+                        isVisible={true}
+                        onOpenFinder={handleOpenFinder}
+                      />
+                    </Suspense>
+                  </PanelErrorBoundary>
                 </div>
               </div>
             )}
@@ -1491,6 +1524,7 @@ export function App() {
                     </button>
                   )}
                   <PullDownDismissable tabId={paneTab.id} onDismiss={handleArchiveTab}>
+                    <PanelErrorBoundary key={`peb-${paneTab.id}`} label={paneTab.type}>
                     <Suspense fallback={<PanelLoading />}>
                       {paneTab.type === 'chat' && (
                         <ChatViewPanel
@@ -1526,6 +1560,7 @@ export function App() {
                         />
                       )}
                     </Suspense>
+                    </PanelErrorBoundary>
                   </PullDownDismissable>
                 </div>
             )

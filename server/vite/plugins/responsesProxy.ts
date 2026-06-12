@@ -39,6 +39,12 @@ import {
 export function responsesProxyPlugin() {
   let runtimeInitialized = false
 
+  // Abort handles for in-flight gateway runs, keyed by responseId. A run keeps
+  // going server-side when the client disconnects (that's what makes recovery
+  // possible) — so Stop/edit/regenerate need an explicit cancel path, or the
+  // agent's session context silently accumulates answers the user never saw.
+  const activeRuns = new Map<string, () => void>()
+
   function ensureRuntimeInitialized() {
     if (runtimeInitialized) return
     runtimeInitialized = true
@@ -226,13 +232,24 @@ export function responsesProxyPlugin() {
             }))
           },
         },
+        (abort) => {
+          activeRuns.set(responseId, () => {
+            finalStatus = 'aborted'
+            abort()
+          })
+        },
       )
     } catch (e: any) {
-      finalStatus = 'failed'
-      bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
-        type: 'response.failed',
-        response: { id: responseId, status: 'failed', error: { message: e.message } },
-      }))
+      // A cancelled run rejecting is the expected outcome, not a failure.
+      if (finalStatus !== 'aborted') {
+        finalStatus = 'failed'
+        bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
+          type: 'response.failed',
+          response: { id: responseId, status: 'failed', error: { message: e.message } },
+        }))
+      }
+    } finally {
+      activeRuns.delete(responseId)
     }
 
     markFinished(responseId, finalStatus)
@@ -407,6 +424,21 @@ export function responsesProxyPlugin() {
     handleGetStream(req, res, entry.responseId)
   }
 
+  /** Cancel the in-flight gateway run behind a responseId. 202 when an abort
+   *  was dispatched, 404 when there is nothing running (already finished). */
+  function handleCancel(res: any, responseId: string | null) {
+    const abort = responseId ? activeRuns.get(responseId) : undefined
+    res.setHeader('Content-Type', 'application/json')
+    if (!abort) {
+      res.statusCode = 404
+      res.end(JSON.stringify({ error: { message: 'No active run for this response' } }))
+      return
+    }
+    abort()
+    res.statusCode = 202
+    res.end(JSON.stringify({ ok: true, responseId }))
+  }
+
   const attach = (server: any) => {
     ensureRuntimeInitialized()
 
@@ -432,6 +464,22 @@ export function responsesProxyPlugin() {
       if (byThreadMatch && req.method === 'GET') {
         const threadId = decodeURIComponent(byThreadMatch[1])
         return handleGetStreamByThread(req, res, threadId)
+      }
+
+      // POST /v1/responses/:id/cancel
+      const cancelMatch = url.match(/^\/v1\/responses\/([^/?]+)\/cancel(?:\?|$)/)
+      if (cancelMatch && req.method === 'POST' && cancelMatch[1] !== 'by-thread') {
+        return handleCancel(res, decodeURIComponent(cancelMatch[1]))
+      }
+
+      // POST /v1/responses/by-thread/:threadId/cancel — cancel whatever run is
+      // active for the thread (covers post-reload, where the client no longer
+      // knows the responseId).
+      const cancelByThreadMatch = url.match(/^\/v1\/responses\/by-thread\/([^/?]+)\/cancel(?:\?|$)/)
+      if (cancelByThreadMatch && req.method === 'POST') {
+        const threadId = decodeURIComponent(cancelByThreadMatch[1])
+        const entry = findByThread(threadId)
+        return handleCancel(res, entry && entry.status === 'in_progress' ? entry.responseId : null)
       }
 
       return next()
