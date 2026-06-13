@@ -19,6 +19,29 @@ import {
   OPENCLAW_API_TARGET,
 } from '../serverEnv.ts'
 
+/** Latest user text from a Responses-API `input` (string, or array of items). */
+function extractLatestUserText(input: any): string {
+  if (typeof input === 'string') return input
+  if (Array.isArray(input)) {
+    for (let i = input.length - 1; i >= 0; i--) {
+      const it = input[i]
+      if (it && (it.role === 'user' || it.role === undefined)) {
+        const c = it.content ?? it.text ?? it
+        if (typeof c === 'string') return c
+        if (Array.isArray(c)) return c.map((p: any) => (typeof p === 'string' ? p : p?.text ?? '')).join('\n')
+      }
+    }
+  }
+  return ''
+}
+
+/** Prepend a workspace-context block to a Responses-API `input`. */
+function prependContext(input: any, ctx: string): any {
+  if (typeof input === 'string') return `${ctx}\n\n${input}`
+  if (Array.isArray(input)) return [{ role: 'user', content: ctx }, ...input]
+  return input
+}
+
 /**
  * Server-side SSE proxy for /v1/responses.
  * Keeps the backend connection alive even if the client (phone) disconnects,
@@ -126,9 +149,10 @@ export function responsesProxyPlugin() {
     if (!input) return false
 
     // Mode 1 pre-pass: prepend relevant workspace context (workspace-indexer). Fail-open —
-    // workspaceContextBlock never throws and returns null when nothing is relevant.
+    // workspaceContextBlock never throws and returns null when nothing is relevant. Keyed by
+    // threadId so it windows recent turns and doesn't re-inject the same note.
     let agentMessage = input
-    const wsCtx = await workspaceContextBlock(input)
+    const wsCtx = await workspaceContextBlock(threadId || undefined, input)
     if (wsCtx) agentMessage = `${wsCtx}\n\n${input}`
 
     const sessionKey = typeof parsed.user === 'string' ? parsed.user
@@ -302,12 +326,22 @@ export function responsesProxyPlugin() {
       headers[key] = value
     }
 
+    // HTTP fallback: also run the Mode 1 pre-pass (the WS path above is primary). Fail-open.
+    let forwardBody = body
+    try {
+      const latest = extractLatestUserText(parsed.input)
+      if (latest) {
+        const ctx = await workspaceContextBlock(threadId || undefined, latest)
+        if (ctx) forwardBody = JSON.stringify({ ...parsed, input: prependContext(parsed.input, ctx) })
+      }
+    } catch { /* forward the original body */ }
+
     let backendRes: Response
     try {
       backendRes = await fetch(`${CHAT_API_TARGET}/v1/responses`, {
         method: 'POST',
         headers,
-        body,
+        body: forwardBody,
       })
     } catch (e: any) {
       res.statusCode = 502
