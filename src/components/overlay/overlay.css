@@ -338,8 +338,10 @@ html[data-overlay]:not(.dark) .ovl-backdrop {
 .ovl-fav-btn {
   position: absolute;
   right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
+  /* Align the star with the timestamp's line (top of the row), not the
+     centre of the two-line row — otherwise on favorites the time sits by
+     the title while the star drifts down to the row's middle. */
+  top: 2px;
   width: 26px;
   height: 26px;
   border-radius: 8px;
