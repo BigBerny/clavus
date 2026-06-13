@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { QueuedMessage } from '../../state/chat'
 
 type EditingMessageRowProps = {
@@ -48,6 +49,22 @@ export function QueuedMessageRow({
   const imageCount = queuedMessage.images?.length ?? 0
   const hasAttachments = fileCount > 0 || imageCount > 0
 
+  const [expanded, setExpanded] = useState(false)
+  const [hasOverflow, setHasOverflow] = useState(false)
+  const textRef = useRef<HTMLParagraphElement>(null)
+
+  useEffect(() => {
+    setExpanded(false)
+  }, [queuedMessage.content])
+
+  useEffect(() => {
+    const el = textRef.current
+    if (!el || expanded) return
+    setHasOverflow(el.scrollHeight > el.clientHeight + 1)
+  }, [queuedMessage.content, expanded])
+
+  const canToggle = hasOverflow || expanded
+
   return (
     <div
       className="mb-2 flex justify-end animate-[fadeSlideIn_0.2s_ease-out]"
@@ -71,7 +88,14 @@ export function QueuedMessageRow({
                 </>
               ) : null}
             </div>
-            <p className="text-[14px] leading-snug max-h-[2.75rem] overflow-hidden whitespace-pre-wrap break-words">
+            <p
+              ref={textRef}
+              onClick={canToggle ? () => setExpanded(v => !v) : undefined}
+              className={`text-[14px] leading-snug whitespace-pre-wrap break-words ${
+                expanded ? 'max-h-[40vh] overflow-y-auto' : 'line-clamp-2'
+              } ${canToggle ? 'cursor-pointer' : ''}`}
+              title={canToggle ? (expanded ? 'Tap to collapse' : 'Tap to expand') : undefined}
+            >
               {queuedMessage.content || (hasAttachments ? 'Attachments queued' : 'Queued')}
             </p>
           </div>
