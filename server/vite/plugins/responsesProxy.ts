@@ -10,6 +10,7 @@ import {
   subscribe as bufferSubscribe,
 } from '../../responseEventBuffer.ts'
 import { initGatewayWs, getGatewayWs } from '../../gatewayWs.ts'
+import { workspaceContextBlock } from '../../workspaceContext.ts'
 import { createSseParser, formatSseFrame } from '../../../src/lib/sseParse.ts'
 import {
   CHAT_API_TARGET,
@@ -124,6 +125,12 @@ export function responsesProxyPlugin() {
         : ''
     if (!input) return false
 
+    // Mode 1 pre-pass: prepend relevant workspace context (workspace-indexer). Fail-open —
+    // workspaceContextBlock never throws and returns null when nothing is relevant.
+    let agentMessage = input
+    const wsCtx = await workspaceContextBlock(input)
+    if (wsCtx) agentMessage = `${wsCtx}\n\n${input}`
+
     const sessionKey = typeof parsed.user === 'string' ? parsed.user
       : typeof req.headers['x-openclaw-session-key'] === 'string' ? req.headers['x-openclaw-session-key']
       : undefined
@@ -168,7 +175,7 @@ export function responsesProxyPlugin() {
     try {
       await gw.runAgent(
         {
-          message: input,
+          message: agentMessage,
           sessionKey,
           model: modelOverride,
           thinking: reasoning?.effort,
