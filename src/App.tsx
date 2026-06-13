@@ -557,6 +557,18 @@ export function App() {
       }
       const tabId = applyRoute({ kind: 'file', path: detail.path, title: detail.title })
       if (tabId) {
+        // Pager: a markdown opened from a conversation (or from the doc pane
+        // itself) becomes the doc pane right of the conversation — the chat
+        // stays mounted, so an active recording keeps running.
+        if (pagerMode && tabId.startsWith('marksense:')) {
+          const current = visiblePanelRef.current
+          const currentTab = useTabsStore.getState().tabs.find(t => t.id === current)
+          if (currentTab?.type === 'chat' || current === docPaneIdRef.current) {
+            setDocPaneId(tabId)
+            scrollToTabRef.current(tabId)
+            return
+          }
+        }
         setVisiblePanel(tabId)
         if (pagerMode) scrollToTabRef.current(tabId)
       }
@@ -754,10 +766,13 @@ export function App() {
         const panelIndex = Math.round(scrollLeft / containerWidth)
         const rawPanelIndex = scrollLeft / containerWidth
 
-        // Pager order: [Home, active pane]. Index 0 = Home.
+        // Pager order: [Home, active pane, linked-doc pane?]. Index 0 = Home.
         if (panelIndex <= 0) {
           logKeyboardScroll('scroll-accept-home', { panelIndex, rawPanelIndex })
           setVisiblePanel('home')
+        } else if (panelIndex >= 2 && docPaneIdRef.current) {
+          logKeyboardScroll('scroll-accept-doc', { panelIndex, rawPanelIndex, nextPanel: docPaneIdRef.current })
+          setVisiblePanel(docPaneIdRef.current)
         } else {
           const paneId = paneTabIdRef.current
           const tab = findTabById(paneId)
@@ -1010,6 +1025,7 @@ export function App() {
     }
     closeTab(tabId)
     setStickyPaneId(null)
+    setDocPaneId(null)
     const container = scrollContainerRef.current
     if (container) {
       isProgrammaticScroll.current = true
@@ -1031,6 +1047,7 @@ export function App() {
     const neighbor = closeTab(tabId)
     if (pagerMode) {
       setStickyPaneId(null)
+      setDocPaneId(null)
       scrollToTab('home')
       return
     }
@@ -1049,13 +1066,32 @@ export function App() {
   // pane mounted (parked off-screen right) so the snap-back animation has
   // something to slide away from and reopening is instant.
   const [stickyPaneId, setStickyPaneId] = useState<string | null>(null)
+  // Linked-doc pane: a markdown opened from inside a conversation mounts as a
+  // THIRD panel right of the conversation (home → conversation → doc) instead
+  // of replacing it. Only the last-opened doc is mounted.
+  const [docPaneId, setDocPaneId] = useState<string | null>(null)
+  const docPaneIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (visiblePanel !== 'home') setStickyPaneId(visiblePanel)
-  }, [visiblePanel])
-  const paneTabId = visiblePanel !== 'home' ? visiblePanel : stickyPaneId
+    if (visiblePanel === 'home' || visiblePanel === docPaneId) return
+    if (visiblePanel !== stickyPaneId) {
+      setStickyPaneId(visiblePanel)
+      // Switching to a different main pane closes the linked-doc pane.
+      setDocPaneId(null)
+    }
+  }, [visiblePanel, docPaneId, stickyPaneId])
+  const paneTabId = visiblePanel !== 'home'
+    ? (visiblePanel === docPaneId && stickyPaneId ? stickyPaneId : visiblePanel)
+    : stickyPaneId
   const paneTab = findTabById(paneTabId)
   const paneTabIdRef = useRef<string | null>(null)
   paneTabIdRef.current = paneTab?.id ?? null
+  const docTab = findTabById(docPaneId)
+  const docPane = docTab && docTab.type === 'marksense' && paneTab && docTab.id !== paneTab.id
+    ? (docTab as MarksenseTab)
+    : null
+  // Ref tracks the MOUNTED doc pane — scroll handlers must never target a
+  // panel that isn't in the DOM.
+  docPaneIdRef.current = docPane?.id ?? null
 
   // Pager: make sure the container actually reaches a newly-opened pane.
   // scrollToTab waits a handful of frames for the pane to mount, but under
@@ -1063,14 +1099,18 @@ export function App() {
   // pane later than that — the route then says "file"/"chat" while the pager
   // still shows Home. Re-assert the scroll once the pane really is in the DOM.
   useEffect(() => {
-    if (!pagerMode || !paneTab || visiblePanel !== paneTab.id) return
+    if (!pagerMode) return
+    const targetId = docPane && visiblePanel === docPane.id
+      ? docPane.id
+      : paneTab && visiblePanel === paneTab.id ? paneTab.id : null
+    if (!targetId) return
     const container = scrollContainerRef.current
-    const target = panelRefs.current.get(paneTab.id)
+    const target = panelRefs.current.get(targetId)
     if (!container || !target) return
     if (isProgrammaticScroll.current) return // a scroll is already in flight
     if (Math.abs(container.scrollLeft - target.offsetLeft) < 8) return
-    scrollToTab(paneTab.id)
-  }, [pagerMode, paneTab, visiblePanel, scrollToTab])
+    scrollToTab(targetId)
+  }, [pagerMode, paneTab, docPane, visiblePanel, scrollToTab])
 
   // Desktop sidebar: select tab by setting visiblePanel directly.
   // The sidebar synthesizes ChatTab entries from synced thread state, so the
@@ -1144,8 +1184,10 @@ export function App() {
             else panelIndex = nearestIndex
           }
 
-          // Clamp to valid panel range (0..sortedTabs.length, where last index = home)
-          panelIndex = Math.max(0, Math.min(sortedTabs.length, panelIndex))
+          // Clamp to the panels the pager actually mounts:
+          // [Home(0), active pane(1), linked-doc pane(2)?].
+          const maxIndex = docPaneIdRef.current ? 2 : (paneTabIdRef.current ? 1 : 0)
+          panelIndex = Math.max(0, Math.min(maxIndex, panelIndex))
           const targetLeft = panelIndex * containerWidth
           if (Math.abs(container.scrollLeft - targetLeft) > 2) {
             // Temporarily disable scroll-snap to set position without animation
@@ -1157,10 +1199,12 @@ export function App() {
             })
           }
           // Update visiblePanel to match the snapped position
-          if (panelIndex >= sortedTabs.length) {
+          if (panelIndex === 0) {
             setVisiblePanel('home')
+          } else if (panelIndex >= 2 && docPaneIdRef.current) {
+            setVisiblePanel(docPaneIdRef.current)
           } else {
-            const tab = sortedTabs[panelIndex]
+            const tab = findTabById(paneTabIdRef.current)
             if (tab) {
               setVisiblePanel(tab.id)
               if (tab.type === 'chat') switchThread((tab as ChatTab).threadId)
@@ -1184,7 +1228,7 @@ export function App() {
       startY: event.clientY,
       wasSwipeInProgress,
     })
-  }, [logKeyboardScroll, sortedTabs, switchThread, setVisiblePanel])
+  }, [logKeyboardScroll, findTabById, switchThread, setVisiblePanel])
 
   const markHorizontalGestureMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     const start = gestureStartPoint.current
@@ -1563,6 +1607,41 @@ export function App() {
                     </PanelErrorBoundary>
                   </PullDownDismissable>
                 </div>
+            )
+          })()}
+
+          {/* Linked-doc pane — a markdown opened from the conversation, mounted
+              as a third panel so the chat (and any active recording) stays
+              alive while reading. Swipe right to get back to the chat. */}
+          {docPane && (() => {
+            const isActive = visiblePanel === docPane.id
+            return (
+              <div
+                key={`doc-${docPane.id}`}
+                ref={setPanelRef(docPane.id)}
+                className="relative w-[100vw] max-w-[100vw] h-full shrink-0 grow-0 snap-start snap-always flex flex-col min-h-0 box-border"
+                style={{ touchAction: 'pan-x pan-y' }}
+                {...(!isActive ? { inert: true } : {})}
+              >
+                <PullDownDismissable
+                  tabId={docPane.id}
+                  onDismiss={() => {
+                    setDocPaneId(null)
+                    scrollToTabRef.current(paneTab ? paneTab.id : 'home')
+                  }}
+                >
+                  <PanelErrorBoundary key={`peb-doc-${docPane.id}`} label="doc-pane">
+                    <Suspense fallback={<PanelLoading />}>
+                      <MarksensePanel
+                        path={docPane.path}
+                        title={docPane.title}
+                        isVisible={isActive}
+                        onOpenFinder={handleOpenFinder}
+                      />
+                    </Suspense>
+                  </PanelErrorBoundary>
+                </PullDownDismissable>
+              </div>
             )
           })()}
         </div>

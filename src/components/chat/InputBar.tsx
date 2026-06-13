@@ -949,14 +949,15 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           )}
         </div>
 
-        {/* Hint row — desktop only (mouse + keyboard hints don't apply on touch) */}
+        {/* Hint row — desktop only (mouse + keyboard hints don't apply on touch).
+            Every key gets the same kbd chip so the row reads as one system. */}
         {!isRecording && !isTranscribing && (
-          <div className="hidden md:flex text-[10.5px] text-muted-foreground/70 mt-2 px-1 items-center gap-3 flex-wrap">
-            <span>↵ to send</span>
-            <span>⇧↵ for new line</span>
+          <div className="hidden md:flex text-[10.5px] text-muted-foreground/80 mt-2 px-1 items-center gap-3 flex-wrap">
+            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">↵</kbd> to send</span>
+            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">⇧↵</kbd> for new line</span>
             <span className="opacity-50">·</span>
-            <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">/</kbd> commands</span>
-            <span><kbd className="px-1 py-0.5 rounded bg-muted text-[10px]">@</kbd> attach a file</span>
+            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">/</kbd> commands</span>
+            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">@</kbd> attach a file</span>
           </div>
         )}
       </div>

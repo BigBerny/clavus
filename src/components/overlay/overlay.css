@@ -504,7 +504,8 @@ html[data-overlay] .ovl-inputzone .glass-heavy:focus-within {
 }
 .ovl-hints b {
   font-weight: 600;
-  color: var(--ovl-text-faint);
+  /* One step above the label text so the key glyph carries the hint. */
+  color: var(--ovl-text-muted);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px;
   padding: 1px 5px;
