@@ -225,6 +225,19 @@ html[data-overlay]:not(.dark) .ovl-backdrop {
   filter: blur(28px) saturate(0.8) brightness(1.28);
 }
 
+/* Adaptive legibility scrim — sits above the frosted screenshot (z 0) but
+   below the content stage (z 1). Opacity is set inline from the wallpaper's
+   measured luminance: 0 over a dark desktop, ramping up over a bright one so
+   the light overlay text never washes out. */
+.ovl-backdrop-scrim {
+  position: absolute;
+  inset: -48px;
+  z-index: 0;
+  pointer-events: none;
+  background: oklch(0.08 0.006 50);
+  transition: opacity 0.45s ease;
+}
+
 /* Scroll region — transparent, content floats directly on the glass */
 .ovl-scroll {
   flex: 1;

@@ -109,6 +109,11 @@ export function OverlayApp() {
   // NSVisualEffectView couldn't fade: window alpha doesn't touch the
   // window-server's backdrop blur, which popped on close.
   const [backdrop, setBackdrop] = useState<string | null>(null)
+  // How hard to darken the frosted screenshot so the light overlay text stays
+  // legible. Driven by the wallpaper's measured luminance: ~0 over a dark
+  // desktop (the backdrop's own brightness(0.72) is enough), ramping up over a
+  // bright one so white text never washes out.
+  const [backdropDim, setBackdropDim] = useState(0)
 
   const isStreaming = useChatStore((s) => (threadId ? s.threadStates[threadId]?.isStreaming ?? EMPTY_STREAMING : EMPTY_STREAMING))
   const { send, abort } = useChat()
@@ -221,6 +226,35 @@ export function OverlayApp() {
     }
   }, [openOverlay, requestClose])
 
+  /* ----- adaptive backdrop dimming for legibility ----- */
+  useEffect(() => {
+    if (!backdrop) { setBackdropDim(0); return }
+    let cancelled = false
+    const img = new Image()
+    img.onload = () => {
+      if (cancelled) return
+      try {
+        const w = 24, h = 16
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')
+        if (!ctx) return
+        ctx.drawImage(img, 0, 0, w, h)
+        const { data } = ctx.getImageData(0, 0, w, h)
+        let sum = 0
+        for (let i = 0; i < data.length; i += 4) {
+          sum += (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255
+        }
+        const lum = sum / (data.length / 4)
+        // Below ~0.32 the wallpaper is dark enough already; above it, ramp a
+        // black scrim up to 0.6 so even a white desktop reads.
+        setBackdropDim(Math.max(0, Math.min(0.6, (lum - 0.32) * 1.15)))
+      } catch { /* data: URLs are same-origin; getImageData won't taint */ }
+    }
+    img.src = backdrop
+    return () => { cancelled = true }
+  }, [backdrop])
+
   /* ----- browser preview (no Tauri shell): open immediately ----- */
   useEffect(() => {
     if (!document.documentElement.hasAttribute('data-tauri')) openOverlay()
@@ -277,7 +311,10 @@ export function OverlayApp() {
   return (
     <div className={'ovl-matte' + (open ? ' is-open' : '')} onMouseDown={onMatteMouseDown}>
       {backdrop && (
-        <div className="ovl-backdrop" style={{ backgroundImage: `url(${backdrop})` }} />
+        <>
+          <div className="ovl-backdrop" style={{ backgroundImage: `url(${backdrop})` }} />
+          <div className="ovl-backdrop-scrim" style={{ opacity: backdropDim }} />
+        </>
       )}
       <div className="ovl-stage">
 
