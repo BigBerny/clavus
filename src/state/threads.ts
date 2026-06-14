@@ -158,6 +158,59 @@ export function getMessagesKey(threadId: string): string {
   return `clavus-messages-${threadId}`
 }
 
+// Queue mirror in localStorage so lazy thread load doesn't block on the network;
+// clavus-data/queues/ on the server is authoritative across devices.
+export function getQueueKey(threadId: string): string {
+  return `clavus-queue-${threadId}`
+}
+
+export function loadQueuedMessageLocal<T>(threadId: string): T | null {
+  try {
+    const raw = localStorage.getItem(getQueueKey(threadId))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as T | null
+    return parsed ?? null
+  } catch {
+    return null
+  }
+}
+
+export function persistQueuedMessageLocal(threadId: string, queue: unknown | null): void {
+  try {
+    if (queue === null || queue === undefined) {
+      localStorage.removeItem(getQueueKey(threadId))
+    } else {
+      localStorage.setItem(getQueueKey(threadId), JSON.stringify(queue))
+    }
+  } catch { /* ignore */ }
+}
+
+const syncQueueTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
+
+export function syncQueuedMessageToServer(threadId: string, queue: unknown | null): void {
+  const existing = syncQueueTimers.get(threadId)
+  if (existing) clearTimeout(existing)
+  syncQueueTimers.set(threadId, setTimeout(async () => {
+    syncQueueTimers.delete(threadId)
+    try {
+      if (queue === null || queue === undefined) {
+        await fetch(`/api/threads/queue/${encodeURIComponent(threadId)}`, {
+          method: 'DELETE',
+          headers: { 'X-Client-Id': getClientId() },
+        })
+      } else {
+        await fetch(`/api/threads/queue/${encodeURIComponent(threadId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-Client-Id': getClientId() },
+          body: JSON.stringify(queue),
+        })
+      }
+    } catch {
+      // Server unavailable — localStorage cache is the fallback until next reconnect.
+    }
+  }, 250))
+}
+
 // Load messages for a specific thread
 export function loadThreadMessages(threadId: string): Message[] {
   try {
@@ -257,7 +310,7 @@ export async function syncFromServer(): Promise<boolean> {
   try {
     const res = await fetch('/api/threads/sync')
     if (!res.ok) return false
-    const data = await res.json() as { threads: Thread[], messages: Record<string, Message[]> }
+    const data = await res.json() as { threads: Thread[], messages: Record<string, Message[]>, queues?: Record<string, unknown> }
     
     const localThreads = loadThreads()
     const serverThreads: Thread[] = data.threads || []
@@ -304,6 +357,18 @@ export async function syncFromServer(): Promise<boolean> {
         if (localMsgs.length > 0) {
           syncMessagesToServer(t.id, localMsgs)
         }
+      }
+    }
+
+    // Hydrate queued composer messages into localStorage so lazy thread load
+    // restores them — covers the cold-start case on a different device.
+    const serverQueues = data.queues || {}
+    for (const t of mergedThreads) {
+      const q = serverQueues[t.id]
+      if (q) persistQueuedMessageLocal(t.id, q)
+      else if (loadQueuedMessageLocal(t.id)) {
+        // Local cache outlived the server entry (drained elsewhere). Drop it.
+        persistQueuedMessageLocal(t.id, null)
       }
     }
     
@@ -513,6 +578,7 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     set((state) => {
       const threads = state.threads.filter((t) => t.id !== id)
       localStorage.removeItem(getMessagesKey(id))
+      localStorage.removeItem(getQueueKey(id))
 
       let activeThreadId = state.activeThreadId
       if (activeThreadId === id) {

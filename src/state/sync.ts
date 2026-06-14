@@ -1,11 +1,12 @@
 import { getClientId, getMessagesKey, refreshThreadsMetadata, useThreadsStore } from './threads'
-import { refreshThreadMessages, useChatStore, type Message } from './chat'
+import { applyQueueFromServer, refreshThreadMessages, useChatStore, type Message, type QueuedMessage } from './chat'
 import { normalizeToolCalls } from '../lib/toolCalls'
 
 type ChangeEvent =
   | { type: 'threads' }
   | { type: 'messages'; threadId: string }
   | { type: 'thread-deleted'; threadId: string }
+  | { type: 'queue'; threadId: string; queue: QueuedMessage | null }
 
 let es: EventSource | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -84,6 +85,10 @@ function handleEvent(event: ChangeEvent) {
     }
     return
   }
+  if (event.type === 'queue') {
+    applyQueueFromServer(event.threadId, event.queue ?? null)
+    return
+  }
   if (event.type === 'thread-deleted') {
     // Drop the thread metadata locally so the sidebar stays in sync.
     const store = useThreadsStore.getState()
@@ -99,6 +104,7 @@ function handleEvent(event: ChangeEvent) {
       delete rest[event.threadId]
       useChatStore.setState({ threadStates: rest })
     }
+    try { localStorage.removeItem(`clavus-queue-${event.threadId}`) } catch { /* ignore */ }
     return
   }
 }

@@ -1,5 +1,13 @@
 import { create } from 'zustand'
-import { useThreadsStore, loadThreadMessages, saveThreadMessages, getMessagesKey } from './threads'
+import {
+  useThreadsStore,
+  loadThreadMessages,
+  saveThreadMessages,
+  getMessagesKey,
+  loadQueuedMessageLocal,
+  persistQueuedMessageLocal,
+  syncQueuedMessageToServer,
+} from './threads'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
 
@@ -162,7 +170,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const messages = loadThreadMessages(threadId).map((m) => (
       m.toolCalls ? { ...m, toolCalls: normalizeToolCalls(m.toolCalls) } : m
     ))
-    const newState: ThreadStreamState = { messages, isStreaming: false, abortController: null, queuedMessage: null }
+    const queuedMessage = loadQueuedMessageLocal<QueuedMessage>(threadId)
+    const newState: ThreadStreamState = { messages, isStreaming: false, abortController: null, queuedMessage }
     set((s) => ({
       threadStates: { ...s.threadStates, [threadId]: newState },
     }))
@@ -172,10 +181,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
   ensureThread: (threadId: string) => {
     if (get().threadStates[threadId]) return
     const messages = loadThreadMessages(threadId)
+    const queuedMessage = loadQueuedMessageLocal<QueuedMessage>(threadId)
     set((s) => ({
       threadStates: {
         ...s.threadStates,
-        [threadId]: { messages, isStreaming: false, abortController: null, queuedMessage: null },
+        [threadId]: { messages, isStreaming: false, abortController: null, queuedMessage },
       },
     }))
   },
@@ -503,6 +513,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       // Strip empty arrays so consumers can treat them as undefined.
       if (merged.files && merged.files.length === 0) delete merged.files
       if (merged.images && merged.images.length === 0) delete merged.images
+      persistQueuedMessageLocal(threadId, merged)
+      syncQueuedMessageToServer(threadId, merged)
       return {
         threadStates: {
           ...state.threadStates,
@@ -516,6 +528,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((state) => {
       const ts = state.threadStates[threadId]
       if (!ts || !ts.queuedMessage) return state
+      persistQueuedMessageLocal(threadId, null)
+      syncQueuedMessageToServer(threadId, null)
       return {
         threadStates: {
           ...state.threadStates,
@@ -622,4 +636,20 @@ export async function refreshThreadMessages(threadId: string): Promise<boolean> 
   } catch {
     return false
   }
+}
+
+/** Apply a queued-message update that arrived from the server (SSE or sync).
+ *  Skipped while a stream is in flight so we don't trample a just-drained queue. */
+export function applyQueueFromServer(threadId: string, queue: QueuedMessage | null): void {
+  persistQueuedMessageLocal(threadId, queue)
+  const chat = useChatStore.getState()
+  const ts = chat.threadStates[threadId]
+  if (!ts) return
+  if (ts.isStreaming && queue === null) return
+  useChatStore.setState((state) => ({
+    threadStates: {
+      ...state.threadStates,
+      [threadId]: { ...ts, queuedMessage: queue },
+    },
+  }))
 }

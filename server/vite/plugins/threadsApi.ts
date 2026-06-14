@@ -14,6 +14,22 @@ export function threadsApiPlugin() {
   if (!fs.existsSync(messagesDir)) {
     fs.mkdirSync(messagesDir, { recursive: true })
   }
+  const queuesDir = nodePath.join(THREADS_DATA_DIR, 'queues')
+  if (!fs.existsSync(queuesDir)) {
+    fs.mkdirSync(queuesDir, { recursive: true })
+  }
+
+  const queueFile = (threadId: string) => nodePath.join(queuesDir, `${threadId}.json`)
+  function readQueue(threadId: string): unknown | null {
+    const f = queueFile(threadId)
+    if (!fs.existsSync(f)) return null
+    try {
+      const parsed = JSON.parse(fs.readFileSync(f, 'utf-8'))
+      return parsed ?? null
+    } catch {
+      return null
+    }
+  }
 
   async function readBody(req: any): Promise<string> {
     const chunks: Buffer[] = []
@@ -28,6 +44,7 @@ export function threadsApiPlugin() {
     | { type: 'threads' }
     | { type: 'messages'; threadId: string }
     | { type: 'thread-deleted'; threadId: string }
+    | { type: 'queue'; threadId: string; queue: unknown | null }
   const sseClients = new Set<{ res: any; clientId: string }>()
 
   function broadcast(event: ChangeEvent, originClientId: string | null) {
@@ -120,8 +137,50 @@ export function threadsApiPlugin() {
             const threadId = decodeURIComponent(msgMatch[1])
             const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
             if (fs.existsSync(msgFile)) fs.unlinkSync(msgFile)
+            const qFile = queueFile(threadId)
+            if (fs.existsSync(qFile)) fs.unlinkSync(qFile)
             res.end(JSON.stringify({ ok: true }))
             broadcast({ type: 'thread-deleted', threadId }, originClientId)
+            return
+          }
+
+          const queueMatch = req.url.match(/^\/api\/threads\/queue\/([^/?]+)/)
+          if (queueMatch && req.method === 'GET') {
+            const threadId = decodeURIComponent(queueMatch[1])
+            res.end(JSON.stringify(readQueue(threadId)))
+            return
+          }
+
+          if (queueMatch && req.method === 'PUT') {
+            const threadId = decodeURIComponent(queueMatch[1])
+            const body = await readBody(req)
+            let queue: unknown
+            try {
+              queue = JSON.parse(body)
+            } catch {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'invalid JSON' }))
+              return
+            }
+            if (queue === null || queue === undefined) {
+              const qFile = queueFile(threadId)
+              if (fs.existsSync(qFile)) fs.unlinkSync(qFile)
+              res.end(JSON.stringify({ ok: true }))
+              broadcast({ type: 'queue', threadId, queue: null }, originClientId)
+              return
+            }
+            fs.writeFileSync(queueFile(threadId), JSON.stringify(queue), 'utf-8')
+            res.end(JSON.stringify({ ok: true }))
+            broadcast({ type: 'queue', threadId, queue }, originClientId)
+            return
+          }
+
+          if (queueMatch && req.method === 'DELETE') {
+            const threadId = decodeURIComponent(queueMatch[1])
+            const qFile = queueFile(threadId)
+            if (fs.existsSync(qFile)) fs.unlinkSync(qFile)
+            res.end(JSON.stringify({ ok: true }))
+            broadcast({ type: 'queue', threadId, queue: null }, originClientId)
             return
           }
 
@@ -179,13 +238,16 @@ export function threadsApiPlugin() {
               ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
               : []
             const allMessages: Record<string, any[]> = {}
+            const allQueues: Record<string, unknown> = {}
             for (const t of threads) {
               const msgFile = nodePath.join(messagesDir, `${t.id}.json`)
               allMessages[t.id] = fs.existsSync(msgFile)
                 ? JSON.parse(fs.readFileSync(msgFile, 'utf-8'))
                 : []
+              const queued = readQueue(t.id)
+              if (queued) allQueues[t.id] = queued
             }
-            res.end(JSON.stringify({ threads, messages: allMessages }))
+            res.end(JSON.stringify({ threads, messages: allMessages, queues: allQueues }))
             return
           }
 
