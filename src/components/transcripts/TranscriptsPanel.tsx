@@ -31,8 +31,18 @@ interface TranscriptEntry {
   appName: string
   bundleId: string
   text: string
+  /** ElevenLabs round-trip latency, measured server-side. */
   durationMs: number | null
+  /** Bytes uploaded as multipart `file`. */
   audioBytes: number | null
+  /** Length of the recorded audio (clavus-desktop widget only, for now). */
+  audioDurationMs: number | null
+  /** MIME type the client sent (e.g. "audio/ogg" for desktop, browser-picked
+   *  for input-field path). */
+  audioFormat: string | null
+  /** Wall time the desktop widget spent in the Opus encoder. Should be near
+   *  zero — encoding runs in parallel with capture. */
+  encodingMs: number | null
   transcriptionId: string
   compose: ComposeDebug | null
 }
@@ -431,10 +441,27 @@ function DebugBlock({
 
   return (
     <div className="mt-3 ml-7 rounded-md border border-border-light/60 dark:border-border-dark/60 bg-surface-light-2/40 dark:bg-surface-dark-3/40 p-3 text-[12px] space-y-3">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-light-muted dark:text-text-dark-muted">
+        {entry.audioDurationMs != null && (
+          <span><b className="font-medium text-text-light dark:text-text-dark">audio:</b> {formatMs(entry.audioDurationMs)}</span>
+        )}
+        {entry.audioBytes != null && (
+          <span><b className="font-medium text-text-light dark:text-text-dark">size:</b> {formatBytes(entry.audioBytes)}</span>
+        )}
+        {entry.audioFormat && (
+          <span><b className="font-medium text-text-light dark:text-text-dark">format:</b> {entry.audioFormat}</span>
+        )}
+        {entry.encodingMs != null && (
+          <span><b className="font-medium text-text-light dark:text-text-dark">encode:</b> {entry.encodingMs}ms</span>
+        )}
+        {entry.durationMs != null && (
+          <span><b className="font-medium text-text-light dark:text-text-dark">stt:</b> {entry.durationMs}ms</span>
+        )}
+      </div>
       {c && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-text-light-muted dark:text-text-dark-muted">
           {c.model && <span><b className="font-medium text-text-light dark:text-text-dark">model:</b> {c.model}</span>}
-          {c.durationMs != null && <span><b className="font-medium text-text-light dark:text-text-dark">latency:</b> {c.durationMs}ms</span>}
+          {c.durationMs != null && <span><b className="font-medium text-text-light dark:text-text-dark">compose:</b> {c.durationMs}ms</span>}
           {c.schema && <span><b className="font-medium text-text-light dark:text-text-dark">schema:</b> {c.schema}</span>}
           {c.directiveApplied && <span className="text-amber-600 dark:text-amber-400">directive applied</span>}
         </div>
@@ -548,20 +575,40 @@ function DebugSection({
   )
 }
 
+function formatMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`
+  const s = ms / 1000
+  if (s < 60) return `${s.toFixed(s < 10 ? 1 : 0)}s`
+  const m = Math.floor(s / 60)
+  const rs = Math.round(s - m * 60)
+  return `${m}:${rs.toString().padStart(2, '0')}`
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)}KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`
+}
+
 function buildDebugBundle(entry: TranscriptEntry): string {
   const c = entry.compose
   const lines: string[] = []
   lines.push(`# Transcript debug bundle`)
-  lines.push(`timestamp: ${entry.timestamp}`)
-  lines.push(`source:    ${entry.source}`)
-  if (entry.appName) lines.push(`app:       ${entry.appName}`)
-  if (entry.bundleId) lines.push(`bundleId:  ${entry.bundleId}`)
+  lines.push(`timestamp:    ${entry.timestamp}`)
+  lines.push(`source:       ${entry.source}`)
+  if (entry.appName) lines.push(`app:          ${entry.appName}`)
+  if (entry.bundleId) lines.push(`bundleId:     ${entry.bundleId}`)
+  if (entry.audioDurationMs != null) lines.push(`audio length: ${entry.audioDurationMs}ms`)
+  if (entry.audioBytes != null) lines.push(`audio bytes:  ${entry.audioBytes}`)
+  if (entry.audioFormat) lines.push(`audio format: ${entry.audioFormat}`)
+  if (entry.encodingMs != null) lines.push(`encode time:  ${entry.encodingMs}ms`)
+  if (entry.durationMs != null) lines.push(`stt latency:  ${entry.durationMs}ms`)
   if (c) {
     lines.push(`schema:    ${c.schema}`)
     if (c.channel) lines.push(`channel:   ${c.channel}`)
     if (c.language) lines.push(`language:  ${c.language}${c.languageDemoted ? ' (demoted)' : ''}`)
-    if (c.model) lines.push(`model:     ${c.model}`)
-    if (c.durationMs != null) lines.push(`latency:   ${c.durationMs}ms`)
+    if (c.model) lines.push(`model:        ${c.model}`)
+    if (c.durationMs != null) lines.push(`compose:      ${c.durationMs}ms`)
   }
   lines.push('', '## Transcript (ElevenLabs)', entry.text)
   if (c?.systemPrompt) lines.push('', '## System prompt', c.systemPrompt)

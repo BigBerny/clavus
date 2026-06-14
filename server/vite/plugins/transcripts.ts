@@ -231,6 +231,9 @@ export function transcriptsApiPlugin() {
               text,
               durationMs: parsed.durationMs ?? null,
               audioBytes: parsed.audioBytes ?? null,
+              audioDurationMs: parsed.audioDurationMs ?? null,
+              audioFormat: parsed.audioFormat ?? null,
+              encodingMs: parsed.encodingMs ?? null,
               transcriptionId: parsed.transcriptionId || '',
               compose: composeMatch
                 ? {

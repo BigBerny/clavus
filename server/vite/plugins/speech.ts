@@ -155,12 +155,23 @@ export function desktopDictationPlugin() {
         try { parsed = JSON.parse(responseText) } catch {}
 
         if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
+        const headerNum = (name: string): number | undefined => {
+          const v = req.headers[name]
+          if (typeof v !== 'string' || !v) return undefined
+          const n = parseInt(v, 10)
+          return Number.isFinite(n) ? n : undefined
+        }
         fs.appendFileSync(historyFile, JSON.stringify({
           timestamp: new Date().toISOString(),
           source: 'clavus-desktop',
           appName: req.headers['x-clavus-app-name'] || '',
           bundleId: req.headers['x-clavus-bundle-id'] || '',
           audioBytes: body.length,
+          audioDurationMs: headerNum('x-clavus-audio-duration-ms'),
+          audioFormat: typeof req.headers['x-clavus-audio-format'] === 'string'
+            ? req.headers['x-clavus-audio-format']
+            : undefined,
+          encodingMs: headerNum('x-clavus-audio-encoding-ms'),
           status: resp.status,
           durationMs: Date.now() - startedAt,
           text: parsed?.text || '',
