@@ -159,7 +159,10 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // Register manually in main.tsx so we can call registration.update()
+      // on visibility/resume — that's how the Capacitor shell picks up new
+      // openclaw-client deploys without a full network reload on every launch.
+      injectRegister: false,
       injectManifest: {
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MiB — increased for Marksense editor chunk
       },

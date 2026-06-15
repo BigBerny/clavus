@@ -53,22 +53,44 @@ if (isTauriShell) document.documentElement.setAttribute('data-tauri', 'true')
 const isOverlayMode = new URLSearchParams(window.location.search).get('overlay') === '1'
 if (isOverlayMode) document.documentElement.setAttribute('data-overlay', 'true')
 
-// In the Capacitor WKWebView (and the Tauri macOS shell, which sets its UA to
-// "Clavus/<ver> (Tauri; …)") we don't want a service worker: precached chunks
-// make new app builds invisible until the SW updates (which can take two cold
-// starts), so changes to the openclaw-client deploy don't show up reliably on
-// the phone or in the desktop app. Unregister anything already installed and
-// clear the caches.
-const isTauri = /Clavus\/[\d.]+ \(Tauri/.test(navigator.userAgent)
-if ((isNative || isTauri) && 'serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((regs) => {
-    regs.forEach((reg) => { void reg.unregister() })
-  }).catch(() => { /* ignore */ })
-  if ('caches' in window) {
-    caches.keys().then((keys) => {
-      keys.forEach((k) => { void caches.delete(k) })
-    }).catch(() => { /* ignore */ })
-  }
+// Service worker registration with explicit update detection.
+//
+// Capacitor (`server.url` → openclaw.random-hamster.win) gets its WKWebView
+// evicted aggressively when the app is backgrounded. Without a SW shell that
+// meant every cold start fetched the full app over Cloudflare and rendered a
+// black flash. With the SW on:
+//   - WKWebView restart serves cached shell instantly, no network, no flash.
+//   - On visibility/resume we call registration.update(); if the deploy has
+//     moved on (new sw.js content hash), the autoUpdate path skipWaiting +
+//     reloads the page once. No code change → no reload.
+//   - The user never has to reinstall the Capacitor app — only the cached web
+//     content swaps.
+if ('serviceWorker' in navigator) {
+  void import('virtual:pwa-register').then(({ registerSW }) => {
+    let swRegistration: ServiceWorkerRegistration | null = null
+    const updateSW = registerSW({
+      immediate: true,
+      onRegisteredSW(_url, reg) {
+        swRegistration = reg ?? null
+      },
+      onNeedRefresh() {
+        console.log('[Clavus] New build detected — reloading')
+        void updateSW(true)
+      },
+    })
+
+    // Nudge the browser to check for a new SW whenever the app comes back to
+    // the foreground. Critical on Capacitor + Tauri where the webview process
+    // may have been suspended for hours.
+    const checkForUpdate = () => {
+      if (document.visibilityState !== 'visible') return
+      swRegistration?.update().catch(() => { /* ignore */ })
+    }
+    document.addEventListener('visibilitychange', checkForUpdate)
+    window.addEventListener('clavus:app-resume', checkForUpdate)
+  }).catch((err) => {
+    console.warn('[Clavus] PWA register failed', err)
+  })
 }
 
 createRoot(document.getElementById('root')!).render(
