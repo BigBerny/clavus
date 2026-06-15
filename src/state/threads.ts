@@ -660,8 +660,9 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
 
   archiveThread: (id) => {
     set((state) => {
+      const now = Date.now()
       const threads = state.threads.map((t) =>
-        t.id === id ? { ...t, archived: true } : t,
+        t.id === id ? { ...t, archived: true, updatedAt: now } : t,
       )
       saveThreads(threads)
       return { threads }
@@ -670,8 +671,9 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
 
   unarchiveThread: (id) => {
     set((state) => {
+      const now = Date.now()
       const threads = state.threads.map((t) =>
-        t.id === id ? { ...t, archived: false } : t,
+        t.id === id ? { ...t, archived: false, updatedAt: now } : t,
       )
       saveThreads(threads)
       return { threads }
@@ -697,8 +699,9 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
 
   toggleFavorite: (id) => {
     set((state) => {
+      const now = Date.now()
       const threads = state.threads.map((t) =>
-        t.id === id ? { ...t, favorite: !t.favorite } : t,
+        t.id === id ? { ...t, favorite: !t.favorite, updatedAt: now } : t,
       )
       saveThreads(threads)
       return { threads }
