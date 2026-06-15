@@ -88,6 +88,20 @@ if ('serviceWorker' in navigator) {
     }
     document.addEventListener('visibilitychange', checkForUpdate)
     window.addEventListener('clavus:app-resume', checkForUpdate)
+
+    // In dev mode the precache manifest is empty, so sw.js content doesn't
+    // change between deploys and onNeedRefresh never fires. The SW's runtime
+    // navigation cache uses BroadcastUpdatePlugin to flag fresh HTML differing
+    // from the cached copy — turn that into a reload here.
+    let reloading = false
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type !== 'CACHE_UPDATED') return
+      if (event.data?.meta !== 'workbox-broadcast-update') return
+      if (reloading) return
+      reloading = true
+      console.log('[Clavus] Cached HTML changed — reloading')
+      void updateSW(true)
+    })
   }).catch((err) => {
     console.warn('[Clavus] PWA register failed', err)
   })
