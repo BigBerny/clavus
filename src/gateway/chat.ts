@@ -22,6 +22,8 @@ export interface StreamCallbacks {
   onThinking?: (token: string) => void
   onThinkingDone?: () => void
   onToolCall?: (toolCall: ToolCallEvent) => void
+  /** Workspace notes Trova matched for this turn (Mode 1 pre-pass), shown under the sent message. */
+  onWorkspaceContext?: (files: WorkspaceFileEvent[]) => void
   onUsage?: (usage: UsageData) => void
   onResponseId?: (responseId: string) => void
   /** Called with the sequence id of each buffered event (when streamed via the
@@ -37,6 +39,13 @@ export interface ToolCallEvent {
   args: Record<string, unknown>
   result?: unknown
   status: 'running' | 'completed' | 'error'
+}
+
+export interface WorkspaceFileEvent {
+  path: string
+  title: string
+  kind: 'inject' | 'suggest'
+  excerpt?: string
 }
 
 export interface ChatHistoryMessage {
@@ -292,6 +301,12 @@ function dispatchResponsesEvent(
     const resp = parsed.response as Record<string, unknown> | undefined
     const id = resp?.id
     if (typeof id === 'string') callbacks.onResponseId?.(id)
+    return false
+  }
+
+  if (eventName === 'response.workspace_context') {
+    const files = Array.isArray(parsed.files) ? (parsed.files as WorkspaceFileEvent[]) : []
+    if (files.length) callbacks.onWorkspaceContext?.(files)
     return false
   }
 

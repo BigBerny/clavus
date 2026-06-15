@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect, useRef, useMemo, Suspense } fro
 import { FileText, Paperclip, Volume2 } from 'lucide-react'
 import type { Message, MessageUsage } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
+import { TrovaFileCards } from './TrovaFileCards.tsx'
 import { ButtonGroup, SelectBlock, ConfirmBlock, FormBlock, parseButtonsLine, parseSelectLine, parseFormBlock, type ButtonAction, type SelectOption, type FormBlockData } from './InteractiveBlock.tsx'
 import { haptic } from '../../lib/native'
 import { normalizeToolCalls } from '../../lib/toolCalls.ts'
@@ -557,7 +558,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   return (
     <div
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}
+      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchEnd}
@@ -783,6 +784,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           </div>
         )}
       </div>
+      {/* Trova retrieval — workspace notes matched for this sent message */}
+      {isUser && message.workspaceFiles && message.workspaceFiles.length > 0 && (
+        <TrovaFileCards files={message.workspaceFiles} className="mt-1 mr-1 max-w-[95%] md:max-w-[750px]" />
+      )}
     </div>
   )
 })

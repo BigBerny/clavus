@@ -153,7 +153,7 @@ export function responsesProxyPlugin() {
     // threadId so it windows recent turns and doesn't re-inject the same note.
     let agentMessage = input
     const wsCtx = await workspaceContextBlock(threadId || undefined, input)
-    if (wsCtx) agentMessage = `${wsCtx}\n\n${input}`
+    if (wsCtx.block) agentMessage = `${wsCtx.block}\n\n${input}`
 
     const sessionKey = typeof parsed.user === 'string' ? parsed.user
       : typeof req.headers['x-openclaw-session-key'] === 'string' ? req.headers['x-openclaw-session-key']
@@ -190,6 +190,15 @@ export function responsesProxyPlugin() {
       response: { id: responseId, object: 'response', created_at: Math.floor(Date.now() / 1000), status: 'in_progress', model: modelOverride || parsed.model || 'openclaw/default', output: [], usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } },
     })
     bufferAppendEvent(responseId, 'response.created', createdEvent)
+
+    // Surface the workspace notes Trova matched for this turn, so the client can show
+    // them under the sent message. Buffered (not just written) so a resume replays it.
+    if (wsCtx.files.length) {
+      bufferAppendEvent(responseId, 'response.workspace_context', JSON.stringify({
+        type: 'response.workspace_context',
+        files: wsCtx.files,
+      }))
+    }
 
     // Subscribe client to buffer (replays the created event + all subsequent)
     attachSubscriber(res, responseId, 0)
@@ -332,7 +341,7 @@ export function responsesProxyPlugin() {
       const latest = extractLatestUserText(parsed.input)
       if (latest) {
         const ctx = await workspaceContextBlock(threadId || undefined, latest)
-        if (ctx) forwardBody = JSON.stringify({ ...parsed, input: prependContext(parsed.input, ctx) })
+        if (ctx.block) forwardBody = JSON.stringify({ ...parsed, input: prependContext(parsed.input, ctx.block) })
       }
     } catch { /* forward the original body */ }
 

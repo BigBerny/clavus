@@ -19,6 +19,16 @@ export interface ToolCall {
   status: 'running' | 'completed' | 'error'
 }
 
+/** A workspace note Trova matched for a sent message (the Mode 1 pre-pass).
+ *  Shown under the user's message; `inject` excerpts were put into the prompt,
+ *  `suggest` notes were merely flagged as related. */
+export interface WorkspaceFile {
+  path: string
+  title: string
+  kind: 'inject' | 'suggest'
+  excerpt?: string
+}
+
 export interface MediaAttachment {
   type: 'image' | 'audio' | 'video' | 'file'
   url: string
@@ -42,6 +52,8 @@ export interface Message {
   streaming?: boolean
   images?: string[] // base64 data URLs
   toolCalls?: ToolCall[]
+  /** Workspace notes Trova surfaced for this (user) message. */
+  workspaceFiles?: WorkspaceFile[]
   model?: string
   usage?: MessageUsage
   media?: MediaAttachment[]
@@ -110,6 +122,7 @@ interface ChatState {
   setStreaming: (threadId: string, streaming: boolean) => void
   setAbortController: (threadId: string, controller: AbortController | null) => void
   updateToolCalls: (threadId: string, id: string, toolCalls: ToolCall[]) => void
+  setWorkspaceFiles: (threadId: string, id: string, files: WorkspaceFile[]) => void
   setMessageModel: (threadId: string, id: string, model: string) => void
   setMessageUsage: (threadId: string, id: string, usage: MessageUsage) => void
   setBackendResponseId: (threadId: string, id: string, responseId: string) => void
@@ -343,6 +356,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
               m.id === id ? { ...m, toolCalls: normalizeToolCalls(toolCalls) } : m,
             ),
           },
+        },
+      }
+    }),
+
+  setWorkspaceFiles: (threadId, id, files) =>
+    set((state) => {
+      const ts = state.threadStates[threadId]
+      if (!ts) return state
+      const messages = ts.messages.map((m) =>
+        m.id === id ? { ...m, workspaceFiles: files } : m,
+      )
+      // The user message isn't streaming, so persist immediately (no finalize will run on it).
+      saveMessages(threadId, messages)
+      return {
+        threadStates: {
+          ...state.threadStates,
+          [threadId]: { ...ts, messages },
         },
       }
     }),

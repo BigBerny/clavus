@@ -42,6 +42,47 @@ interface PackResult {
   guidance: string | null
 }
 
+/** A workspace note Trova surfaced for a turn — surfaced to the UI under the sent message. */
+export interface WorkspaceContextFile {
+  path: string
+  /** Heading breadcrumb (inject) or note title (suggest) — display label. */
+  title: string
+  /** `inject` = excerpt was put into the prompt; `suggest` = related note, not injected. */
+  kind: 'inject' | 'suggest'
+  /** The injected excerpt, or the note abstract for suggestions. */
+  excerpt?: string
+}
+
+export interface WorkspaceContextResult {
+  /** The `<workspace_context>` block to prepend to the agent message, or null. */
+  block: string | null
+  /** The notes Trova matched, for display under the user's sent message. */
+  files: WorkspaceContextFile[]
+}
+
+/** Flatten a pack result into a deduped, file-level list for the UI. Multiple injected
+ *  excerpts from the same note are coalesced into one entry. */
+function collectFiles(r: PackResult): WorkspaceContextFile[] {
+  const files: WorkspaceContextFile[] = []
+  const idxByPath = new Map<string, number>()
+  for (const u of r.inject ?? []) {
+    const at = idxByPath.get(u.path)
+    if (at != null) {
+      const prev = files[at].excerpt
+      files[at].excerpt = prev ? `${prev}\n\n${u.text}` : u.text
+    } else {
+      idxByPath.set(u.path, files.length)
+      files.push({ path: u.path, title: u.breadcrumb || u.path, kind: 'inject', excerpt: u.text })
+    }
+  }
+  for (const s of r.suggest ?? []) {
+    if (idxByPath.has(s.path)) continue
+    idxByPath.set(s.path, files.length)
+    files.push({ path: s.path, title: s.title || s.path, kind: 'suggest', excerpt: s.abstract || undefined })
+  }
+  return files
+}
+
 function formatBlock(r: PackResult): string | null {
   const parts: string[] = []
   if (r.guidance) parts.push(r.guidance)
@@ -56,9 +97,10 @@ function formatBlock(r: PackResult): string | null {
   return `<workspace_context>\n${parts.join('\n\n')}\n</workspace_context>`
 }
 
-/** Context block to prepend to the agent message, or null to leave it untouched. Never throws. */
-export async function workspaceContextBlock(threadId: string | undefined, message: string): Promise<string | null> {
-  if (!ENABLED || !message.trim()) return null
+/** Context block to prepend to the agent message + the notes Trova matched (for the UI).
+ *  Never throws — fail-open returns an empty result. */
+export async function workspaceContextBlock(threadId: string | undefined, message: string): Promise<WorkspaceContextResult> {
+  if (!ENABLED || !message.trim()) return { block: null, files: [] }
   const session = threadId ? getSession(threadId) : null
 
   let conversation: { role: string; content: string }[]
@@ -81,15 +123,15 @@ export async function workspaceContextBlock(threadId: string | undefined, messag
       body: JSON.stringify({ conversation, exclude }),
       signal: ac.signal,
     })
-    if (!res.ok) return null
+    if (!res.ok) return { block: null, files: [] }
     const r = (await res.json()) as PackResult
     if (session) {
       for (const u of r.inject ?? []) session.injected.add(u.path)
       for (const s of r.suggest ?? []) session.injected.add(s.path)
     }
-    return formatBlock(r)
+    return { block: formatBlock(r), files: collectFiles(r) }
   } catch {
-    return null // fail-open: a slow or unreachable indexer must never block chat
+    return { block: null, files: [] } // fail-open: a slow or unreachable indexer must never block chat
   } finally {
     clearTimeout(timer)
   }

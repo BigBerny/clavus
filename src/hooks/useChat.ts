@@ -240,6 +240,20 @@ export function useChat() {
       onThinkingDone: () => store.getState().setThinkingDone(threadId, assistantId),
       onToken: (token: string) => { markThrottled(); store.getState().appendToMessage(threadId, assistantId, token) },
       onToolCall: handleToolCall,
+      onWorkspaceContext: (files: import('../gateway/chat.ts').WorkspaceFileEvent[]) => {
+        // Trova ran the Mode 1 pre-pass for THIS turn — attach the matched notes to the
+        // user message that triggered it (the most recent user message in the thread).
+        // A turn can emit this more than once (a retry re-runs the pre-pass server-side,
+        // but with an accumulating exclude set, so its result is a partial subset). Union
+        // by path so the first full result is preserved and retries only add new notes.
+        const msgs = store.getState().getThreadState(threadId).messages
+        const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
+        if (!lastUser) return
+        const existing = lastUser.workspaceFiles ?? []
+        const seen = new Set(existing.map((f) => f.path))
+        const merged = [...existing, ...files.filter((f) => !seen.has(f.path))]
+        store.getState().setWorkspaceFiles(threadId, lastUser.id, merged)
+      },
       onResponseId: (responseId: string) => {
         store.getState().setBackendResponseId(threadId, assistantId, responseId)
       },
