@@ -558,7 +558,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   return (
     <div
-      className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}
+      className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-[fadeSlideIn_0.3s_ease-out] group/msg`}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchEnd}
@@ -584,6 +584,10 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
                 }`
           }`}
         >
+          {/* Trova retrieval — workspace notes matched for this sent message (top of bubble) */}
+          {isUser && message.workspaceFiles && message.workspaceFiles.length > 0 && (
+            <TrovaFileCards files={message.workspaceFiles} className="mb-1.5" />
+          )}
           {/* Image attachments (user-sent) */}
           {message.images && message.images.length > 0 && (
             <div className={`flex flex-wrap gap-1.5 ${message.content ? 'mb-2' : ''}`}>
@@ -784,10 +788,6 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
           </div>
         )}
       </div>
-      {/* Trova retrieval — workspace notes matched for this sent message */}
-      {isUser && message.workspaceFiles && message.workspaceFiles.length > 0 && (
-        <TrovaFileCards files={message.workspaceFiles} className="mt-1 mr-1 max-w-[95%] md:max-w-[750px]" />
-      )}
     </div>
   )
 })
