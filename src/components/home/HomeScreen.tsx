@@ -1,23 +1,15 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Bell, ChevronRight, Star } from 'lucide-react'
 import { useThreadsStore } from '../../state/threads'
-import { useTabsStore, openOrFocusFinderTab, type Tab, type ChatTab, type MarksenseTab } from '../../state/tabs'
+import { useTabsStore, openOrFocusFinderTab, type ChatTab, type MarksenseTab } from '../../state/tabs'
 import { ThreadSearch } from './ThreadSearch.tsx'
 import { applyRoute } from '../../state/router.ts'
 import { useUIStore } from '../../state/ui.ts'
+import { ThreadStatusDot } from '../layout/ThreadStatusDot.tsx'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
 import { greeting, formatDateLabel, relativeTime, stripMarkdown } from '../../lib/homeText'
-
-/** Pick a stable category accent for a tab — mirrors DesktopSidebar.accentForTab */
-function accentForTab(tab: Tab): string {
-  if (tab.type === 'marksense' || tab.type === 'file') return 'cat-doc'
-  const accents = ['cat-chat', 'cat-violet', 'cat-rose', 'cat-voice']
-  let h = 0
-  for (let i = 0; i < tab.id.length; i++) h = (h * 31 + tab.id.charCodeAt(i)) >>> 0
-  return accents[h % accents.length]
-}
 
 // ── icons ──────────────────────────────────────────────────────────────────
 
@@ -317,7 +309,6 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                     const thread = tab.type === 'chat'
                       ? threads.find((t) => t.id === (tab as ChatTab).threadId)
                       : undefined
-                    const accent = accentForTab(tab)
                     // Prefer the synced thread title — `tab.title` is a local
                     // snapshot that goes stale when another device retitles.
                     const displayTitle = (tab.type === 'chat' ? thread?.title : undefined) || tab.title || 'Untitled'
@@ -339,10 +330,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                           className={`inline-btn home-group-row ${i > 0 ? 'home-group-row-border' : ''}`}
                           style={tab.type === 'chat' ? { paddingRight: '2.75rem' } : undefined}
                         >
-                          <span
-                            className="w-[5px] h-[5px] rounded-full shrink-0"
-                            style={{ background: `var(--color-${accent})` }}
-                          />
+                          <ThreadStatusDot threadId={tab.type === 'chat' ? (tab as ChatTab).threadId : undefined} />
                           <div className="flex-1 min-w-0">
                             <div className="text-[13.5px] font-medium truncate text-foreground">{displayTitle}</div>
                             {preview && (
@@ -421,7 +409,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
                         onClick={() => handleSelectThread(thread.id)}
                         className="inline-btn home-group-row home-group-row-border"
                       >
-                        <span className={`w-[5px] h-[5px] rounded-full shrink-0 ${thread.archived ? 'bg-muted-foreground/30' : 'bg-accent/60'}`} />
+                        <ThreadStatusDot threadId={thread.id} />
                         <div className="flex-1 min-w-0">
                           <div className={`text-[13.5px] font-medium truncate ${thread.archived ? 'text-foreground/70' : 'text-foreground'}`}>
                             {thread.title || 'Untitled'}

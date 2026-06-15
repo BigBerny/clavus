@@ -3,6 +3,12 @@ import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
 import { openOrFocusFinderTab } from '../../state/tabs'
 import { lazyWithRetry } from '../../lib/lazyWithRetry'
 
+// The editor swallows its own saves via the 2s recent-write window in the
+// workspace plugin. Anything within this longer grace window we treat as
+// "our own echo" too — covers OneDrive metadata touches and macOS FSEvents
+// that fire `change` for non-content changes.
+const SELF_WRITE_SILENCE_MS = 6000
+
 class EditorErrorBoundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { hasError: boolean }
@@ -26,7 +32,7 @@ const MarksenseEditorInstance = lazyWithRetry(
   m => (m as typeof import('@clavus/marksense-core')).MarksenseEditorInstance,
 )
 
-export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
+export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitToggle }: {
   path?: string
   /** @deprecated Legacy URL-based prop */
   documentUrl?: string
@@ -34,6 +40,11 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   isVisible: boolean
   /** Called when the user clicks "Browse" in the header — App focuses the Finder tab. */
   onOpenFinder?: () => void
+  /** When present, render a split/pane toggle in the title bar (pager mode only). */
+  splitToggle?: {
+    mode: 'split' | 'pane'
+    onToggle: () => void
+  }
 }) {
   // Track content + the path it belongs to. We compare against `path` on every
   // render so a path switch wipes stale content BEFORE we render the editor.
@@ -43,10 +54,19 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   const [content, setContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  // Bumped when the server reports an external change to the open file.
-  // Forces a refetch via this effect's deps and a remount of the editor
-  // (which only reads `content` once on mount) via instanceId below.
+  // Bumped only when the server reports an external change AND the on-disk
+  // content actually differs from what we have in memory. The fetch effect
+  // depends on this; the editor's `instanceId` includes it so a real change
+  // remounts the editor with the new content.
   const [revision, setRevision] = useState(0)
+  // Tracks the last time we (or our autosave) wrote this file so we can ignore
+  // file-watch echoes from OneDrive sync or macOS FSEvents fired without an
+  // actual content change.
+  const lastSelfWriteRef = useRef(0)
+  // Holds the content currently shown by the editor — used to decide if an
+  // external change is real or a no-op echo.
+  const currentContentRef = useRef<string | null>(null)
+  currentContentRef.current = content
 
   // If the path changed under us, drop the stale content immediately so the
   // editor doesn't mount with the wrong file's text.
@@ -87,19 +107,28 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
   }, [path, isVisible, revision])
 
   // Subscribe to server-side file-change events. The Vite workspace plugin
-  // suppresses echoes of our own POST writes, so this only fires for external
-  // changes (agent edits, OneDrive sync, another tab, …).
+  // suppresses echoes of our own POST writes within its own 2s window; we add a
+  // longer self-write silence here AND a content diff check so OneDrive sync
+  // pings and FSEvents metadata churn don't remount the editor (which would
+  // throw the user back to the top of the document).
   useEffect(() => {
     if (!isVisible || !path) return
+    const currentPath = path
     const es = new EventSource(`${DOCUMENTS_API}/__events`)
-    es.onmessage = (ev) => {
+    es.onmessage = async (ev) => {
+      let data: { path?: string } = {}
+      try { data = JSON.parse(ev.data) } catch { return }
+      if (data?.path !== currentPath) return
+      if (Date.now() - lastSelfWriteRef.current < SELF_WRITE_SILENCE_MS) return
       try {
-        const data = JSON.parse(ev.data)
-        if (data?.path && data.path === path) {
-          setRevision(r => r + 1)
-        }
+        const r = await fetch(`${DOCUMENTS_API}${currentPath}`)
+        if (!r.ok) return
+        const fresh = await r.json().catch(() => ({}))
+        if (typeof fresh?.content !== 'string') return
+        if (fresh.content === currentContentRef.current) return
+        setRevision(rev => rev + 1)
       } catch {
-        // Ignore malformed SSE frames.
+        // Network blip — skip; the next event will retry.
       }
     }
     return () => es.close()
@@ -150,6 +179,28 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
         <h1 className="text-[13px] font-medium text-foreground truncate flex-1">
           {title || 'Document'}
         </h1>
+        {splitToggle && (
+          <button
+            onClick={splitToggle.onToggle}
+            aria-label={splitToggle.mode === 'split' ? 'Show as full pane' : 'Show side-by-side with conversation'}
+            title={splitToggle.mode === 'split' ? 'Full pane' : 'Split with conversation'}
+            className="inline-btn h-7 px-2 rounded-md flex items-center gap-1.5 text-[11.5px] font-medium text-muted-foreground hover:text-foreground hover:bg-accent-soft transition-colors"
+          >
+            {splitToggle.mode === 'split' ? (
+              // Currently split — icon shows "expand to single pane".
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+              </svg>
+            ) : (
+              // Currently full pane — icon shows the split layout you'll switch to.
+              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <line x1="12" y1="3" x2="12" y2="21"/>
+              </svg>
+            )}
+            <span className="hidden sm:inline">{splitToggle.mode === 'split' ? 'Full' : 'Split'}</span>
+          </button>
+        )}
         {/* Browse files — re-open the Finder/file explorer without leaving this doc */}
         <button
           onClick={openBrowser}
@@ -193,6 +244,8 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder }: {
                 mobileToolbarTarget={toolbarSlot}
                 onSave={(markdown) => {
                   if (path) {
+                    lastSelfWriteRef.current = Date.now()
+                    currentContentRef.current = markdown
                     writeFile(path, markdown, DOCUMENTS_API).catch(err =>
                       console.error('[MarksensePanel] save failed:', err)
                     )

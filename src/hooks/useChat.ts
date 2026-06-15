@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore, composeMessageText, type Message } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse, cancelActiveResponse } from '../gateway/chat.ts'
+import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse, cancelActiveResponse, isTransientLockError } from '../gateway/chat.ts'
 import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import { useModelStore } from '../state/preset.ts'
@@ -16,6 +16,12 @@ import { markStreamActivity } from '../lib/streamActivity.ts'
 
 const MAX_RETRIES = 2
 const RETRY_DELAY = 1500
+// Session-write-lock contention is transient but can persist for tens of
+// seconds (a held lock is only reclaimed by the gateway's watchdog). Retry on
+// the SAME idempotency key with exponential backoff before giving up.
+const LOCK_MAX_RETRIES = 4
+const LOCK_RETRY_BASE = 2000
+const LOCK_RETRY_MAX = 15000
 const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/g
 
 function buildMediaUrl(filePath: string): string {
@@ -42,7 +48,7 @@ export function useChat() {
   const store = useChatStore
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[]; files?: import('../state/chat').PendingFile[] }[]>([])
-  const sendRef = useRef<((threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount?: number) => Promise<void>) | undefined>(undefined)
+  const sendRef = useRef<((threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount?: number, idempotencyKey?: string) => Promise<void>) | undefined>(undefined)
   // Forward-declared so `send`'s onDone callback (created earlier) can invoke
   // the drain helper (created later) without a circular useCallback dep.
   const drainQueueIfAnyRef = useRef<((threadId: string) => void) | null>(null)
@@ -76,7 +82,7 @@ export function useChat() {
     }
   }, [setConnectionStatus])
 
-  const send = useCallback(async (threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0) => {
+  const send = useCallback(async (threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string) => {
     if (!content.trim() && (!images || images.length === 0) && (!files || files.length === 0)) return
 
     const {
@@ -204,6 +210,10 @@ export function useChat() {
         return { role: m.role, content: text }
       })
 
+    // Stable per-logical-send key: generated on the first attempt, reused on
+    // every retry so the gateway dedupes instead of starting a duplicate run.
+    const idemKey = idempotencyKey ?? crypto.randomUUID()
+
     const controller = new AbortController()
     setAbortController(threadId, controller)
 
@@ -296,7 +306,10 @@ export function useChat() {
           if (msg && !msg.content) {
             store.getState().removeMessage(threadId, assistantId)
           }
-          store.getState().addMessage(threadId, { role: 'system', content: `Error: ${error.message}` })
+          const content = isTransientLockError(error)
+            ? 'Die Sitzung war kurz belegt. Bitte sende die Nachricht erneut.'
+            : `Error: ${error.message}`
+          store.getState().addMessage(threadId, { role: 'system', content })
         }
       },
     }
@@ -313,6 +326,7 @@ export function useChat() {
           // calls it "none", which the gateway doesn't recognize (it would
           // silently fall back to the default level).
           reasoningEffort: reasoningEffort === 'none' ? 'off' : reasoningEffort,
+          idempotencyKey: idemKey,
         },
       )
     } catch (error) {
@@ -333,6 +347,30 @@ export function useChat() {
         store.getState().finalizeMessage(threadId, assistantId)
         store.getState().setStreaming(threadId, false)
         // Stop button: queue stays (user wanted to stop). Do not drain.
+        return
+      }
+
+      // Session-write-lock timeout: the gateway never started the turn, so
+      // there's nothing to resume or recover — just re-send. Safe because the
+      // stable idempotency key lets the gateway dedupe if an earlier attempt
+      // did slip through. Back off so we don't hammer a still-held lock.
+      if (isTransientLockError(error)) {
+        store.getState().finalizeMessage(threadId, assistantId)
+        store.getState().setStreaming(threadId, false)
+        const lockMsg = store.getState().getThreadState(threadId).messages.find((m) => m.id === assistantId)
+        if (lockMsg && !lockMsg.content) store.getState().removeMessage(threadId, assistantId)
+        if (retryCount < LOCK_MAX_RETRIES) {
+          setConnectionStatus('reconnecting')
+          // Keep the recovery sweep from also re-sending this thread while we back off.
+          markStreamActivity(threadId)
+          await delay(Math.min(LOCK_RETRY_BASE * 2 ** retryCount, LOCK_RETRY_MAX))
+          return sendRef.current?.(threadId, content, images, files, retryCount + 1, idemKey)
+        }
+        setConnectionStatus('connected')
+        store.getState().addMessage(threadId, {
+          role: 'system',
+          content: 'Die Sitzung war kurz belegt. Bitte sende die Nachricht erneut.',
+        })
         return
       }
 
@@ -398,7 +436,7 @@ export function useChat() {
         setConnectionStatus('reconnecting')
         store.getState().addMessage(threadId, { role: 'system', content: `Connection failed. Retrying... (${retryCount + 1}/${MAX_RETRIES})` })
         await delay(RETRY_DELAY)
-        return sendRef.current?.(threadId, content, images, files, retryCount + 1)
+        return sendRef.current?.(threadId, content, images, files, retryCount + 1, idemKey)
       }
 
       setConnectionStatus('disconnected')

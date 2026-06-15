@@ -218,6 +218,18 @@ export function App() {
   // Which panel is expanded to full width: 'chat', 'doc', or null (split 50/50)
   const [splitExpanded, setSplitExpanded] = useState<'chat' | 'doc' | null>(null)
 
+  // Pager-mode split: when on, a linked-doc pane (opened from a chat) renders
+  // side-by-side with the chat inside the same pager column instead of as a
+  // separate column right of it. Preference persists across sessions.
+  const SPLIT_DOC_PREF_KEY = 'clavus-marksense-split-with-chat'
+  const [pagerSplitDoc, _setPagerSplitDoc] = useState<boolean>(() => {
+    try { return localStorage.getItem(SPLIT_DOC_PREF_KEY) === '1' } catch { return false }
+  })
+  const setPagerSplitDoc = useCallback((next: boolean) => {
+    _setPagerSplitDoc(next)
+    try { localStorage.setItem(SPLIT_DOC_PREF_KEY, next ? '1' : '0') } catch {}
+  }, [])
+
   // Editing-a-message state: when set, the InputBar pre-fills with the message
   // content and submit triggers editAndResend instead of a fresh send.
   const [editingMessage, setEditingMessage] = useState<{
@@ -1089,9 +1101,20 @@ export function App() {
   const docPane = docTab && docTab.type === 'marksense' && paneTab && docTab.id !== paneTab.id
     ? (docTab as MarksenseTab)
     : null
+  // Pager split: doc rides in the chat column instead of as a separate column.
+  const splitDocActive = !!(pagerMode && pagerSplitDoc && docPane && paneTab?.type === 'chat')
   // Ref tracks the MOUNTED doc pane — scroll handlers must never target a
-  // panel that isn't in the DOM.
-  docPaneIdRef.current = docPane?.id ?? null
+  // panel that isn't in the DOM (the split-mode doc has no column of its own).
+  docPaneIdRef.current = splitDocActive ? null : (docPane?.id ?? null)
+
+  // When the user enables split-with-chat while sitting on the doc column,
+  // its column disappears — strand visiblePanel back on the chat pane so
+  // scroll-snap doesn't leave us looking at nothing.
+  useEffect(() => {
+    if (splitDocActive && docPane && visiblePanel === docPane.id && paneTab) {
+      setVisiblePanel(paneTab.id)
+    }
+  }, [splitDocActive, docPane, visiblePanel, paneTab, setVisiblePanel])
 
   // Pager: make sure the container actually reaches a newly-opened pane.
   // scrollToTab waits a handful of frames for the pane to mount, but under
@@ -1571,14 +1594,72 @@ export function App() {
                     <PanelErrorBoundary key={`peb-${paneTab.id}`} label={paneTab.type}>
                     <Suspense fallback={<PanelLoading />}>
                       {paneTab.type === 'chat' && (
-                        <ChatViewPanel
-                          threadId={(paneTab as ChatTab).threadId}
-                          onRegenerate={handleRegenerate}
-                          onStartEdit={handleStartEditMessage}
-                          editingMessageId={editingMessage?.threadId === (paneTab as ChatTab).threadId ? editingMessage.messageId : null}
-                          onBranch={handleBranch}
-                          isActivePane={isActive}
-                        />
+                        // Stable tree: the ChatViewPanel sits at the same JSX
+                        // position whether split is on or off, so toggling the
+                        // mode reconciles instead of remounting (which would
+                        // flash the top of the thread before scroll-to-bottom).
+                        <div className="flex flex-row h-full min-h-0 w-full">
+                          <div className="flex-1 min-w-0 min-h-0 flex flex-col relative">
+                            <ChatViewPanel
+                              threadId={(paneTab as ChatTab).threadId}
+                              onRegenerate={handleRegenerate}
+                              onStartEdit={handleStartEditMessage}
+                              editingMessageId={editingMessage?.threadId === (paneTab as ChatTab).threadId ? editingMessage.messageId : null}
+                              onBranch={handleBranch}
+                              isActivePane={isActive}
+                            />
+                            {splitDocActive && docPane && (
+                              // In split mode the outer InputBar (which spans
+                              // the full viewport) is hidden — render one inside
+                              // the chat half so the composer stays bound to
+                              // the conversation column.
+                              <div className="absolute bottom-0 left-0 right-0 z-10" style={{ touchAction: 'none' }}>
+                                <InputBar
+                                  onSend={handleSend}
+                                  onAbort={handleAbort}
+                                  onSendNow={handleSendNow}
+                                  isStreaming={visibleThreadStreaming}
+                                  onRecordingChange={handleRecordingChange}
+                                  onFocusInput={() => preserveVisiblePanelDuringKeyboard('inputbar-focus')}
+                                  onClear={() => useChatStore.getState().clearMessages(paneTab.id)}
+                                  threadId={paneTab.id}
+                                  onVoiceThreadNeeded={ensureVoiceThread}
+                                  draftKey={paneTab.id}
+                                  onRetry={() => {
+                                    const msgs = useChatStore.getState().getThreadState(paneTab.id).messages
+                                    const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
+                                    if (lastUser) handleSend(lastUser.content, lastUser.images)
+                                  }}
+                                  talkMode={{ active: talkMode.active, phase: talkMode.phase, toggle: handleTalkModeToggle, endListening: talkMode.endListening, interrupt: talkMode.interrupt }}
+                                  editingMessage={editingMessage?.threadId === paneTab.id ? editingMessage : null}
+                                  onEditSubmit={handleSubmitEditMessage}
+                                  onEditCancel={handleCancelEditMessage}
+                                />
+                              </div>
+                            )}
+                          </div>
+                          {splitDocActive && docPane && (
+                            <div className="flex-1 min-w-0 min-h-0 flex flex-col border-l border-surface-light-3/20 dark:border-surface-dark-3/20">
+                              <MarksensePanel
+                                path={docPane.path}
+                                title={docPane.title}
+                                isVisible={isActive}
+                                onOpenFinder={handleOpenFinder}
+                                splitToggle={{
+                                  mode: 'split',
+                                  onToggle: () => {
+                                    const id = docPane.id
+                                    setPagerSplitDoc(false)
+                                    // The doc column mounts on the next render —
+                                    // scrollToTab retries across frames until the
+                                    // ref appears, so calling it now is safe.
+                                    scrollToTabRef.current(id)
+                                  },
+                                }}
+                              />
+                            </div>
+                          )}
+                        </div>
                       )}
                       {paneTab.type === 'marksense' && (
                         <MarksensePanel
@@ -1612,8 +1693,9 @@ export function App() {
 
           {/* Linked-doc pane — a markdown opened from the conversation, mounted
               as a third panel so the chat (and any active recording) stays
-              alive while reading. Swipe right to get back to the chat. */}
-          {docPane && (() => {
+              alive while reading. Swipe right to get back to the chat.
+              Hidden when split mode is on (the doc rides inside the chat pane). */}
+          {docPane && !splitDocActive && (() => {
             const isActive = visiblePanel === docPane.id
             return (
               <div
@@ -1637,6 +1719,13 @@ export function App() {
                         title={docPane.title}
                         isVisible={isActive}
                         onOpenFinder={handleOpenFinder}
+                        splitToggle={paneTab?.type === 'chat' ? {
+                          mode: 'pane',
+                          onToggle: () => {
+                            scrollToTabRef.current(paneTab.id)
+                            setPagerSplitDoc(true)
+                          },
+                        } : undefined}
                       />
                     </Suspense>
                   </PanelErrorBoundary>
@@ -1649,7 +1738,7 @@ export function App() {
 
 
         {/* InputBar floating over content with glass effect (skip when split view has its own) */}
-        {isVisibleChat && !(isDesktop && splitDocPath) && (
+        {isVisibleChat && !(isDesktop && splitDocPath) && !splitDocActive && (
           <div className="row-start-1 col-start-1 self-end z-10" style={{ touchAction: 'none' }}>
             <InputBar
               onSend={handleSend}

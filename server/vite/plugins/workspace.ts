@@ -16,6 +16,10 @@ export function workspacePlugin(rootDir = WORKSPACE_ROOT, apiPrefix = '/api/work
   const sseClients = new Set<any>()
   const recentWrites = new Map<string, number>()
   const RECENT_WRITE_WINDOW_MS = 2000
+  // Per-file mtime+size cache used to drop fs.watch firings that don't actually
+  // change the file body (macOS FSEvents fires `change` on metadata access; the
+  // editor sometimes round-trips a no-op save; OneDrive scans touch atimes).
+  const fileStatCache = new Map<string, { mtimeMs: number; size: number }>()
   let watcherStarted = false
 
   function markRecentWrite(absPath: string) {
@@ -32,6 +36,28 @@ export function workspacePlugin(rootDir = WORKSPACE_ROOT, apiPrefix = '/api/work
     const ts = recentWrites.get(absPath)
     if (ts && Date.now() - ts < RECENT_WRITE_WINDOW_MS) return
     if (!absPath.startsWith(rootDir)) return
+
+    if (event === 'change') {
+      // Snapshot mtime+size and skip if nothing meaningful moved. Stat may
+      // throw if the file was deleted between the watch event and now —
+      // treat that as `unlink` to keep clients in sync.
+      let stat: fs.Stats | null = null
+      try { stat = fs.statSync(absPath) } catch {}
+      if (!stat) {
+        fileStatCache.delete(absPath)
+        event = 'unlink'
+      } else if (stat.isDirectory()) {
+        return
+      } else {
+        const prev = fileStatCache.get(absPath)
+        const next = { mtimeMs: stat.mtimeMs, size: stat.size }
+        if (prev && prev.mtimeMs === next.mtimeMs && prev.size === next.size) return
+        fileStatCache.set(absPath, next)
+      }
+    } else if (event === 'unlink') {
+      fileStatCache.delete(absPath)
+    }
+
     const rel = '/' + nodePath.relative(rootDir, absPath).split(nodePath.sep).join('/')
     const payload = `data: ${JSON.stringify({ type: event, path: rel, ts: Date.now() })}\n\n`
     for (const res of sseClients) {
@@ -173,6 +199,12 @@ export function workspacePlugin(rootDir = WORKSPACE_ROOT, apiPrefix = '/api/work
           fs.writeFileSync(tmpPath, content, 'utf-8')
           fs.renameSync(tmpPath, absPath)
           markRecentWrite(absPath)
+          // Pre-seed the stat cache so the watcher's own-write echo (which can
+          // arrive after the 2s recent-write window) is treated as a no-op.
+          try {
+            const stat = fs.statSync(absPath)
+            fileStatCache.set(absPath, { mtimeMs: stat.mtimeMs, size: stat.size })
+          } catch {}
           res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify({ ok: true, path: relPath }))
         } catch (err: any) {

@@ -70,6 +70,10 @@ const MAX_IMAGE_SIZE = 4 * 1024 * 1024 // 4MB per image
 const MAX_FILES = 5
 const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB per file
 
+type SubmitOptions = {
+  refocus?: boolean
+}
+
 async function uploadFile(file: File, threadId?: string | null): Promise<{ path: string } | null> {
   try {
     const form = new FormData()
@@ -238,7 +242,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
 
   // Forward-declared so the voice hook (defined later) can submit via this ref
   // without depending on declaration order.
-  const handleSubmitRef = useRef<((overrideText?: string) => void) | null>(null)
+  const handleSubmitRef = useRef<((overrideText?: string, options?: SubmitOptions) => void) | null>(null)
 
   // Listen for suggestion clicks from empty state
   useEffect(() => {
@@ -377,11 +381,12 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     return result.handled
   }, [threadId, onClear, onRetry, showToast])
 
-  const handleSubmit = useCallback(async (overrideText?: string | React.SyntheticEvent) => {
+  const handleSubmit = useCallback(async (overrideText?: string | React.SyntheticEvent, options?: SubmitOptions) => {
     // React passes the click/submit event when this function is used directly
     // as an event handler. Treat non-string values as "no override"; otherwise
     // `(overrideText ?? value).trim()` crashes and sending silently fails.
     const sourceText = typeof overrideText === 'string' ? overrideText : value
+    const shouldRefocus = options?.refocus !== false
     const trimmed = sourceText.trim()
     if (!trimmed && pendingImages.length === 0 && pendingFiles.length === 0) return
 
@@ -425,7 +430,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       setPendingImages([])
       setPendingFiles([])
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
-      setTimeout(() => textareaRef.current?.focus(), 50)
+      if (shouldRefocus) setTimeout(() => textareaRef.current?.focus(), 50)
       return
     }
 
@@ -439,7 +444,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
     }
-    setTimeout(() => textareaRef.current?.focus(), 50)
+    if (shouldRefocus) setTimeout(() => textareaRef.current?.focus(), 50)
   }, [value, onSend, pendingImages, pendingFiles, runSlash, isStreaming, threadId, editingMessage, onEditSubmit])
 
   // Keep the forward-declared ref in sync with the latest handleSubmit.
@@ -453,7 +458,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       // and slash commands still work.
       const current = value.trim()
       const finalText = current ? current + ' ' + text : text
-      handleSubmitRef.current?.(finalText)
+      handleSubmitRef.current?.(finalText, { refocus: false })
       haptic.tap()
     },
     onInsertTranscription: (text) => {
@@ -759,15 +764,14 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
         />
 
         {isStreaming && (
-          <div className="mb-2 flex justify-end pr-1 animate-[fadeSlideIn_0.2s_ease-out]">
+          <div className="mb-2 flex justify-end animate-[fadeSlideIn_0.2s_ease-out]">
             <button
               type="button"
               onClick={handleAbortClick}
-              className="inline-btn h-9 px-3 rounded-full glass flex items-center gap-2 text-[12px] font-medium text-red-400 hover:bg-red-500/10 active:scale-95 transition-all"
+              className="inline-btn w-9 h-9 rounded-full glass flex items-center justify-center text-red-400 hover:bg-red-500/10 active:scale-95 transition-all"
               aria-label="Stop generating"
             >
               <StopMini />
-              <span>Stop</span>
             </button>
           </div>
         )}

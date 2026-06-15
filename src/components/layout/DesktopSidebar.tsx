@@ -3,6 +3,7 @@ import type { Tab, ChatTab, MarksenseTab } from '../../state/tabs.ts'
 import { useThreadsStore, type Thread } from '../../state/threads.ts'
 import { useThreadSearch, type SearchHit } from '../../lib/threadSearch.ts'
 import { getFileTypeInfo } from '../../lib/fileTypes.ts'
+import { ThreadStatusDot } from './ThreadStatusDot.tsx'
 
 interface Props {
   tabs: Tab[]
@@ -65,16 +66,6 @@ function groupFor(timestamp: number, now: number): GroupKey {
   const dayAgo = now - 24 * 60 * 60 * 1000
   if (timestamp >= dayAgo) return 'today'
   return 'older'
-}
-
-/** Pick a stable category accent for a tab based on its type + id hash. */
-function accentForTab(tab: Tab): string {
-  if (tab.type === 'marksense' || tab.type === 'file' || tab.type === 'finder') return 'cat-doc'
-  // Spread chat tabs across the warm accent set deterministically by id hash
-  const accents = ['cat-chat', 'cat-violet', 'cat-rose', 'cat-voice']
-  let h = 0
-  for (let i = 0; i < tab.id.length; i++) h = (h * 31 + tab.id.charCodeAt(i)) >>> 0
-  return accents[h % accents.length]
 }
 
 const FileIcon = (
@@ -265,7 +256,6 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     // Dim the active chat tab when the split doc is expanded to full width
     const isDimmedByDocExpand = isActive && isDocExpanded && tab.type === 'chat'
     const isHovered = tab.id === hoveredTab
-    const accent = accentForTab(tab)
     const thread = threadFor(tab)
     const isArchived = !!thread?.archived
     return (
@@ -291,10 +281,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                 : 'hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]'
             } ${(opts?.muted && !isActive) || isDimmedByDocExpand ? 'opacity-50 hover:opacity-100' : ''}`}
           >
-            <span
-              className="w-1.5 h-1.5 rounded-full shrink-0"
-              style={{ background: `var(--color-${accent})` }}
-            />
+            <ThreadStatusDot threadId={tab.type === 'chat' ? (tab as ChatTab).threadId : undefined} />
             <div className="flex-1 min-w-0">
               <div
                 className={`text-[13px] truncate pr-5 ${
@@ -524,7 +511,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
                             onClick={() => onOpenThread?.(thread.id)}
                             className="inline-btn w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-colors opacity-70 hover:opacity-100 hover:bg-foreground/[0.04] dark:hover:bg-foreground/[0.06]"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground/40" />
+                            <ThreadStatusDot threadId={thread.id} />
                             <div className="flex-1 min-w-0">
                               <div className="text-[13px] truncate text-foreground/85">
                                 {thread.title || 'Untitled'}

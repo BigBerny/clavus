@@ -587,19 +587,21 @@ export function ChatView({ messages, title, threadId, onRegenerate, onStartEdit,
       </div>
 
       {!autoScroll && (
-        /* Anchored to the same centered 900px column as the composer, so the
-           button floats just above the input field's right corner instead of
-           hugging the far edge of a wide window. */
+        /* Anchored to the same centered 900px column as the composer. Offset
+           leaves an 8px gap above the InputBar's topmost visible row (Stop,
+           Q-row, or composer), matching the mb-2 rhythm between Stop and the
+           composer below. p-3 top padding = 0.75rem; subtract another 0.5rem
+           for the 8px gap → −0.25rem total. */
         <div
           className="absolute left-0 right-0 z-20 pointer-events-none"
-          style={{ bottom: 'calc(var(--input-bar-h, 72px) + 0.5rem)' }}
+          style={{ bottom: 'calc(var(--input-bar-h, 72px) - 0.25rem)' }}
         >
           <div className="max-w-[900px] mx-auto px-3 flex justify-end">
             <button
               onTouchStart={(e) => e.preventDefault()}
               onMouseDown={(e) => e.preventDefault()}
               onClick={(e) => { e.stopPropagation(); scrollToLatestMessageStart() }}
-              className="pointer-events-auto relative flex items-center justify-center w-11 h-11 rounded-full glass text-muted-foreground active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
+              className="inline-btn pointer-events-auto relative flex items-center justify-center w-9 h-9 rounded-full glass text-muted-foreground active:scale-90 transition-all animate-[fadeSlideIn_0.2s_ease-out]"
               aria-label={unseenCount > 0 ? `${unseenCount} new messages` : 'Scroll to latest message'}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m7 13 5 5 5-5"/><path d="M12 18V6"/></svg>

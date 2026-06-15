@@ -452,13 +452,34 @@ function dispatchResponsesEvent(
 
 // --- Chat API ---
 
+export interface SendOptions {
+  conversationId?: string
+  reasoningEffort?: string
+  /** Stable per-logical-send key. Reused across the responses→chat-completions
+   *  fallback and across retries so the gateway dedupes instead of starting a
+   *  duplicate run. */
+  idempotencyKey?: string
+}
+
+/** A session-write-lock timeout from the OpenClaw gateway: the turn couldn't be
+ *  appended because another writer held the session lock. Transient — safe to
+ *  retry with the same idempotency key. */
+export function isTransientLockError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error ?? '')
+  return /OPENCLAW_SESSION_WRITE_LOCK_TIMEOUT|session file locked/i.test(msg)
+}
+
 export async function sendChatStream(
   config: GatewayConfig,
   messages: ChatCompletionMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  options: { conversationId?: string; reasoningEffort?: string } = {},
+  options: SendOptions = {},
 ): Promise<void> {
+  // One stable idempotency key per logical send. Both the responses path and
+  // the chat-completions fallback below — and any caller-driven retry that
+  // passes the same key back in — share it, so the gateway dedupes.
+  const opts: SendOptions = { ...options, idempotencyKey: options.idempotencyKey ?? crypto.randomUUID() }
   const capabilities = await getBackendCapabilities(config)
   // OpenClaw's Gateway exposes `/v1/responses` but not `/v1/capabilities`.
   // Treat OpenClaw as Responses-capable by default so long-running streams go
@@ -469,7 +490,7 @@ export async function sendChatStream(
 
   if (canUseResponses) {
     try {
-      await sendResponsesStream(config, messages, callbacks, signal, options)
+      await sendResponsesStream(config, messages, callbacks, signal, opts)
       return
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') throw error
@@ -478,13 +499,18 @@ export async function sendChatStream(
         // completions would create a second run and lose the event cursor.
         throw error
       }
+      // A session-write-lock timeout means the gateway couldn't even append the
+      // turn. Falling through to chat-completions would just block on the same
+      // lock for another full timeout window — bubble it up so the caller can
+      // back off and retry (with the same idempotency key).
+      if (isTransientLockError(error)) throw error
       // Some non-OpenClaw backends may not expose Responses streaming despite
       // health checks. A pre-event OpenClaw failure may also be an older gateway.
       console.warn(`[${config.backend}] Responses stream failed before first event, falling back to chat completions:`, error)
     }
   }
 
-  await sendChatCompletionsStream(config, messages, callbacks, signal, options)
+  await sendChatCompletionsStream(config, messages, callbacks, signal, opts)
 }
 
 async function sendResponsesStream(
@@ -492,7 +518,7 @@ async function sendResponsesStream(
   messages: ChatCompletionMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  options: { conversationId?: string; reasoningEffort?: string } = {},
+  options: SendOptions = {},
 ): Promise<void> {
   const lastUser = [...messages].reverse().find((msg) => msg.role === 'user')
   if (!lastUser) throw new Error('No user message to send')
@@ -502,7 +528,7 @@ async function sendResponsesStream(
     headers: {
       'Content-Type': 'application/json',
       ...backendHeaders(config, options),
-      'Idempotency-Key': crypto.randomUUID(),
+      'Idempotency-Key': options.idempotencyKey ?? crypto.randomUUID(),
     },
     body: JSON.stringify({
       model: requestModel(config),
@@ -522,7 +548,8 @@ async function sendResponsesStream(
   })
 
   if (!res.ok) {
-    throw new ResponsesStreamError(`${config.backend} error: ${res.status} ${res.statusText}`, false)
+    const detail = await res.text().catch(() => '')
+    throw new ResponsesStreamError(`${config.backend} error: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`, false)
   }
 
   const state = createResponsesDispatchState()
@@ -620,14 +647,14 @@ async function sendChatCompletionsStream(
   messages: ChatCompletionMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  options: { conversationId?: string; reasoningEffort?: string } = {},
+  options: SendOptions = {},
 ): Promise<void> {
   const res = await fetch(apiPath(config, '/v1/chat/completions'), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       ...backendHeaders(config, options),
-      'Idempotency-Key': crypto.randomUUID(),
+      'Idempotency-Key': options.idempotencyKey ?? crypto.randomUUID(),
     },
     body: JSON.stringify({
       model: requestModel(config),
@@ -640,7 +667,8 @@ async function sendChatCompletionsStream(
   })
 
   if (!res.ok) {
-    throw new Error(`${config.backend} error: ${res.status} ${res.statusText}`)
+    const detail = await res.text().catch(() => '')
+    throw new Error(`${config.backend} error: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`)
   }
 
   const toolCalls = new Map<string, ToolCallEvent>()

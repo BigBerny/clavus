@@ -41,6 +41,23 @@ interface PendingRequest {
 
 type EventHandler = (event: string, payload: Record<string, unknown>) => void
 
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function extractAgentEventRunId(payload: Record<string, unknown>, data: Record<string, unknown>): string | undefined {
+  return readString(payload.runId)
+    ?? readString(payload.run_id)
+    ?? readString(data.runId)
+    ?? readString(data.run_id)
+}
+
 export interface AgentRunCallbacks {
   onThinking?: (delta: string) => void
   onToken?: (delta: string) => void
@@ -306,12 +323,15 @@ class GatewayWsClient {
 
       const handler: EventHandler = (_event, payload) => {
         if (done) return
-        const evRunId = payload.runId as string | undefined
-        if (evRunId && evRunId !== runId) return
 
-        const stream = payload.stream as string | undefined
         // Data is nested in payload.data for agent events
-        const data = (payload.data ?? payload) as Record<string, unknown>
+        const data = readRecord(payload.data) ?? payload
+        const evRunId = extractAgentEventRunId(payload, data)
+        // Gateway agent events are broadcast globally. A missing run id must
+        // not be treated as a match, otherwise concurrent runs can cross-stream.
+        if (evRunId !== runId) return
+
+        const stream = readString(payload.stream) ?? readString(data.stream)
         const phase = data.phase as string | undefined
         const status = data.status as string | undefined
 

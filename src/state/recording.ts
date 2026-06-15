@@ -98,6 +98,14 @@ function setErrorWithAutoDismiss(msg: string) {
   errorTimerId = setTimeout(() => useRecordingStore.setState({ error: null }), 5000)
 }
 
+function blurActiveTextInput() {
+  if (typeof document === 'undefined') return
+  const active = document.activeElement
+  if (active instanceof HTMLElement && active.matches('input, textarea, [contenteditable="true"]')) {
+    active.blur()
+  }
+}
+
 function cleanupHardware() {
   if (timerId) { clearInterval(timerId); timerId = null }
   if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = 0 }
@@ -295,6 +303,7 @@ export const useRecordingStore = create<RecordingStore>((set) => ({
   clearHandlers: () => { handlers = null },
 
   start: async (threadId) => {
+    blurActiveTextInput()
     set({ error: null, targetThreadId: threadId })
     cancelled = false
 
