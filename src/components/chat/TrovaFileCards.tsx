@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { ChevronRight, FileText, Sparkles } from 'lucide-react'
 import type { WorkspaceFile } from '../../state/chat.ts'
 
@@ -62,46 +62,65 @@ function TrovaFileRow({ file }: { file: WorkspaceFile }) {
   )
 }
 
+/** Smoothly tween the enclosing message bubble between its old and new size when the
+ *  list expands/collapses. The bubble is width:fit-content, so it would otherwise jump
+ *  to the new content width instantly. FLIP via the Web Animations API (works in WebKit
+ *  too, unlike CSS interpolate-size). */
+function useBubbleResizeAnimation(rootRef: React.RefObject<HTMLDivElement | null>, dep: unknown) {
+  const prev = useRef<{ w: number; h: number } | null>(null)
+  useLayoutEffect(() => {
+    const bubble = rootRef.current?.closest('[data-message-bubble]') as HTMLElement | null
+    if (!bubble) return
+    const next = { w: bubble.offsetWidth, h: bubble.offsetHeight }
+    const from = prev.current
+    prev.current = next
+    if (!from || (Math.abs(from.w - next.w) < 1 && Math.abs(from.h - next.h) < 1)) return
+    const restoreOverflow = bubble.style.overflow
+    bubble.style.overflow = 'hidden'
+    const anim = bubble.animate(
+      [
+        { width: `${from.w}px`, height: `${from.h}px` },
+        { width: `${next.w}px`, height: `${next.h}px` },
+      ],
+      { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+    )
+    const done = () => { bubble.style.overflow = restoreOverflow }
+    anim.onfinish = done
+    anim.oncancel = done
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dep])
+}
+
 /** Trova retrieval results shown under a sent message — the workspace notes the
  *  Mode 1 pre-pass matched. Mirrors the assistant's tool-call action row. */
 export function TrovaFileCards({ files, className }: { files: WorkspaceFile[]; className?: string }) {
   const [expanded, setExpanded] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useBubbleResizeAnimation(rootRef, expanded)
+
   if (!files.length) return null
   const count = files.length
   const countLabel = `Trova · ${count} ${count === 1 ? 'note' : 'notes'}`
 
-  if (!expanded) {
-    return (
-      <div className={className}>
-        <button
-          onClick={() => setExpanded(true)}
-          className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
-        >
-          <Sparkles className="shrink-0 w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
-          <span className="leading-none">{countLabel}</span>
-          <ChevronRight className="shrink-0 w-2.5 h-2.5 transition-transform" strokeWidth={2} aria-hidden="true" />
-        </button>
-      </div>
-    )
-  }
-
   return (
-    <div className={className}>
+    <div className={className} ref={rootRef}>
       <button
-        onClick={() => setExpanded(false)}
-        className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors mb-0.5"
+        onClick={() => setExpanded((v) => !v)}
+        className="inline-btn flex items-center gap-1.5 text-[11px] text-text-light-muted/55 dark:text-text-dark-muted/55 hover:text-text-light-muted dark:hover:text-text-dark-muted transition-colors"
       >
         <Sparkles className="shrink-0 w-3 h-3" strokeWidth={1.75} aria-hidden="true" />
         <span className="leading-none">{countLabel}</span>
-        <ChevronRight className="shrink-0 w-2.5 h-2.5 transition-transform rotate-90" strokeWidth={2} aria-hidden="true" />
+        <ChevronRight className={`shrink-0 w-2.5 h-2.5 transition-transform ${expanded ? 'rotate-90' : ''}`} strokeWidth={2} aria-hidden="true" />
       </button>
-      <div className="rounded-lg border border-text-light-muted/12 dark:border-text-dark-muted/12 overflow-hidden">
-        <div className="divide-y divide-text-light-muted/8 dark:divide-text-dark-muted/8">
-          {files.map((f) => (
-            <TrovaFileRow key={`${f.kind}:${f.path}`} file={f} />
-          ))}
+      {expanded && (
+        <div className="mt-1 rounded-lg border border-text-light-muted/12 dark:border-text-dark-muted/12 overflow-hidden">
+          <div className="divide-y divide-text-light-muted/8 dark:divide-text-dark-muted/8">
+            {files.map((f) => (
+              <TrovaFileRow key={`${f.kind}:${f.path}`} file={f} />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

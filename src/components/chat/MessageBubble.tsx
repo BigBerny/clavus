@@ -568,6 +568,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     >
       <div className={`flex items-end gap-1 max-w-[95%] md:max-w-[750px] min-w-0 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
         <div
+          data-message-bubble
           className={`px-3.5 py-2 min-w-0 w-fit relative transition-[min-height,opacity] duration-200 ease-out ${message.streaming ? 'streaming-bubble' : ''} ${isBeingEdited ? 'opacity-50' : ''} ${
             isUser
               ? `glass-user text-foreground ${
