@@ -23,18 +23,18 @@ function TrovaFileRow({ file }: { file: WorkspaceFile }) {
   const hasExcerpt = !!file.excerpt?.trim()
 
   return (
-    <div className="overflow-hidden">
-      <div className="flex items-center gap-1.5 px-2 py-1 text-[11px]">
-        <FileText className="shrink-0 w-3 h-3 text-text-light-muted/60 dark:text-text-dark-muted/60" strokeWidth={1.75} aria-hidden="true" />
+    <div>
+      <div className="group/row flex items-center gap-1.5 px-2 py-1 text-[11px] transition-colors hover:bg-surface-light-3/25 dark:hover:bg-surface-dark-3/25">
+        <FileText className="shrink-0 w-3 h-3 text-text-light-muted/55 dark:text-text-dark-muted/55" strokeWidth={1.75} aria-hidden="true" />
         <button
           onClick={() => openFile(file.path, name)}
-          className="inline-btn flex-1 min-w-0 flex items-baseline gap-1 text-left leading-none hover:underline"
+          className="inline-btn flex-1 min-w-0 flex items-baseline gap-1.5 text-left leading-none"
           title={`Open ${file.path}`}
         >
-          <span className="truncate text-text-light-muted/80 dark:text-text-dark-muted/80">{name}</span>
-          <span className="shrink-0 text-text-light-muted/40 dark:text-text-dark-muted/40">{folder}</span>
+          <span className="truncate text-text-light-muted/75 dark:text-text-dark-muted/75 transition-colors group-hover/row:text-text-light dark:group-hover/row:text-text-dark">{name}</span>
+          <span className="shrink-0 truncate text-text-light-muted/40 dark:text-text-dark-muted/40">{folder}</span>
           {file.kind === 'suggest' && (
-            <span className="shrink-0 text-[9px] uppercase tracking-wider text-text-light-muted/35 dark:text-text-dark-muted/35">related</span>
+            <span className="shrink-0 text-[8.5px] uppercase tracking-wider text-text-light-muted/30 dark:text-text-dark-muted/30">related</span>
           )}
         </button>
         {hasExcerpt && (
@@ -52,10 +52,10 @@ function TrovaFileRow({ file }: { file: WorkspaceFile }) {
         )}
       </div>
       {expanded && hasExcerpt && (
-        <div className="px-2 pb-1.5">
-          <pre className="text-[10px] text-text-light-muted/55 dark:text-text-dark-muted/55 whitespace-pre-wrap break-words mt-0.5 max-h-40 overflow-y-auto font-sans leading-relaxed">
+        <div className="px-2 pb-1.5 pl-[26px]">
+          <p className="text-[10.5px] text-text-light-muted/55 dark:text-text-dark-muted/55 whitespace-pre-wrap break-words mt-0.5 max-h-40 overflow-y-auto leading-relaxed">
             {file.excerpt}
-          </pre>
+          </p>
         </div>
       )}
     </div>
@@ -95,8 +95,8 @@ export function TrovaFileCards({ files, className }: { files: WorkspaceFile[]; c
         <span className="leading-none">{countLabel}</span>
         <ChevronRight className="shrink-0 w-2.5 h-2.5 transition-transform rotate-90" strokeWidth={2} aria-hidden="true" />
       </button>
-      <div className="rounded-lg border border-surface-light-3/15 dark:border-surface-dark-3/15 bg-surface-light-2/30 dark:bg-surface-dark-2/30 overflow-hidden">
-        <div className="divide-y divide-surface-light-3/8 dark:divide-surface-dark-3/8">
+      <div className="rounded-lg border border-text-light-muted/12 dark:border-text-dark-muted/12 overflow-hidden">
+        <div className="divide-y divide-text-light-muted/8 dark:divide-text-dark-muted/8">
           {files.map((f) => (
             <TrovaFileRow key={`${f.kind}:${f.path}`} file={f} />
           ))}
