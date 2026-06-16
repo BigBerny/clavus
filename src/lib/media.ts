@@ -19,6 +19,41 @@ export function mediaTypeFromPath(path: string): MediaAttachment['type'] {
   return 'file'
 }
 
+const TOOL_MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/g
+
+/** Pull MEDIA: markers out of a single tool-call result (string or object). */
+export function mediaFromToolResult(result: unknown): MediaAttachment[] {
+  if (result == null) return []
+  const text = typeof result === 'string' ? result : JSON.stringify(result)
+  const out: MediaAttachment[] = []
+  for (const m of text.matchAll(TOOL_MEDIA_RE)) {
+    const path = m[1].trim().replace(/^`|`$/g, '')
+    if (!path) continue
+    out.push({ type: mediaTypeFromPath(path), url: buildWorkspaceMediaUrl(path), title: path.split('/').pop() })
+  }
+  return out
+}
+
+/** Collect media from all completed tool calls on a message, deduped by url.
+ *  Agent-generated images (image_gen / image_generate) surface only as a
+ *  MEDIA: marker in the tool result; this recovers them on any code path. */
+export function mediaFromToolCalls(
+  toolCalls?: { status?: string; result?: unknown }[],
+): MediaAttachment[] {
+  if (!toolCalls) return []
+  const out: MediaAttachment[] = []
+  const seen = new Set<string>()
+  for (const tc of toolCalls) {
+    if (tc.status !== 'completed') continue
+    for (const m of mediaFromToolResult(tc.result)) {
+      if (seen.has(m.url)) continue
+      seen.add(m.url)
+      out.push(m)
+    }
+  }
+  return out
+}
+
 export function buildWorkspaceMediaUrl(filePath: string): string {
   const trimmed = filePath.trim().replace(/^`|`$/g, '')
   if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed

@@ -7,6 +7,7 @@ import { ButtonGroup, SelectBlock, ConfirmBlock, FormBlock, parseButtonsLine, pa
 import { haptic } from '../../lib/native'
 import { normalizeToolCalls } from '../../lib/toolCalls.ts'
 import { lazyWithRetry } from '../../lib/lazyWithRetry.ts'
+import { mediaFromToolCalls } from '../../lib/media.ts'
 
 const RichMessageRenderer = lazyWithRetry('RichMessageRenderer', () => import('./RichMessageRenderer.tsx'), m => m.RichMessageRenderer)
 
@@ -478,6 +479,16 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
     isAssistant ? extractReplyQuote(message.content) : null,
     [isAssistant, message.content]
   )
+  // Merge persisted media with media re-derived from completed tool calls
+  // (image_gen/image_generate emit only a MEDIA: marker in the tool result).
+  // This backfills messages whose media was never persisted — e.g. responses
+  // that completed via the resume/recovery path.
+  const displayMedia = useMemo(() => {
+    const persisted = message.media ?? []
+    const seen = new Set(persisted.map((m) => m.url))
+    const derived = mediaFromToolCalls(message.toolCalls).filter((m) => !seen.has(m.url))
+    return [...persisted, ...derived]
+  }, [message.media, message.toolCalls])
   const isError = isSystem && message.content.startsWith('Error:')
   const [copied, setCopied] = useState(false)
   const [infoUnlocked, setInfoUnlocked] = useState(false)
@@ -600,9 +611,9 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
             </div>
           )}
           {/* Media attachments (agent-sent) */}
-          {message.media && message.media.length > 0 && (
+          {displayMedia.length > 0 && (
             <div className={`space-y-1.5 ${message.content ? 'mb-2' : ''}`}>
-              {message.media.map((m, i) => (
+              {displayMedia.map((m, i) => (
                 <div key={i}>
                   {m.type === 'image' && (
                     <a href={m.url} target="_blank" rel="noopener noreferrer" className="block rounded-lg overflow-hidden max-w-[300px]">

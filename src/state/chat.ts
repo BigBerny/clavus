@@ -8,7 +8,7 @@ import {
   persistQueuedMessageLocal,
   syncQueuedMessageToServer,
 } from './threads'
-import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
+import { buildWorkspaceMediaUrl, mediaFromToolCalls, mediaTypeFromPath } from '../lib/media.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
 
 export interface ToolCall {
@@ -302,12 +302,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       if (!ts) return state
       const messages = ts.messages.map((m) => {
         if (m.id !== id) return m
-        const { text, media } = extractMedia(m.content)
+        const { text, media: contentMedia } = extractMedia(m.content)
+        // Agent-generated images arrive as a MEDIA: marker in a tool result.
+        // The live path attaches them immediately, but resume/recovery paths
+        // don't — so re-derive here and dedup so every path persists the image.
+        const existingUrls = new Set((m.media || []).map((x) => x.url))
+        const newMedia = [...contentMedia, ...mediaFromToolCalls(m.toolCalls)]
+          .filter((x) => !existingUrls.has(x.url) && (existingUrls.add(x.url), true))
         return {
           ...m,
           streaming: false,
           content: text,
-          ...(media.length > 0 ? { media: [...(m.media || []), ...media] } : {}),
+          ...(newMedia.length > 0 ? { media: [...(m.media || []), ...newMedia] } : {}),
         }
       })
       saveMessages(threadId, messages)
