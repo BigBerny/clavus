@@ -16,6 +16,7 @@ Return ONLY valid JSON with these fields:
 - "label": a 2-4 word category (e.g. "Writing task", "Knowledge question", "Coaching", "Code task", "Creative writing", "Simple factual")
 
 Rules:
+- HIGHEST PRIORITY — overrides every rule below: if the user asks to generate, create, draw, paint, make, render, or edit an image/photo/picture/portrait/illustration/logo/icon/artwork/wallpaper (in any language, e.g. "erstelle ein Bild", "zeichne", "male ein Foto") → model MUST be "gpt", reasoning: "low", label: "Image generation". Only GPT has working image generation; never route image/photo generation to "opus" or "flash".
 - Use "opus" for: strategic thinking, personal advice, coaching, medicine/health advice, creative writing, writing/formulating text, collaborative work (brainstorming, co-editing, drafting), conceptual discussions, life decisions. Reasoning: "high"
   - Exception: if the user explicitly asks for deep thinking or high reasoning → reasoning: "xhigh"
 - Use "flash" for very simple requests that do not need careful writing or deep reasoning: greetings, tiny factual questions, simple confirmations, quick formatting, short translations, one-step how-to, and other low-risk utility tasks. Reasoning: "minimal"
