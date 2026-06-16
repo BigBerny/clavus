@@ -246,6 +246,23 @@ export function responsesProxyPlugin() {
               },
             }))
           },
+          onMedia: ({ id, agentId }) => {
+            // Surface the generated image as a completed image_gen tool output
+            // carrying a MEDIA: marker. The browser's extractMediaFromToolResult
+            // turns it into an inline image; the /api/agent-media route resolves
+            // the ig_<id> to the file on disk and serves it same-origin.
+            const url = `/api/agent-media/${encodeURIComponent(agentId)}/${encodeURIComponent(id)}.png`
+            bufferAppendEvent(responseId, 'response.output_item.done', JSON.stringify({
+              type: 'response.output_item.done',
+              item: {
+                type: 'function_call_output',
+                call_id: id,
+                name: 'image_gen',
+                arguments: '{}',
+                output: `MEDIA: ${url}`,
+              },
+            }))
+          },
           onUsage: (usage) => {
             bufferAppendEvent(responseId, 'response.completed', JSON.stringify({
               type: 'response.completed',

@@ -22,6 +22,8 @@ export function mediaTypeFromPath(path: string): MediaAttachment['type'] {
 export function buildWorkspaceMediaUrl(filePath: string): string {
   const trimmed = filePath.trim().replace(/^`|`$/g, '')
   if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed
+  // Agent-generated images (Codex image_gen) are served by their own route.
+  if (trimmed.startsWith('/api/agent-media/')) return trimmed
   if (trimmed.startsWith('/api/documents/raw/')) return trimmed
   // Legacy prefix — rewrite to documents
   if (trimmed.startsWith('/api/workspace/raw/')) return trimmed.replace('/api/workspace/raw/', '/api/documents/raw/')

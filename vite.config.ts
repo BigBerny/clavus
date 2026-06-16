@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import nodePath from 'path'
+import { agentMediaPlugin } from './server/vite/plugins/agentMedia.ts'
 import { appleAppSiteAssociationPlugin } from './server/vite/plugins/appleAppSiteAssociation.ts'
 import { composeApiPlugin } from './server/vite/plugins/composeApi.ts'
 import { fileUploadPlugin } from './server/vite/plugins/fileUpload.ts'
@@ -140,6 +141,7 @@ export default defineConfig({
   preview: serverOptions,
   plugins: [
     responsesProxyPlugin(),
+    agentMediaPlugin(),
     threadsApiPlugin(),
     elevenLabsProxy(),
     desktopDictationPlugin(),

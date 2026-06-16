@@ -63,6 +63,10 @@ export interface AgentRunCallbacks {
   onToken?: (delta: string) => void
   onThinkingDone?: () => void
   onToolCall?: (tc: { id: string; name: string; args: Record<string, unknown>; result?: unknown; status: 'running' | 'completed' | 'error' }) => void
+  /** A built-in image_gen (Codex/gpt-image-2) result. The WS only carries the
+   *  `ig_<id>` item id (no path/url), so we pass that plus the agent id and let
+   *  the /api/agent-media route resolve the file on disk. */
+  onMedia?: (media: { id: string; agentId: string }) => void
   onUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number; model?: string }) => void
   onDone?: () => void
   onError?: (error: Error) => void
@@ -334,6 +338,20 @@ class GatewayWsClient {
         const stream = readString(payload.stream) ?? readString(data.stream)
         const phase = data.phase as string | undefined
         const status = data.status as string | undefined
+
+        // Built-in image generation (Codex `image_gen` / gpt-image-2). The
+        // gateway emits a `codex_app_server.item` of type `imageGeneration`
+        // with just the `ig_<id>` item id — no path, no url, no base64. We
+        // forward the id + agent so the proxy can surface a same-origin URL.
+        if (stream === 'codex_app_server.item' && data.type === 'imageGeneration' && phase === 'completed') {
+          const itemId = readString(data.itemId) ?? readString(data.id)
+          if (itemId) {
+            const sessionKey = readString(payload.sessionKey) ?? ''
+            const agentId = sessionKey.startsWith('agent:') ? sessionKey.split(':')[1] : 'main'
+            callbacks.onMedia?.({ id: itemId, agentId: agentId || 'main' })
+          }
+          return
+        }
 
         // Thinking / reasoning
         if (stream === 'thinking' || stream === 'plan') {
