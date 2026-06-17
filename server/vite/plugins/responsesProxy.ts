@@ -297,8 +297,12 @@ export function responsesProxyPlugin() {
         },
       )
     } catch (e: any) {
-      // A cancelled run rejecting is the expected outcome, not a failure.
-      if (finalStatus !== 'aborted') {
+      // failRun() in gatewayWs both invokes onError (which already appended a
+      // response.failed above, flipping finalStatus to 'failed') AND rejects the
+      // run promise — landing us here. Only emit if nothing terminal fired yet,
+      // otherwise the client sees two response.failed events and shows the error
+      // twice. A cancelled run rejecting is the expected outcome, not a failure.
+      if (finalStatus === 'completed') {
         finalStatus = 'failed'
         bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
           type: 'response.failed',
