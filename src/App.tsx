@@ -357,11 +357,25 @@ export function App() {
     setNeedsToken(false)
   }, [setGatewayToken])
 
+  const retryInFlightRef = useRef(false)
   const handleRetryConnection = useCallback(async () => {
-    setConnectionStatus('reconnecting')
-    const config = getConfig()
-    const ok = await checkGateway(config)
-    setConnectionStatus(ok ? 'connected' : 'disconnected')
+    if (retryInFlightRef.current) return
+    retryInFlightRef.current = true
+    try {
+      setConnectionStatus('reconnecting')
+      const config = getConfig()
+      let ok = await checkGateway(config)
+      if (!ok) {
+        // Give a poisoned HTTP/2 pool one chance to retry with a fresh socket
+        // before flipping the banner back to "Connection lost." — without this
+        // a single transient stall looks like Retry did nothing.
+        await new Promise((r) => setTimeout(r, 1500))
+        ok = await checkGateway(config)
+      }
+      setConnectionStatus(ok ? 'connected' : 'disconnected')
+    } finally {
+      retryInFlightRef.current = false
+    }
   }, [setConnectionStatus])
 
   // Check gateway connectivity + periodic retry when disconnected

@@ -836,10 +836,16 @@ export async function recoverResponse(threadId: string, config?: GatewayConfig):
 export async function checkGateway(config: GatewayConfig): Promise<boolean> {
   if (!config.token) return false
 
+  // Bust HTTP cache and any half-closed keep-alive stream: after a Tailscale
+  // re-handshake or gateway restart the browser's connection pool can hold a
+  // dead socket that silently stalls every reused fetch.
+  const url = `${apiPath(config, '/v1/models')}?_=${Date.now()}`
+
   try {
-    const res = await fetch(apiPath(config, '/v1/models'), {
+    const res = await fetch(url, {
       headers: backendHeaders(config),
-      signal: AbortSignal.timeout(3000),
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10000),
     })
     return res.ok
   } catch {
