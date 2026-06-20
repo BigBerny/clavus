@@ -6,6 +6,7 @@ import { useChatSettingsStore } from '../../state/chatSettings'
 import { useChatStore, type PendingFile } from '../../state/chat'
 import { useAutoClassifyStore } from '../../state/autoClassify'
 import { listAllWorkspaceFiles, searchWorkspaceFiles } from '../../lib/workspaceApi'
+import { compressImageToDataUrl } from '../../lib/imageCompress'
 import { useThreadsStore } from '../../state/threads'
 import { useDraftsStore } from '../../state/drafts'
 import StatusModal from './StatusModal'
@@ -282,15 +283,12 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
         if (!file || file.size > MAX_IMAGE_SIZE) continue
         if (pendingImages.length >= MAX_IMAGES) continue
 
-        const reader = new FileReader()
-        reader.onload = () => {
-          const dataUrl = reader.result as string
+        compressImageToDataUrl(file).then((dataUrl) => {
           setPendingImages((prev) => {
             if (prev.length >= MAX_IMAGES) return prev
             return [...prev, dataUrl]
           })
-        }
-        reader.readAsDataURL(file)
+        }).catch(() => {})
         return // Only handle the first image
       }
     }
@@ -316,9 +314,11 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     const handler = (e: Event) => {
       const images = (e as CustomEvent).detail?.images as string[] | undefined
       if (!images || images.length === 0) return
-      setPendingImages((prev) => {
-        const combined = [...prev, ...images]
-        return combined.slice(0, MAX_IMAGES)
+      Promise.all(images.map((img) => compressImageToDataUrl(img).catch(() => img))).then((compressed) => {
+        setPendingImages((prev) => {
+          const combined = [...prev, ...compressed]
+          return combined.slice(0, MAX_IMAGES)
+        })
       })
     }
     window.addEventListener('clavus-screenshot', handler)
@@ -594,15 +594,12 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       if (file.type.startsWith('image/')) {
         if (pendingImages.length >= MAX_IMAGES) continue
         if (file.size > MAX_IMAGE_SIZE) continue
-        const reader = new FileReader()
-        reader.onload = () => {
-          const dataUrl = reader.result as string
+        compressImageToDataUrl(file).then((dataUrl) => {
           setPendingImages((prev) => {
             if (prev.length >= MAX_IMAGES) return prev
             return [...prev, dataUrl]
           })
-        }
-        reader.readAsDataURL(file)
+        }).catch(() => {})
       } else {
         // All non-image files: upload to get a local path the agent can read directly
         if (pendingFiles.length >= MAX_FILES) continue
@@ -646,11 +643,9 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       if (file.type.startsWith('image/')) {
         if (pendingImages.length >= MAX_IMAGES) continue
         if (file.size > MAX_IMAGE_SIZE) continue
-        const reader = new FileReader()
-        reader.onload = () => {
-          setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, reader.result as string])
-        }
-        reader.readAsDataURL(file)
+        compressImageToDataUrl(file).then((dataUrl) => {
+          setPendingImages(prev => prev.length >= MAX_IMAGES ? prev : [...prev, dataUrl])
+        }).catch(() => {})
       } else {
         if (pendingFiles.length >= MAX_FILES) continue
         if (file.size > MAX_FILE_SIZE) continue

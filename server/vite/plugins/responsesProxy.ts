@@ -19,6 +19,19 @@ import {
   OPENCLAW_API_TARGET,
 } from '../serverEnv.ts'
 
+/** Image attachments from a request body: array of { mimeType, content(base64) }. */
+function readAttachments(parsed: any): Array<{ mimeType: string; content: string }> {
+  const raw = parsed?.attachments
+  if (!Array.isArray(raw)) return []
+  const out: Array<{ mimeType: string; content: string }> = []
+  for (const a of raw) {
+    const mimeType = typeof a?.mimeType === 'string' ? a.mimeType : ''
+    const content = typeof a?.content === 'string' ? a.content : ''
+    if (mimeType && content) out.push({ mimeType, content })
+  }
+  return out
+}
+
 /** Latest user text from a Responses-API `input` (string, or array of items). */
 function extractLatestUserText(input: any): string {
   if (typeof input === 'string') return input
@@ -141,12 +154,14 @@ export function responsesProxyPlugin() {
     const gw = getGatewayWs()
     if (!gw.isConnected) return false
 
+    const attachments = readAttachments(parsed)
+
     const input = typeof parsed.input === 'string'
       ? parsed.input
       : Array.isArray(parsed.input)
         ? parsed.input.map((p: any) => typeof p === 'string' ? p : p?.text ?? '').join('\n')
         : ''
-    if (!input) return false
+    if (!input && attachments.length === 0) return false
 
     // Mode 1 pre-pass: prepend relevant workspace context (workspace-indexer). Fail-open —
     // workspaceContextBlock never throws and returns null when nothing is relevant. Keyed by
@@ -163,8 +178,13 @@ export function responsesProxyPlugin() {
       ? req.headers['x-openclaw-model'].trim()
       : ''
     const bodyModel = typeof parsed.model === 'string' ? parsed.model.trim() : ''
-    const modelOverride = headerModel
+    const requestedModel = headerModel
       || (bodyModel && bodyModel !== 'openclaw/default' && !bodyModel.startsWith('openclaw/') ? bodyModel : undefined)
+    // Image attachments require a vision-capable model. The gateway's named
+    // models ("auto", "openclaw/*") reject images ("active model does not accept
+    // image inputs"), but the agent's own default model handles vision — so when
+    // sending attachments we omit the model override and let the agent default win.
+    const modelOverride = attachments.length ? undefined : requestedModel
 
     const headerAgentId = typeof req.headers['x-openclaw-agent-id'] === 'string'
       ? req.headers['x-openclaw-agent-id'].trim()
@@ -213,6 +233,7 @@ export function responsesProxyPlugin() {
           model: modelOverride,
           thinking: reasoning?.effort,
           agentId,
+          attachments,
         },
         {
           onThinking: (delta) => {

@@ -246,12 +246,27 @@ function toResponsesContent(content: ChatCompletionMessage['content']): string |
 
 function toOpenClawResponsesInput(content: ChatCompletionMessage['content']): string {
   if (typeof content === 'string') return content
+  // Text-only path. Images never go here — messages with images use the
+  // structured `input_image` form (see sendResponsesStream) so the gateway
+  // receives real image parts instead of base64 inlined as text.
   return content
-    .map((part) => {
-      if (part.type === 'text') return part.text
-      return `[image: ${part.image_url.url}]`
-    })
+    .filter((part) => part.type === 'text')
+    .map((part) => part.text)
     .join('\n')
+}
+
+/** Split image_url parts (data URLs) into gateway attachments: { mimeType, content(base64) }. */
+function toOpenClawAttachments(content: ChatCompletionMessage['content']): Array<{ mimeType: string; content: string }> {
+  if (typeof content === 'string') return []
+  const out: Array<{ mimeType: string; content: string }> = []
+  for (const part of content) {
+    if (part.type !== 'image_url') continue
+    const url = part.image_url.url
+    const match = url.match(/^data:([^;,]+)[^,]*,(.*)$/s)
+    if (!match) continue
+    out.push({ mimeType: match[1], content: match[2] })
+  }
+  return out
 }
 
 // --- Responses API event dispatch ---
@@ -523,6 +538,8 @@ async function sendResponsesStream(
   const lastUser = [...messages].reverse().find((msg) => msg.role === 'user')
   if (!lastUser) throw new Error('No user message to send')
 
+  const openClawAttachments = isOpenClaw(config) ? toOpenClawAttachments(lastUser.content) : []
+
   const res = await fetch(apiPath(config, '/v1/responses'), {
     method: 'POST',
     headers: {
@@ -537,12 +554,18 @@ async function sendResponsesStream(
       ...(isOpenClaw(config) && sessionKey(options.conversationId) ? { user: sessionKey(options.conversationId) } : {}),
       ...(!isOpenClaw(config) && options.conversationId ? { conversation: `clavus:${options.conversationId}` } : {}),
       ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort, summary: 'auto' } } : {}),
+      // OpenClaw: text in `input` (string, WS agent RPC path → streams thinking),
+      // images ride alongside as `attachments` which the gateway agent RPC turns
+      // into real vision input. Other backends keep the structured Responses form.
       input: isOpenClaw(config)
         ? toOpenClawResponsesInput(lastUser.content)
         : [{
             role: 'user',
             content: toResponsesContent(lastUser.content),
           }],
+      ...(isOpenClaw(config) && openClawAttachments.length
+        ? { attachments: openClawAttachments }
+        : {}),
     }),
     signal,
   })

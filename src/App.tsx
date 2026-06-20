@@ -18,6 +18,7 @@ import { DesktopSidebar } from './components/layout/DesktopSidebar.tsx'
 import { ConnectionBanner } from './components/layout/ConnectionBanner.tsx'
 import { PanelLoading } from './components/layout/PanelLoading.tsx'
 import { consumePendingThread } from './lib/pendingThread.ts'
+import { compressImageToDataUrl } from './lib/imageCompress.ts'
 import { useModelStore } from './state/preset.ts'
 import { useChatSettingsStore } from './state/chatSettings.ts'
 import { usePushNotifications } from './hooks/usePushNotifications.ts'
@@ -966,9 +967,14 @@ export function App() {
 
   useEffect(() => {
     const handleInteractiveSend = (event: Event) => {
-      const detail = (event as CustomEvent<{ content?: string }>).detail
-      const content = detail?.content?.trim()
-      if (content) handleSend(content)
+      const detail = (event as CustomEvent<{ content?: string; images?: string[] }>).detail
+      const content = detail?.content?.trim() ?? ''
+      const rawImages = Array.isArray(detail?.images) ? detail.images : []
+      if (!content && rawImages.length === 0) return
+      // Compress screenshots (native captures are full-res PNGs) before sending,
+      // matching the composer's attach path, then send text + images as one message.
+      Promise.all(rawImages.map((img) => compressImageToDataUrl(img).catch(() => img)))
+        .then((images) => handleSend(content, images.length ? images : undefined))
     }
     window.addEventListener('clavus:interactive-send', handleInteractiveSend)
     return () => window.removeEventListener('clavus:interactive-send', handleInteractiveSend)
