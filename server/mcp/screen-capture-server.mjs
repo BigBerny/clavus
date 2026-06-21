@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Clavus screen-capture MCP server (stdio).
 //
-// Spawned by the Hermes gateway (registered in ~/.hermes/config.yaml under
-// mcp_servers.clavus_screen). Gives the agent two tools to look at what was on
-// the user's screen while they dictated:
+// Spawned by the OpenClaw gateway (registered via `openclaw mcp add clavus_screen
+// --command node --arg <this file>`, stored in ~/.openclaw/openclaw.json). Gives
+// the agent two tools to look at what was on the user's screen while they dictated:
 //
 //   list_screen_captures — text index of available frames (timestamp + app +
 //       window title). No image bytes; cheap. Eager-uploaded by the desktop.
