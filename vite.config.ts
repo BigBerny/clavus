@@ -11,6 +11,7 @@ import { hermesResponsesPlugin } from './server/vite/plugins/hermesResponses.ts'
 import { openaiRealtimeProxy } from './server/vite/plugins/openaiRealtimeProxy.ts'
 import { pushApiPlugin } from './server/vite/plugins/pushApi.ts'
 import { responsesProxyPlugin } from './server/vite/plugins/responsesProxy.ts'
+import { screenCapturePlugin } from './server/vite/plugins/screenCapture.ts'
 import { desktopDictationPlugin, elevenLabsProxy } from './server/vite/plugins/speech.ts'
 import { threadsApiPlugin } from './server/vite/plugins/threadsApi.ts'
 import { transcriptsApiPlugin } from './server/vite/plugins/transcripts.ts'
@@ -145,6 +146,7 @@ export default defineConfig({
     threadsApiPlugin(),
     elevenLabsProxy(),
     desktopDictationPlugin(),
+    screenCapturePlugin(),
     transcriptsApiPlugin(),
     composeApiPlugin(),
     appleAppSiteAssociationPlugin(),

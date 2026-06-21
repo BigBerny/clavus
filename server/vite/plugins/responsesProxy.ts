@@ -20,6 +20,7 @@ import {
 } from '../serverEnv.ts'
 import { routeUtterance } from './jane/router.ts'
 import { MAIN_THREAD_ID } from './jane/store.ts'
+import { screenCaptureHint } from './screenCapture.ts'
 
 /** Image attachments from a request body: array of { mimeType, content(base64) }. */
 function readAttachments(parsed: any): Array<{ mimeType: string; content: string }> {
@@ -273,6 +274,12 @@ export function responsesProxyPlugin() {
     let agentMessage = input
     const wsCtx = await workspaceContextBlock(threadId || undefined, input)
     if (wsCtx.block) agentMessage = `${wsCtx.block}\n\n${input}`
+
+    // Let the agent know screen captures from the just-finished dictation are
+    // fetchable via the clavus_screen MCP tools. Null (no recent session) →
+    // nothing injected, so plain web turns are unaffected.
+    const capHint = screenCaptureHint()
+    if (capHint) agentMessage = `${capHint}\n\n${agentMessage}`
 
     const sessionKey = typeof parsed.user === 'string' ? parsed.user
       : typeof req.headers['x-openclaw-session-key'] === 'string' ? req.headers['x-openclaw-session-key']
