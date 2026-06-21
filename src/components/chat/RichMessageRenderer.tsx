@@ -1,9 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createRoot } from 'react-dom/client'
-import Markdown from 'react-markdown'
+import Markdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { getFileTypeInfo, type FileViewerKind } from '../../lib/fileTypes'
+
+// react-markdown's default URL sanitizer strips unknown schemes, which would
+// blank out our `clavus://` deep links (file cards, thread breadcrumbs). Pass
+// those through untouched and defer everything else to the default sanitizer.
+function clavusUrlTransform(url: string): string {
+  return url.startsWith('clavus://') ? url : defaultUrlTransform(url)
+}
 
 // ─── Code Block ──────────────────────────────────────────────────────────────
 
@@ -97,9 +104,37 @@ function openFileInline(path: string, title: string) {
   }))
 }
 
+/** Detect a Clavus conversation link (`clavus://thread/<id>`), used as the
+ *  breadcrumb card Jane leaves in Main when she reroutes a turn into a branch. */
+function parseClavusThreadUrl(href: string): { threadId: string } | null {
+  const prefix = 'clavus://thread/'
+  if (!href.startsWith(prefix)) return null
+  const id = href.slice(prefix.length).split(/[?#]/)[0]
+  return id ? { threadId: id } : null
+}
+
+function ThreadLinkCard({ threadId, label }: { threadId: string; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => import('../../state/router').then(({ pushHash }) => pushHash({ kind: 'chat', threadId }))}
+      className="inline-btn my-2 inline-flex w-full items-center gap-2 rounded-xl border border-accent/20 bg-accent/5 dark:bg-accent/8 px-3 py-2 text-left hover:bg-accent/10 transition-colors"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent flex-shrink-0"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span className="text-[13px] font-medium text-accent truncate min-w-0 flex-1">{label}</span>
+      <span className="text-[11px] font-medium text-accent/70 whitespace-nowrap flex-shrink-0">Open</span>
+    </button>
+  )
+}
+
 function ExternalLink(threadId?: string, isStreaming?: boolean) {
   return function ExternalLinkInner({ href, children, ...props }: React.ComponentPropsWithoutRef<'a'>) {
     if (href) {
+      const thread = parseClavusThreadUrl(href)
+      if (thread) {
+        const label = typeof children === 'string' ? children : 'Open conversation'
+        return <ThreadLinkCard threadId={thread.threadId} label={label} />
+      }
       const parsed = parseClavusFileUrl(href)
       if (parsed) return <FileLinkCard href={href} path={parsed.path} filename={parsed.filename} threadId={threadId} isStreaming={isStreaming} />
     }
@@ -349,6 +384,7 @@ export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId, i
     <Markdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeHighlight]}
+      urlTransform={clavusUrlTransform}
       components={components}
     >
       {content}

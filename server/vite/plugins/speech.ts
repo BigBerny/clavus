@@ -2,6 +2,21 @@ import fs from 'fs'
 import nodePath from 'path'
 
 import { ELEVENLABS_KEY, THREADS_DATA_DIR } from '../serverEnv.ts'
+import { routeUtterance, type RouterDecision } from './jane/router.ts'
+
+const CLAVUS_BUNDLE_ID = 'win.random-hamster.clavus'
+
+/** Compact routing shape sent back to the desktop overlay. The overlay only
+ *  needs `target` (paste vs Jane-directed); the rest rides along for display. */
+function trimRouting(d: RouterDecision) {
+  return {
+    target: d.target,
+    routedThreadId: d.routedThreadId,
+    label: d.label,
+    rationale: d.rationale,
+    newBranchTitle: d.newBranchTitle,
+  }
+}
 
 export function elevenLabsProxy() {
   const transcriptsFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
@@ -154,6 +169,30 @@ export function desktopDictationPlugin() {
         let parsed: any = null
         try { parsed = JSON.parse(responseText) } catch {}
 
+        const appName = typeof req.headers['x-clavus-app-name'] === 'string' ? req.headers['x-clavus-app-name'] : ''
+        const bundleId = typeof req.headers['x-clavus-bundle-id'] === 'string' ? req.headers['x-clavus-bundle-id'] : ''
+
+        // Jane's server-side router: decide where this dictation belongs (paste
+        // into the focused app vs. main/branch/new-branch/ask). The desktop
+        // overlay branches on `routing.target`. Fail-open — never block the
+        // transcript if routing hiccups (overlay then keeps its paste default).
+        let routing: ReturnType<typeof trimRouting> | null = null
+        if (parsed?.text && resp.ok) {
+          try {
+            const decision = await routeUtterance({
+              utterance: parsed.text,
+              appName: appName || undefined,
+              bundleId: bundleId || undefined,
+              source: 'desktop-dictation',
+              focusedInClavus: bundleId === CLAVUS_BUNDLE_ID,
+            })
+            routing = trimRouting(decision)
+            parsed.routing = routing
+          } catch {
+            // Best-effort; the overlay treats absent routing as "paste as usual".
+          }
+        }
+
         if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
         const headerNum = (name: string): number | undefined => {
           const v = req.headers[name]
@@ -164,8 +203,8 @@ export function desktopDictationPlugin() {
         fs.appendFileSync(historyFile, JSON.stringify({
           timestamp: new Date().toISOString(),
           source: 'clavus-desktop',
-          appName: req.headers['x-clavus-app-name'] || '',
-          bundleId: req.headers['x-clavus-bundle-id'] || '',
+          appName,
+          bundleId,
           audioBytes: body.length,
           audioDurationMs: headerNum('x-clavus-audio-duration-ms'),
           audioFormat: typeof req.headers['x-clavus-audio-format'] === 'string'
@@ -176,11 +215,12 @@ export function desktopDictationPlugin() {
           durationMs: Date.now() - startedAt,
           text: parsed?.text || '',
           transcriptionId: parsed?.transcription_id || '',
+          routing,
         }) + '\n')
 
         res.statusCode = resp.status
         res.setHeader('Content-Type', resp.headers.get('content-type') || 'application/json')
-        res.end(responseText)
+        res.end(parsed ? JSON.stringify(parsed) : responseText)
       } catch (err: any) {
         res.statusCode = 502
         res.setHeader('Content-Type', 'application/json')

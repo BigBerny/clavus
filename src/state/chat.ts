@@ -136,6 +136,9 @@ interface ChatState {
   truncateMessagesFrom: (threadId: string, messageId: string) => Message[]
   /** Bulk-set the entire messages array for a thread (e.g. for branching). */
   setThreadMessages: (threadId: string, messages: Message[]) => void
+  /** Move the given messages (by id, preserving objects/order) from one thread
+   *  to another. Used when Jane reroutes a typed Main turn into a branch. */
+  relocateMessages: (fromThreadId: string, toThreadId: string, messageIds: string[]) => void
   /** Queue a message (or append to an existing one) while a response is streaming. */
   enqueueOrAppend: (threadId: string, msg: QueuedMessage) => void
   /** Clear the queued message for a thread (e.g. after sending or trashing it). */
@@ -524,6 +527,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
       threadStates: {
         ...state.threadStates,
         [threadId]: { ...state.threadStates[threadId]!, messages },
+      },
+    }))
+  },
+
+  relocateMessages: (fromThreadId, toThreadId, messageIds) => {
+    if (fromThreadId === toThreadId || messageIds.length === 0) return
+    get().ensureThread(toThreadId)
+    const fromTs = get().threadStates[fromThreadId]
+    if (!fromTs) return
+    const idSet = new Set(messageIds)
+    const moving = fromTs.messages.filter((m) => idSet.has(m.id))
+    if (moving.length === 0) return
+    const remaining = fromTs.messages.filter((m) => !idSet.has(m.id))
+    const toTs = get().threadStates[toThreadId]!
+    const merged = [...toTs.messages, ...moving]
+    saveMessages(fromThreadId, remaining)
+    saveMessages(toThreadId, merged)
+    set((state) => ({
+      threadStates: {
+        ...state.threadStates,
+        [fromThreadId]: { ...state.threadStates[fromThreadId]!, messages: remaining },
+        [toThreadId]: { ...state.threadStates[toThreadId]!, messages: merged },
       },
     }))
   },

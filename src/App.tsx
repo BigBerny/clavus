@@ -4,7 +4,7 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
-import { useThreadsStore, syncFromServer, archiveStaleThreads, refreshThreadsMetadata } from './state/threads.ts'
+import { useThreadsStore, syncFromServer, archiveStaleThreads, refreshThreadsMetadata, MAIN_THREAD_ID } from './state/threads.ts'
 import { useChatStore, refreshThreadMessages } from './state/chat.ts'
 import { startThreadsSync } from './state/sync.ts'
 import { useTabsStore, ensureChatTab, openOrFocusFinderTab, type ChatTab, type FileTab, type MarksenseTab, type FinderTab } from './state/tabs.ts'
@@ -986,6 +986,24 @@ export function App() {
     window.addEventListener('clavus:interactive-send', handleInteractiveSend)
     return () => window.removeEventListener('clavus:interactive-send', handleInteractiveSend)
   }, [handleSend])
+
+  // Desktop dictation that Jane's router decided is for her (not a paste into a
+  // foreign app): send it into the Main conversation, where the server router
+  // re-files it into main/branch/new-branch/ask exactly like a typed Main send.
+  useEffect(() => {
+    const handleJaneDictation = (event: Event) => {
+      const detail = (event as CustomEvent<{ content?: string; images?: string[] }>).detail
+      const content = detail?.content?.trim() ?? ''
+      const rawImages = Array.isArray(detail?.images) ? detail.images : []
+      if (!content && rawImages.length === 0) return
+      pushHash({ kind: 'chat', threadId: MAIN_THREAD_ID })
+      switchThread(MAIN_THREAD_ID)
+      Promise.all(rawImages.map((img) => compressImageToDataUrl(img).catch(() => img)))
+        .then((images) => send(MAIN_THREAD_ID, content, images.length ? images : undefined))
+    }
+    window.addEventListener('clavus:jane-dictation', handleJaneDictation)
+    return () => window.removeEventListener('clavus:jane-dictation', handleJaneDictation)
+  }, [send, switchThread])
 
   // Abort scoped to visible thread
   const handleAbort = useCallback(() => {

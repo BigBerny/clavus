@@ -30,13 +30,31 @@ export interface Thread {
   /** Last time the user actually looked at this thread (any device — synced).
    *  updatedAt > lastSeenAt with an assistant last-message ⇒ unseen answer. */
   lastSeenAt?: number
+  /** Rolling topic summary, maintained server-side, used by Jane's router to
+   *  decide where new input belongs. Server is authoritative for this field. */
+  summary?: string
+  /** For branches: the thread this conversation was spun off from (Main).
+   *  Lets Jane trace lineage and read sibling branches on demand. */
+  parentThreadId?: string
+  /** Conversation role. 'main' = the persistent Jane conversation (never
+   *  auto-archived); 'branch' = a topic spun off from Main; undefined/'normal'
+   *  = an ordinary thread. Server is authoritative for this field. */
+  kind?: 'main' | 'branch' | 'normal'
 }
+
+/** Stable id of the persistent "Jane" conversation. Everything Jane-directed
+ *  defaults here; branches are spun off from it. Bootstrapped on first run both
+ *  client- and server-side. */
+export const MAIN_THREAD_ID = 'main'
 
 interface ThreadsState {
   threads: Thread[]
   activeThreadId: string
 
   createThread: () => string
+  /** Create a branch thread with a server-minted id (idempotent: no-op if it
+   *  already exists). Used when Jane reroutes a typed Main turn into a new branch. */
+  ensureBranchThread: (id: string, title: string, parentThreadId?: string) => void
   deleteThread: (id: string) => void
   switchThread: (id: string) => void
   updateThreadTitle: (id: string, title: string) => void
@@ -291,7 +309,7 @@ export function archiveStaleThreads(): number {
   const current = useThreadsStore.getState().threads
   let count = 0
   const next = current.map((t) => {
-    if (!t.archived && !t.favorite && t.updatedAt < cutoff) {
+    if (!t.archived && !t.favorite && t.kind !== 'main' && t.updatedAt < cutoff) {
       count++
       return { ...t, archived: true }
     }
@@ -380,7 +398,7 @@ export async function syncFromServer(): Promise<boolean> {
     let archiveDirty = false
     for (let i = 0; i < mergedThreads.length; i++) {
       const t = mergedThreads[i]
-      if (!t.archived && !t.favorite && t.updatedAt < archiveCutoff) {
+      if (!t.archived && !t.favorite && t.kind !== 'main' && t.updatedAt < archiveCutoff) {
         mergedThreads[i] = { ...t, archived: true }
         archiveDirty = true
       }
@@ -480,11 +498,29 @@ export function mergeThreadsFromServer(serverThreads: Thread[]): boolean {
       }
       localById.set(incoming.id, merged)
       changed = true
-    } else if ((incoming.lastSeenAt ?? 0) > (local.lastSeenAt ?? 0)) {
-      // Seen-markers don't bump updatedAt, so adopt them independently —
-      // an answer read on another device must clear "unseen" here.
-      localById.set(incoming.id, { ...local, lastSeenAt: incoming.lastSeenAt })
-      changed = true
+    } else {
+      // Server is authoritative for routing metadata (summary/kind/parentThreadId)
+      // and seen-markers — none of these bump updatedAt, so adopt them
+      // independently of the updatedAt comparison above.
+      const nextSummary = incoming.summary ?? local.summary
+      const nextKind = incoming.kind ?? local.kind
+      const nextParent = incoming.parentThreadId ?? local.parentThreadId
+      const nextSeen = Math.max(local.lastSeenAt ?? 0, incoming.lastSeenAt ?? 0) || undefined
+      if (
+        nextSummary !== local.summary
+        || nextKind !== local.kind
+        || nextParent !== local.parentThreadId
+        || nextSeen !== local.lastSeenAt
+      ) {
+        localById.set(incoming.id, {
+          ...local,
+          summary: nextSummary,
+          kind: nextKind,
+          parentThreadId: nextParent,
+          lastSeenAt: nextSeen,
+        })
+        changed = true
+      }
     }
   }
 
@@ -511,6 +547,23 @@ export async function refreshThreadsMetadata(): Promise<boolean> {
 
 // Initialize threads
 const initialThreads = loadThreads()
+
+// Bootstrap the persistent Main ("Jane") conversation if it doesn't exist yet.
+// The server bootstraps the same stable id, so a fresh device and a fresh
+// server converge on one thread after sync (dedup by id).
+if (!initialThreads.find((t) => t.id === MAIN_THREAD_ID)) {
+  const now = Date.now()
+  initialThreads.unshift({
+    id: MAIN_THREAD_ID,
+    title: 'Jane',
+    createdAt: now,
+    updatedAt: now,
+    lastMessagePreview: '',
+    kind: 'main',
+  })
+  saveThreads(initialThreads)
+}
+
 let initialActiveId = getActiveThreadId()
 
 // If active thread doesn't exist anymore, clear it
@@ -572,6 +625,25 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
       return { threads, activeThreadId: id }
     })
     return id
+  },
+
+  ensureBranchThread: (id, title, parentThreadId = MAIN_THREAD_ID) => {
+    set((state) => {
+      if (state.threads.some((t) => t.id === id)) return state
+      const now = Date.now()
+      const thread: Thread = {
+        id,
+        title: title || 'New conversation',
+        createdAt: now,
+        updatedAt: now,
+        lastMessagePreview: '',
+        kind: 'branch',
+        parentThreadId,
+      }
+      const threads = [thread, ...state.threads]
+      saveThreads(threads)
+      return { threads }
+    })
   },
 
   deleteThread: (id) => {

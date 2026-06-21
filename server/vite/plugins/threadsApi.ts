@@ -2,6 +2,12 @@ import fs from 'fs'
 import nodePath from 'path'
 
 import { THREADS_DATA_DIR, sendPushToAll } from '../serverEnv.ts'
+import { registerThreadBroadcaster } from './jane/bus.ts'
+import { appendThreadMessage, createBranchThread } from './jane/store.ts'
+
+/** Stable id of the persistent "Jane" conversation. Mirrors MAIN_THREAD_ID in
+ *  src/state/threads.ts. */
+const MAIN_THREAD_ID = 'main'
 
 export function threadsApiPlugin() {
   // Ensure data directory exists
@@ -37,6 +43,37 @@ export function threadsApiPlugin() {
     return Buffer.concat(chunks).toString('utf-8')
   }
 
+  function readThreads(): any[] {
+    try {
+      const data = fs.existsSync(threadsFile) ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8')) : []
+      return Array.isArray(data) ? data : []
+    } catch {
+      return []
+    }
+  }
+
+  function writeThreads(threads: any[]) {
+    fs.writeFileSync(threadsFile, JSON.stringify(threads), 'utf-8')
+  }
+
+  // Bootstrap the persistent Main ("Jane") conversation so every device that
+  // syncs adopts the same stable thread id.
+  function ensureMainThread() {
+    const threads = readThreads()
+    if (threads.find((t: any) => t?.id === MAIN_THREAD_ID)) return
+    const now = Date.now()
+    threads.unshift({
+      id: MAIN_THREAD_ID,
+      title: 'Jane',
+      createdAt: now,
+      updatedAt: now,
+      lastMessagePreview: '',
+      kind: 'main',
+    })
+    try { writeThreads(threads) } catch { /* ignore */ }
+  }
+  ensureMainThread()
+
   // Cross-device change broadcaster. Every open EventSource connection registers
   // itself here; PUTs to threads/messages broadcast a JSON event. The originating
   // client passes X-Client-Id so it can be excluded from its own broadcast.
@@ -54,6 +91,17 @@ export function threadsApiPlugin() {
       try { c.res.write(payload) } catch { /* connection dead; cleaned up by close handler */ }
     }
   }
+
+  // Let server-side writers (Jane's router, summary maintenance) broadcast
+  // through the same SSE fan-out without an HTTP self-call.
+  registerThreadBroadcaster(broadcast)
+
+  // Backfill missing thread summaries shortly after startup, off the hot path.
+  setTimeout(() => {
+    import('./jane/summary.ts')
+      .then((m) => m.backfillSummaries())
+      .catch(() => { /* best-effort */ })
+  }, 5000)
 
   const attach = (server: any) => {
     server.middlewares.use(async (req: any, res: any, next: any) => {
@@ -230,6 +278,55 @@ export function threadsApiPlugin() {
 
             res.statusCode = 201
             res.end(JSON.stringify({ threadId, thread }))
+            return
+          }
+
+          // Append a message to an existing (or implicitly created) thread.
+          // Generalizes /push (create-only) for Jane's router + reassign: bumps
+          // preview/updatedAt and broadcasts via the shared store helper.
+          if (req.url === '/api/threads/append' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            const threadId: string = body.threadId
+            const role: string = body.role
+            const content: string = typeof body.content === 'string' ? body.content : ''
+            if (!threadId || (role !== 'user' && role !== 'assistant' && role !== 'system')) {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'threadId and valid role are required' }))
+              return
+            }
+            const now = Date.now()
+            const message = {
+              id: typeof body.id === 'string' ? body.id : `msg-${now}-${Math.random().toString(36).slice(2, 8)}`,
+              role: role as 'user' | 'assistant' | 'system',
+              content,
+              timestamp: now,
+              ...(typeof body.meta === 'string' ? { meta: body.meta } : {}),
+            }
+            appendThreadMessage(threadId, message, { bumpActivity: body.bumpActivity !== false })
+            res.statusCode = 201
+            res.end(JSON.stringify({ ok: true, messageId: message.id }))
+            return
+          }
+
+          // Create a branch conversation with a curated hidden seed message.
+          if (req.url === '/api/threads/branch' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            const seedPrompt: string = typeof body.seedPrompt === 'string' ? body.seedPrompt : ''
+            if (!seedPrompt) {
+              res.statusCode = 400
+              res.end(JSON.stringify({ error: 'seedPrompt is required' }))
+              return
+            }
+            const thread = createBranchThread({
+              title: body.title || seedPrompt.slice(0, 40),
+              summary: body.summary,
+              seedPrompt,
+              parentThreadId: body.parentThreadId,
+              modelId: body.modelId,
+              reasoningLevel: body.reasoningLevel,
+            })
+            res.statusCode = 201
+            res.end(JSON.stringify({ threadId: thread.id, thread }))
             return
           }
 

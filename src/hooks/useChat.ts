@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore, composeMessageText, type Message } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
 import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse, cancelActiveResponse, isTransientLockError } from '../gateway/chat.ts'
-import { useThreadsStore } from '../state/threads.ts'
+import { useThreadsStore, MAIN_THREAD_ID } from '../state/threads.ts'
+import { pushHash } from '../state/router.ts'
 import { getConfig } from '../gateway/config.ts'
 import { useModelStore } from '../state/preset.ts'
 import { useChatSettingsStore } from '../state/chatSettings.ts'
@@ -82,8 +83,15 @@ export function useChat() {
     }
   }, [setConnectionStatus])
 
-  const send = useCallback(async (threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string) => {
+  const send = useCallback(async (inputThreadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string) => {
     if (!content.trim() && (!images || images.length === 0) && (!files || files.length === 0)) return
+
+    // Mutable: Jane's server-side router may refile this turn into a different
+    // thread mid-send (see onRouted). Everything after the routing point — token
+    // appends, completion, error/resume handling, retries — must target the
+    // resolved thread, so the rest of this function reads `threadId`, not the arg.
+    let threadId = inputThreadId
+    let userMsgId: string | undefined
 
     const {
       getThreadState,
@@ -122,7 +130,7 @@ export function useChat() {
     }
 
     if (retryCount === 0) {
-      addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files })
+      userMsgId = addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files })
       // Claim the streaming slot before any awaits so a concurrent recovery sweep
       // (or a second submit) doesn't see "last message is user, isStreaming=false"
       // and kick off a duplicate run. Auto-classify below can await up to 3s.
@@ -264,6 +272,27 @@ export function useChat() {
         const merged = [...existing, ...files.filter((f) => !seen.has(f.path))]
         store.getState().setWorkspaceFiles(threadId, lastUser.id, merged)
       },
+      onRouted: ({ threadId: routed, target, title }: { threadId: string; target: string; title?: string; rationale?: string }) => {
+        // Jane filed this turn into a different conversation. Relocate the live
+        // exchange there, leave a breadcrumb card in the source, and auto-follow.
+        if (!routed || routed === threadId) return
+        const threads = useThreadsStore.getState()
+        if (target === 'new-branch') threads.ensureBranchThread(routed, title || 'New conversation')
+        const ids = [userMsgId, assistantId].filter((x): x is string => !!x)
+        store.getState().relocateMessages(threadId, routed, ids)
+        store.getState().addMessage(threadId, {
+          role: 'assistant',
+          content: `[${title || 'Opened a new conversation'}](clavus://thread/${routed})`,
+        })
+        // Hand the streaming slot from the source thread to the routed one.
+        store.getState().setStreaming(threadId, false)
+        store.getState().setAbortController(threadId, null)
+        store.getState().setStreaming(routed, true)
+        store.getState().setAbortController(routed, controller)
+        markStreamActivity(routed)
+        pushHash({ kind: 'chat', threadId: routed })
+        threadId = routed
+      },
       onResponseId: (responseId: string) => {
         store.getState().setBackendResponseId(threadId, assistantId, responseId)
       },
@@ -327,6 +356,9 @@ export function useChat() {
           // silently fall back to the default level).
           reasoningEffort: reasoningEffort === 'none' ? 'off' : reasoningEffort,
           idempotencyKey: idemKey,
+          // Opt typed Main sends into Jane's server-side router (first attempt
+          // only; retries target whatever thread we already resolved to).
+          route: retryCount === 0 && inputThreadId === MAIN_THREAD_ID,
         },
       )
     } catch (error) {

@@ -26,6 +26,9 @@ export interface StreamCallbacks {
   onWorkspaceContext?: (files: WorkspaceFileEvent[]) => void
   onUsage?: (usage: UsageData) => void
   onResponseId?: (responseId: string) => void
+  /** Jane's server-side router filed this turn into a (possibly different)
+   *  thread. Fires once, before any tokens, so the client can auto-follow. */
+  onRouted?: (route: { threadId: string; target: string; title?: string; rationale?: string }) => void
   /** Called with the sequence id of each buffered event (when streamed via the
    *  Clavus event buffer). Used to track `lastEventSeq` for resume. */
   onSeq?: (seq: number) => void
@@ -474,6 +477,17 @@ export interface SendOptions {
    *  fallback and across retries so the gateway dedupes instead of starting a
    *  duplicate run. */
   idempotencyKey?: string
+  /** Opt this send into Jane's server-side routing (sends X-Clavus-Route: 1).
+   *  Set only for typed sends from Main. */
+  route?: boolean
+}
+
+/** Server-side routing decision surfaced via response headers on a routed send. */
+export interface RouteInfo {
+  threadId: string
+  target: string
+  title?: string
+  rationale?: string
 }
 
 /** A session-write-lock timeout from the OpenClaw gateway: the turn couldn't be
@@ -546,6 +560,7 @@ async function sendResponsesStream(
       'Content-Type': 'application/json',
       ...backendHeaders(config, options),
       'Idempotency-Key': options.idempotencyKey ?? crypto.randomUUID(),
+      ...(options.route ? { 'X-Clavus-Route': '1' } : {}),
     },
     body: JSON.stringify({
       model: requestModel(config),
@@ -573,6 +588,21 @@ async function sendResponsesStream(
   if (!res.ok) {
     const detail = await res.text().catch(() => '')
     throw new ResponsesStreamError(`${config.backend} error: ${res.status} ${res.statusText}${detail ? ` — ${detail}` : ''}`, false)
+  }
+
+  // Jane's router may have refiled this turn into a different thread. The header
+  // is set before the SSE body, so surface it before any tokens arrive.
+  if (options.route && callbacks.onRouted) {
+    const routedThread = res.headers.get('X-Clavus-Routed-Thread')
+    if (routedThread) {
+      const decodeHeader = (v: string | null) => { try { return v ? decodeURIComponent(v) : undefined } catch { return v ?? undefined } }
+      callbacks.onRouted({
+        threadId: routedThread,
+        target: res.headers.get('X-Clavus-Route-Target') || '',
+        title: decodeHeader(res.headers.get('X-Clavus-Route-Title')),
+        rationale: decodeHeader(res.headers.get('X-Clavus-Route-Rationale')),
+      })
+    }
   }
 
   const state = createResponsesDispatchState()
