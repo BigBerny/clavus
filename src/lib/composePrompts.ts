@@ -657,7 +657,7 @@ const PROMPT_OPTIMISER_LANGUAGE_RULE =
   "Prompt optimiser language rule: when language selection is Auto, preserve the dictation language. Do not translate German prompts into English just because the target app is a coding assistant. Translate only if the user explicitly requested another language or manually selected one."
 
 const PRODUCT_NAME_RULE =
-  "Speech-to-text cannot reliably tell apart two similar-sounding names: \"Clavus\" (the user's own app) and \"Claude\" (Anthropic's AI). Whenever either name appears in the [dictation], do not trust that the transcriber picked the right one — judge from the surrounding context which the user most likely meant, and use that. Lean towards \"Clavus\" when the talk is about the app, its dictation/chat/notes/messages or features; lean towards \"Claude\" when it clearly refers to the AI model (e.g. \"Claude Code\", \"Opus/Sonnet/Haiku\", \"Anthropic\")."
+  "Two similar-sounding names are easy to confuse: \"Clavus\" (the user's own app) and \"Claude\" (Anthropic's AI). The speech-to-text is usually right, so by default keep whichever name appears in the [dictation]. Only correct it when the surrounding context makes it clear the transcriber got it wrong — e.g. it wrote \"Claude\" but the talk is plainly about the app (its dictation/chat/notes/messages or features), or it wrote \"Clavus\" but the talk is plainly about the AI model (\"Claude Code\", \"Opus/Sonnet/Haiku\", \"Anthropic\"). When in doubt, keep exactly what was transcribed."
 
 /**
  * The pivotal rule: the model must pick one of two modes on every call.
