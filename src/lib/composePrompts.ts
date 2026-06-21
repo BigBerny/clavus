@@ -657,7 +657,7 @@ const PROMPT_OPTIMISER_LANGUAGE_RULE =
   "Prompt optimiser language rule: when language selection is Auto, preserve the dictation language. Do not translate German prompts into English just because the target app is a coding assistant. Translate only if the user explicitly requested another language or manually selected one."
 
 const PRODUCT_NAME_RULE =
-  "\"Clavus\" is the user's own app and a frequent speech-to-text error: transcripts often render it as \"Claude\". When the [dictation] contains \"Claude\" and the context is the app, a message, a note, a chat, or is ambiguous, treat it as \"Clavus\". Keep \"Claude\" only when it clearly refers to Anthropic's AI (e.g. \"Claude Code\", \"Claude Opus/Sonnet/Haiku\", \"Anthropic\")."
+  "Speech-to-text cannot reliably tell apart two similar-sounding names: \"Clavus\" (the user's own app) and \"Claude\" (Anthropic's AI). Whenever either name appears in the [dictation], do not trust that the transcriber picked the right one — judge from the surrounding context which the user most likely meant, and use that. Lean towards \"Clavus\" when the talk is about the app, its dictation/chat/notes/messages or features; lean towards \"Claude\" when it clearly refers to the AI model (e.g. \"Claude Code\", \"Opus/Sonnet/Haiku\", \"Anthropic\")."
 
 /**
  * The pivotal rule: the model must pick one of two modes on every call.
@@ -794,7 +794,7 @@ ${TWO_MODE_RULE}
 ${SELF_CORRECTION_RULE}
 ${NO_STYLE_MIMICRY_RULE}
 ${channel === 'prompt-optimiser' ? PROMPT_OPTIMISER_LANGUAGE_RULE : NEVER_TRANSLATE_RULE}
-${channel === 'prompt-optimiser' || channel === 'code' ? '' : PRODUCT_NAME_RULE}
+${PRODUCT_NAME_RULE}
 </output>`
 }
 
