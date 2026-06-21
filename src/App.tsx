@@ -649,6 +649,13 @@ export function App() {
     // A deep-linked tab must be mounted as the pager's right pane before we
     // can scroll to it.
     if (targetPanelId !== 'home') setVisiblePanel(targetPanelId)
+    // Booting on Home: the in-setVisiblePanel reset is skipped because
+    // visiblePanel already equals 'home' from the initial useState, so the
+    // global model/reasoning would still carry over the last thread's pick.
+    else if (!initialScrollDone.current) {
+      useModelStore.getState().setSelectedModelId('auto')
+      useChatSettingsStore.getState().setGlobalReasoning(null)
+    }
 
     const scrollToTarget = () => {
       const target = targetPanelId === 'home'
