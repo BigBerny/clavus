@@ -470,6 +470,7 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
   const isUser = message.role === 'user'
   const isSystem = message.role === 'system'
   const isAssistant = message.role === 'assistant'
+  const isBranchContext = isSystem && message.meta === 'branch-context'
 
   const contentParts = useMemo(() =>
     isAssistant ? splitContentBlocks(message.content) : [],
@@ -536,6 +537,21 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   // System/error messages
   if (isSystem) {
+    if (isBranchContext) {
+      return (
+        <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out] py-1" role="note" aria-label="Conversation context">
+          <div className="max-w-[92%] md:max-w-[680px] rounded-xl border border-accent/15 bg-accent/[0.04] dark:bg-accent/[0.07] px-3.5 py-2.5 text-left shadow-sm">
+            <div className="mb-1.5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-accent/70">
+              <FileText className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+              Jane context
+            </div>
+            <p className="whitespace-pre-wrap text-[12.5px] leading-[1.45] text-text-light-muted/80 dark:text-text-dark-muted/80" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+              {message.content}
+            </p>
+          </div>
+        </div>
+      )
+    }
     return (
       <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out] py-0.5" role="status">
         <div className={`max-w-[85%] px-3.5 py-2 rounded-xl text-[12px] text-center leading-snug ${

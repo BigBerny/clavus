@@ -24,6 +24,7 @@ const LOCK_MAX_RETRIES = 4
 const LOCK_RETRY_BASE = 2000
 const LOCK_RETRY_MAX = 15000
 const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/g
+const ROUTE_CONTEXT_LIMIT = 8
 
 function buildMediaUrl(filePath: string): string {
   return buildWorkspaceMediaUrl(filePath)
@@ -43,6 +44,21 @@ function extractMediaFromToolResult(result: unknown): import('../state/chat.ts')
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function quoteForRoutingCard(content: string): string {
+  const trimmed = content.trim()
+  if (!trimmed) return ''
+  return trimmed.length > 700 ? `${trimmed.slice(0, 700).trim()}...` : trimmed
+}
+
+function buildBranchContextCard(messages: Message[], currentUserId?: string): string {
+  const history = messages
+    .filter((m) => m.role !== 'system' && m.id !== currentUserId && m.content.trim())
+    .slice(-ROUTE_CONTEXT_LIMIT)
+  if (history.length === 0) return ''
+  const lines = history.map((m) => `${m.role === 'user' ? 'You' : 'Jane'}: ${quoteForRoutingCard(m.content)}`)
+  return ['Context from Jane before this new conversation:', ...lines].join('\n\n')
 }
 
 export function useChat() {
@@ -273,20 +289,43 @@ export function useChat() {
         store.getState().setWorkspaceFiles(threadId, lastUser.id, merged)
       },
       onRouted: ({ threadId: routed, target, title }: { threadId: string; target: string; title?: string; rationale?: string }) => {
-        // Jane filed this turn into a different conversation. Relocate the live
-        // exchange there, leave a breadcrumb card in the source, and auto-follow.
+        // Jane filed this turn into a different conversation. The user's message
+        // STAYS in Main (Jane's home keeps everything addressed to her, so the
+        // user can always navigate back); only the streaming answer moves into the
+        // target, and Main gets a tappable breadcrumb pointing to where it landed.
         if (!routed || routed === threadId) return
+        const sourceThreadId = threadId
+        const sourceMessages = store.getState().getThreadState(sourceThreadId).messages
+        const userContent = (userMsgId
+          ? sourceMessages.find((m) => m.id === userMsgId)?.content
+          : '') || content
         const threads = useThreadsStore.getState()
         if (target === 'new-branch') threads.ensureBranchThread(routed, title || 'New conversation')
-        const ids = [userMsgId, assistantId].filter((x): x is string => !!x)
-        store.getState().relocateMessages(threadId, routed, ids)
-        store.getState().addMessage(threadId, {
+        // Seed the branch so it reads coherently on its own: prior Jane context
+        // (new branch only), then the user's question, then the answer (relocated
+        // below). The user's question is copied — not moved — so it remains in Main.
+        if (target === 'new-branch') {
+          const contextCard = buildBranchContextCard(sourceMessages, userMsgId)
+          if (contextCard) {
+            store.getState().addMessage(routed, {
+              role: 'system',
+              content: contextCard,
+              meta: 'branch-context',
+            })
+          }
+        }
+        if (userContent.trim()) {
+          store.getState().addMessage(routed, { role: 'user', content: userContent })
+        }
+        store.getState().relocateMessages(sourceThreadId, routed, [assistantId].filter((x): x is string => !!x))
+        store.getState().addMessage(sourceThreadId, {
           role: 'assistant',
-          content: `[${title || 'Opened a new conversation'}](clavus://thread/${routed})`,
+          meta: 'routing',
+          content: `Jane answered this in [${title || 'another conversation'}](clavus://thread/${routed}).`,
         })
         // Hand the streaming slot from the source thread to the routed one.
-        store.getState().setStreaming(threadId, false)
-        store.getState().setAbortController(threadId, null)
+        store.getState().setStreaming(sourceThreadId, false)
+        store.getState().setAbortController(sourceThreadId, null)
         store.getState().setStreaming(routed, true)
         store.getState().setAbortController(routed, controller)
         markStreamActivity(routed)

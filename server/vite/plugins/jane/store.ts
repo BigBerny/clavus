@@ -88,6 +88,21 @@ export function topicMessageCount(threadId: string): number {
   return readThreadMessages(threadId).filter((m) => m.role !== 'system' && m.meta !== 'routing').length
 }
 
+/** Recent real messages of a thread (newest last) in the router's input shape,
+ *  excluding system scaffolding and Jane's routing notices. Gives the router
+ *  enough context to resolve references ("make a separate discussion out of THIS")
+ *  and to write a self-contained seed + correct title for a new branch. Used by
+ *  the dictation path, which (unlike typed sends) has no client-sent context. */
+export function buildRecentRouterMessages(
+  threadId: string,
+  limit = 8,
+): { role: 'user' | 'assistant'; content: string }[] {
+  return readThreadMessages(threadId)
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.meta !== 'routing' && (m.content || '').trim())
+    .slice(-limit)
+    .map((m) => ({ role: m.role as 'user' | 'assistant', content: (m.content || '').trim().slice(0, 2500) }))
+}
+
 /**
  * Append a message to a thread (creating the thread record if missing), update
  * the thread's preview, and broadcast to all devices. `bumpActivity: false`

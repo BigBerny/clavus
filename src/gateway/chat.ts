@@ -10,6 +10,11 @@ export interface ChatCompletionMessage {
   content: string | ContentPart[]
 }
 
+interface RouteContextMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface UsageData {
   inputTokens: number
   outputTokens: number
@@ -270,6 +275,25 @@ function toOpenClawAttachments(content: ChatCompletionMessage['content']): Array
     out.push({ mimeType: match[1], content: match[2] })
   }
   return out
+}
+
+function textFromMessageContent(content: ChatCompletionMessage['content']): string {
+  if (typeof content === 'string') return content
+  return content
+    .filter((part): part is Extract<ContentPart, { type: 'text' }> => part.type === 'text')
+    .map((part) => part.text)
+    .join('\n\n')
+}
+
+function buildRouteContext(messages: ChatCompletionMessage[]): RouteContextMessage[] {
+  return messages
+    .filter((msg): msg is ChatCompletionMessage & { role: 'user' | 'assistant' } => msg.role === 'user' || msg.role === 'assistant')
+    .slice(-12)
+    .map((msg) => ({
+      role: msg.role,
+      content: textFromMessageContent(msg.content).slice(0, 2500),
+    }))
+    .filter((msg) => msg.content.trim().length > 0)
 }
 
 // --- Responses API event dispatch ---
@@ -581,6 +605,7 @@ async function sendResponsesStream(
       ...(isOpenClaw(config) && openClawAttachments.length
         ? { attachments: openClawAttachments }
         : {}),
+      ...(options.route ? { clavusRouteContext: buildRouteContext(messages) } : {}),
     }),
     signal,
   })

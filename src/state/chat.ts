@@ -46,6 +46,7 @@ export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
+  meta?: string
   thinking?: string
   thinkingDone?: boolean
   timestamp: number

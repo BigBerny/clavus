@@ -188,10 +188,16 @@ export function responsesProxyPlugin() {
     if (req.headers['x-clavus-route'] !== '1') return { handled: false, threadId }
     const utterance = extractLatestUserText(parsed.input)
     if (!utterance.trim()) return { handled: false, threadId }
+    const routeContext = Array.isArray(parsed.clavusRouteContext)
+      ? parsed.clavusRouteContext
+          .filter((m: any) => (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string' && m.content.trim())
+          .slice(-12)
+          .map((m: any) => ({ role: m.role, content: m.content.slice(0, 2500) }))
+      : []
 
     let decision
     try {
-      decision = await routeUtterance({ utterance, source: 'typed', focusedInClavus: true })
+      decision = await routeUtterance({ utterance, recentMessages: routeContext, source: 'typed', focusedInClavus: true })
     } catch {
       return { handled: false, threadId }
     }
@@ -211,13 +217,22 @@ export function responsesProxyPlugin() {
     if (decision.target === 'new-branch') {
       targetThreadId = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       newBranchTitle = decision.newBranchTitle || utterance.slice(0, 40) || 'New conversation'
-      const seed = decision.seedPrompt || utterance
+      const recentContext = routeContext.length
+        ? routeContext
+            .map((m: any) => `${m.role === 'user' ? 'User' : 'Jane'}: ${m.content}`)
+            .join('\n\n')
+        : ''
+      const seed = [
+        decision.seedPrompt || utterance,
+        recentContext ? `Recent visible Jane MAIN context:\n${recentContext}` : '',
+      ].filter(Boolean).join('\n\n')
       if (typeof parsed.input === 'string') {
         parsed.input = `${seed}\n\n${parsed.input}`
       } else if (Array.isArray(parsed.input)) {
         parsed.input = [{ role: 'user', content: seed }, ...parsed.input]
       }
     }
+    delete parsed.clavusRouteContext
 
     // Tell the client where the answer is being filed so it can auto-follow.
     try {

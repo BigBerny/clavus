@@ -3,6 +3,7 @@ import nodePath from 'path'
 
 import { ELEVENLABS_KEY, THREADS_DATA_DIR } from '../serverEnv.ts'
 import { routeUtterance, type RouterDecision } from './jane/router.ts'
+import { buildRecentRouterMessages, MAIN_THREAD_ID } from './jane/store.ts'
 
 const CLAVUS_BUNDLE_ID = 'win.random-hamster.clavus'
 
@@ -181,6 +182,7 @@ export function desktopDictationPlugin() {
           try {
             const decision = await routeUtterance({
               utterance: parsed.text,
+              recentMessages: buildRecentRouterMessages(MAIN_THREAD_ID),
               appName: appName || undefined,
               bundleId: bundleId || undefined,
               source: 'desktop-dictation',

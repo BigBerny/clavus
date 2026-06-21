@@ -14,6 +14,7 @@ export type RouteTarget = 'paste' | 'main' | 'branch' | 'new-branch' | 'ask'
 
 export interface RouterInput {
   utterance: string
+  recentMessages?: { role: 'user' | 'assistant'; content: string }[]
   appName?: string
   bundleId?: string
   source: string
@@ -74,6 +75,16 @@ function renderRegistry(entries: RegistryEntry[]): string {
     .join('\n')
 }
 
+function renderRecentMessages(messages: RouterInput['recentMessages']): string {
+  const visible = (messages || [])
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && m.content.trim())
+    .slice(-10)
+  if (!visible.length) return '(none provided)'
+  return visible
+    .map((m) => `${m.role === 'user' ? 'User' : 'Jane'}: ${m.content.trim().slice(0, 1200)}`)
+    .join('\n\n')
+}
+
 function buildSystemPrompt(input: RouterInput, registryText: string): string {
   const appLine = input.appName || input.bundleId
     ? `Focused app: ${input.appName || ''}${input.bundleId ? ` (${input.bundleId})` : ''}.`
@@ -89,7 +100,7 @@ function buildSystemPrompt(input: RouterInput, registryText: string): string {
     '- "paste": not for Jane — send the text into the focused app as-is.',
     '- "main": belongs to Jane in the persistent main conversation (the default for anything addressed to Jane, including follow-ups to recent main activity).',
     '- "branch": belongs to one of the existing topic conversations listed below — set "branchId" to its id.',
-    '- "new-branch": a distinct new project/topic that deserves its own conversation — provide "newBranchTitle" and a curated "seedPrompt" (a clean, self-contained framing of the task distilled from the utterance, stripped of unrelated noise).',
+    '- "new-branch": a distinct new project/topic that deserves its own conversation — provide "newBranchTitle" and a curated "seedPrompt". The seedPrompt MUST be fully self-contained: a follow-up like "make a separate discussion out of this" / "Mach eine separate Diskussion daraus" has no meaning on its own, so resolve every reference ("this", "that", "daraus", "es") against the recent MAIN messages below and bake the actual topic + any needed facts into the seedPrompt. The branch is generated ONLY from the seedPrompt — if the real subject is missing, the answer will be wrong.',
     '- "ask": genuinely ambiguous (e.g. could be for Jane or could be meant for someone/another app) — provide a short "clarifyingQuestion" Jane will ask in main before dispatching.',
     '',
     pasteRule,
@@ -97,6 +108,11 @@ function buildSystemPrompt(input: RouterInput, registryText: string): string {
     '',
     'Open conversations (most recent first):',
     registryText,
+    '',
+    'Recent visible messages from Jane MAIN before/including this input (do not include separate branch contents here):',
+    renderRecentMessages(input.recentMessages),
+    '',
+    'When choosing "new-branch", the title MUST describe the ACTUAL topic being branched off (resolved from the recent MAIN messages when the utterance is just a bare follow-up), never an unrelated earlier subject. Wrong example: branching the user\'s question about Portugal\'s capital into a branch titled "Klimatabelle Zürich" — the title must match the real subject (Portugal), not some stale topic.',
     '',
     'Also choose the model/reasoning Jane should answer with (only relevant for main/branch/new-branch):',
     '- HIGHEST PRIORITY: image generation requests → "model":"gpt","reasoning":"low","label":"Image generation".',
