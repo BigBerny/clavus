@@ -146,8 +146,19 @@ export function screenCaptureHint(): string | null {
   }
 }
 
+// Idle periods would otherwise leave frames around until the next request
+// triggers sweepStale(); a low-frequency timer guarantees the 30-min TTL
+// (well within the desktop's 24h cap) holds even when nothing is uploading.
+let sweepTimer: ReturnType<typeof setInterval> | null = null
+function startPeriodicSweep() {
+  if (sweepTimer) return
+  sweepTimer = setInterval(sweepStale, 5 * 60 * 1000)
+  sweepTimer.unref?.()
+}
+
 export function screenCapturePlugin() {
   const attach = (server: any) => {
+    startPeriodicSweep()
     server.middlewares.use(async (req: any, res: any, next: any) => {
       const url: string = req.url || ''
       if (!url.startsWith('/desktop/screen-capture/')) return next()
