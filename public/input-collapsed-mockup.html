@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="de" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clavus · Input-Field — Collapsed / Voice-first Mockups</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:            oklch(0.165 0.006 50);
+    --fg:            oklch(0.95 0.005 80);
+    --muted:         oklch(0.68 0.008 60);
+    --muted-2:       oklch(0.55 0.02 300);
+    --primary:       oklch(0.72 0.15 280);
+    --primary-fg:    oklch(0.18 0.012 60);
+    --voice:         oklch(0.72 0.1 160);
+    --glass-bg:        oklch(0.95 0.008 50 / 0.04);
+    --glass-bg-heavy:  oklch(0.95 0.008 50 / 0.07);
+    --glass-inner-glow: oklch(0.95 0.008 50 / 0.06);
+    --glass-border:        oklch(0.95 0.008 50 / 0.08);
+    --glass-border-strong: oklch(0.95 0.008 50 / 0.16);
+    --glass-shadow: oklch(0 0 0 / 0.35);
+    --red:  oklch(0.62 0.22 25);
+    --red-soft-2: oklch(0.62 0.22 25 / 0.25);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    color: var(--fg);
+    min-height: 100vh;
+    padding: 48px 24px 96px;
+    background:
+      radial-gradient(60% 50% at 20% 0%, oklch(0.60 0.16 300 / 0.18), transparent 70%),
+      radial-gradient(50% 60% at 95% 100%, oklch(0.68 0.13 65 / 0.10), transparent 70%),
+      linear-gradient(160deg, oklch(0.20 0.025 280) 0%, oklch(0.16 0.012 50) 45%, oklch(0.18 0.018 340) 100%);
+    background-attachment: fixed;
+  }
+
+  .page-title { font-size: 13px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; margin-bottom: 8px; }
+  .page-sub { font-size: 13px; color: oklch(0.6 0.008 60); text-align: center; margin-bottom: 44px; max-width: 560px; margin-left:auto; margin-right:auto; line-height:1.6; }
+
+  /* spec card */
+  .spec {
+    max-width: 720px; margin: 0 auto 56px; padding: 26px 30px;
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--glass-border); border-radius: 1.5rem;
+    box-shadow: 0 8px 32px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+  }
+  .spec h1 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+  .spec h2 { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: oklch(0.62 0.04 300); margin: 22px 0 10px; }
+  .spec p, .spec li { font-size: 13px; color: oklch(0.74 0.008 60); line-height: 1.7; }
+  .spec ul { padding-left: 18px; } .spec li { margin-bottom: 5px; }
+  .spec b { color: var(--fg); font-weight: 600; }
+  .spec code { font-size: 12px; background: oklch(0.95 0.008 50 / 0.07); padding: 1px 6px; border-radius: 5px; color: var(--fg); }
+  .spec .divider { height:1px; background: var(--glass-border); margin: 18px 0; }
+
+  /* grid */
+  .grid { display:flex; flex-wrap:wrap; gap: 52px 44px; justify-content:center; max-width: 1320px; margin: 0 auto; }
+  .section-title { width:100%; text-align:center; font-size:12px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color: oklch(0.7 0.1 300); margin: 48px 0 2px; }
+  .section-note { width:100%; text-align:center; font-size:12.5px; color: var(--muted); margin: 0 0 8px; max-width:560px; margin-left:auto; margin-right:auto; line-height:1.6; }
+
+  .cell { display:flex; flex-direction:column; align-items:center; gap:14px; }
+  .cell .label { font-size:12px; font-weight:600; color: var(--fg); }
+  .cell .desc  { font-size:11.5px; color: var(--muted); max-width: 340px; text-align:center; line-height:1.55; }
+  .badge-state { font-size:9.5px; font-weight:600; letter-spacing:.07em; text-transform:uppercase; padding:3px 9px; border-radius:999px; border:1px solid var(--glass-border-strong); color:var(--muted); }
+  .badge-state.open { color: oklch(0.86 0.08 280); background: oklch(0.72 0.15 280 / 0.14); border-color: oklch(0.72 0.15 280 / 0.3); }
+  .badge-state.rec  { color: oklch(0.82 0.12 25); background: oklch(0.62 0.22 25 / 0.13); border-color: oklch(0.62 0.22 25 / 0.3); }
+
+  /* phone bottom frame */
+  .frame {
+    width: 380px; border-radius: 28px; padding: 0 0 16px;
+    background: linear-gradient(180deg, transparent 0%, oklch(0.18 0.01 280 / 0.4) 60%);
+    border: 1px solid oklch(0.95 0.008 50 / 0.05);
+    border-bottom: none; position: relative; overflow: visible;
+    display:flex; flex-direction:column; justify-content:flex-end;
+    min-height: 300px;
+  }
+  .chat { padding: 22px 18px 0; display:flex; flex-direction:column; gap:9px; }
+  .bubble { max-width: 78%; border-radius: 16px; padding: 9px 12px; font-size: 12px; line-height:1.5; }
+  .bubble.a { align-self:flex-start; background: var(--glass-bg); border:1px solid var(--glass-border); color: oklch(0.78 0.008 60); }
+  .bubble.u { align-self:flex-end; background: oklch(0.72 0.15 280 / 0.16); border:1px solid oklch(0.72 0.15 280 / 0.22); color: oklch(0.86 0.05 280); }
+
+  /* freed-space affordances that the collapsed bar makes room for */
+  .freed { padding: 14px 16px 4px; display:flex; flex-direction:column; gap:9px; }
+  .freed-label { font-size:10px; letter-spacing:.07em; text-transform:uppercase; color: oklch(0.5 0.02 160); display:flex; align-items:center; gap:6px; }
+  .freed-label::before { content:""; flex:1; height:1px; background: oklch(0.72 0.1 160 / 0.18); }
+  .freed-label::after  { content:""; flex:1; height:1px; background: oklch(0.72 0.1 160 / 0.18); }
+  .sugs { display:flex; flex-wrap:wrap; gap:7px; justify-content:center; }
+  .sug { font-size:11.5px; padding:7px 12px; border-radius:999px; background: var(--glass-bg-heavy); border:1px solid var(--glass-border); color: oklch(0.8 0.008 60); display:flex; align-items:center; gap:6px; }
+  .sug svg { opacity:.7; }
+
+  /* composer base */
+  .composer-wrap { padding: 0 14px; position: relative; }
+  .glass {
+    background: var(--glass-bg-heavy);
+    backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--glass-border-strong);
+    box-shadow: 0 8px 32px var(--glass-shadow), inset 0 1px 0 var(--glass-inner-glow);
+  }
+
+  /* full composer (expanded) */
+  .composer { border-radius: 24px; overflow: hidden; }
+  .ta { padding: 12px 16px 4px; font-size: 15px; line-height: 1.5; min-height: 24px; }
+  .ta.placeholder { color: oklch(0.5 0.008 60); }
+  .ta.text { color: var(--fg); }
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; padding: 4px 8px 8px; }
+  .tb-left, .tb-right { display:flex; align-items:center; gap:4px; }
+  .pill { height:28px; padding: 0 8px; border-radius:12px; display:flex; align-items:center; gap:6px; font-size:11.5px; color: oklch(0.78 0.005 80); }
+  .pill .dot { width:6px; height:6px; border-radius:50%; }
+  .pill .chev { color: var(--muted); opacity:.6; }
+  .sep { width:1px; height:16px; background: var(--glass-border-strong); margin: 0 6px; }
+  .ibtn { width:32px; height:32px; border-radius:12px; display:flex; align-items:center; justify-content:center; color: var(--muted); }
+  .ibtn.active { color: var(--fg); }
+  .send { width:32px; height:32px; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+  .send.on  { background: var(--primary); color: var(--primary-fg); box-shadow: 0 2px 8px oklch(0.72 0.15 280 / 0.35); }
+  .send.off { background: oklch(0.95 0.008 50 / 0.07); color: var(--muted); }
+
+  /* recording bits */
+  .wave { display:flex; align-items:center; gap:2.5px; height:22px; }
+  .wave i { width:2.5px; border-radius:2px; background: oklch(0.7 0.16 25 / 0.85); animation: w 1s ease-in-out infinite; }
+  @keyframes w { 0%,100%{height:4px} 50%{height:var(--h,16px)} }
+  .reddot { width:8px; height:8px; border-radius:50%; background: var(--red); box-shadow:0 0 0 0 var(--red-soft-2); animation: pulse 1.4s infinite; flex-shrink:0; }
+  @keyframes pulse { 0%{box-shadow:0 0 0 0 oklch(0.62 0.22 25 / 0.4)} 70%{box-shadow:0 0 0 8px transparent} 100%{box-shadow:0 0 0 0 transparent} }
+  .timer { font-size:12px; font-variant-numeric: tabular-nums; color: var(--muted); flex-shrink:0; }
+
+  /* ===== Variant A — Voice Dock (collapsed single row) ===== */
+  .dock { display:flex; align-items:center; gap:10px; padding: 8px; border-radius: 999px; }
+  .dock .type-pill { flex:1; min-width:0; height:44px; border-radius:999px; display:flex; align-items:center; gap:8px; padding:0 16px; color: oklch(0.55 0.008 60); font-size:14px; background: oklch(0.95 0.008 50 / 0.04); border:1px solid var(--glass-border); }
+  .dock .type-pill .kbd { margin-left:auto; color: var(--muted); opacity:.8; }
+  .mic-lg {
+    width:52px; height:52px; border-radius:50%; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(180deg, oklch(0.75 0.11 160 / 0.95), oklch(0.66 0.11 160 / 0.95));
+    color: oklch(0.16 0.02 160); box-shadow: 0 6px 18px oklch(0.6 0.11 160 / 0.4), inset 0 1px 0 oklch(1 0 0 / 0.25);
+  }
+  .mic-lg.rec { background: linear-gradient(180deg, oklch(0.66 0.22 25), oklch(0.58 0.22 25)); color:#fff; box-shadow: 0 6px 20px oklch(0.62 0.22 25 / 0.5); }
+
+  /* ===== Variant B — Tap-to-expand pill ===== */
+  .capsule { display:flex; align-items:center; gap:10px; padding: 7px 7px 7px 18px; border-radius:999px; }
+  .capsule .hint { flex:1; min-width:0; font-size:14px; color: oklch(0.55 0.008 60); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .capsule .mic-sm { width:40px; height:40px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; color: var(--voice); background: oklch(0.72 0.1 160 / 0.14); border:1px solid oklch(0.72 0.1 160 / 0.28); }
+
+  /* ===== Variant C — Floating mic FAB (no bar) ===== */
+  .fab-stack { position:absolute; right:16px; bottom:16px; display:flex; flex-direction:column; align-items:center; gap:12px; z-index:5; }
+  .fab-mic { width:62px; height:62px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(180deg, oklch(0.75 0.11 160 / 0.96), oklch(0.64 0.11 160 / 0.96));
+    color: oklch(0.15 0.02 160); box-shadow: 0 10px 28px oklch(0.6 0.11 160 / 0.45), inset 0 1px 0 oklch(1 0 0 / 0.25); }
+  .fab-kbd { width:44px; height:44px; border-radius:50%; display:flex; align-items:center; justify-content:center; color: var(--muted); }
+  .fab-hint { position:absolute; left:16px; bottom:30px; font-size:12px; color: oklch(0.5 0.01 160); display:flex; align-items:center; gap:7px; }
+
+  /* ===== Variant D — Segmented capsule ===== */
+  .seg { display:flex; align-items:stretch; gap:0; border-radius:999px; overflow:hidden; padding:0; }
+  .seg .half { flex:1; height:50px; display:flex; align-items:center; justify-content:center; gap:9px; font-size:13.5px; color: var(--muted); }
+  .seg .half.voice { color: oklch(0.16 0.02 160); background: linear-gradient(180deg, oklch(0.75 0.11 160 / 0.92), oklch(0.66 0.11 160 / 0.92)); font-weight:600; box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.2); }
+  .seg .vsep { width:1px; align-self:stretch; background: var(--glass-border-strong); }
+  .seg .half.kbd { color: oklch(0.8 0.008 60); }
+
+  svg { display:block; }
+</style>
+</head>
+<body>
+
+  <div class="page-title">Clavus · Input-Field — Collapsed &amp; Voice-first</div>
+  <div class="page-sub">Idee: Das Input-Field ist standardmäßig <b>klein/zusammengeklappt</b> und öffnet sich nur, wenn du tippen willst. Voice bleibt immer mit einem großen, leicht treffbaren Button erreichbar — und der gewonnene Platz geht an den Chat / Vorschläge.</div>
+
+  <div class="spec">
+    <h1>Das Prinzip</h1>
+    <p>Heute belegt der Composer immer zwei Zeilen (Textfeld + Toolbar), obwohl du meistens nur die Stimme nutzt. Der Mic-Button ist dabei einer von vielen kleinen 32px-Icons. Die Mockups drehen das um:</p>
+    <ul>
+      <li><b>Collapsed (Default):</b> Eine schlanke Zeile. Der <b>Record-Button wird groß</b> und ist die primäre Aktion. Darüber ist mehr Platz für Chat, Vorschläge oder Quick-Actions.</li>
+      <li><b>Expanded:</b> Tippt man auf das Feld (oder den Tastatur-Button), wächst der volle Composer mit Textarea + Toolbar heraus — also der heutige Zustand, aber nur auf Wunsch.</li>
+      <li><b>Recording:</b> Aus dem großen Mic wird die Aufnahme-Zeile mit Pegel + Timer + Bestätigen.</li>
+    </ul>
+    <div class="divider"></div>
+    <h2>Vier Richtungen zum Vergleichen</h2>
+    <ul>
+      <li><b>A · Voice Dock</b> — schlanke Zeile, großer Mic rechts, daneben ein „Tippen“-Feld zum Aufklappen.</li>
+      <li><b>B · Tap-to-Expand</b> — eine einzige minimale Kapsel; tippen lässt sie zum Composer wachsen.</li>
+      <li><b>C · Floating Mic</b> — gar keine Leiste, nur ein schwebender großer Mic (maximaler Chat-Platz) + kleiner Tastatur-Knopf.</li>
+      <li><b>D · Segmented</b> — eine Kapsel, halb „Sprechen“ / halb „Tippen“, gestenfreundlich symmetrisch.</li>
+    </ul>
+  </div>
+
+  <!-- ============ VARIANT A ============ -->
+  <div class="section-title">A · Voice Dock</div>
+  <div class="section-note">Eine Zeile statt zwei. Der Mic ist groß (52px) und sofort treffbar; das „Tippen“-Feld klappt bei Bedarf den vollen Composer auf.</div>
+  <div class="grid">
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Klar — soll ich dir die Liste als Tabelle zusammenstellen?</div>
+        </div>
+        <div class="freed">
+          <div class="freed-label">Vorschläge</div>
+          <div class="sugs">
+            <div class="sug">__SPARK__ Fass den letzten Thread zusammen</div>
+            <div class="sug">__SPARK__ Was steht heute an?</div>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="dock glass">
+            <div class="type-pill">Tippen…<span class="kbd">__KBD__</span></div>
+            <div class="mic-lg">__MIC_BIG__</div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state">Collapsed · Default</div>
+      <div class="label">Ruhezustand</div>
+      <div class="desc">Nur eine Zeile. Großer Mic = primäre Aktion. Der freie Platz darüber zeigt Vorschläge.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Klar — soll ich dir die Liste als Tabelle zusammenstellen?</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer glass">
+            <div class="ta text">Ja, sortier nach Datum bitte</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<span class="chev">__CHEV__</span></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send on">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state open">Expanded</div>
+      <div class="label">Aufgeklappt (Tippen)</div>
+      <div class="desc">Tipp ins Feld → der volle Composer wächst heraus. Exakt der heutige Zustand, aber nur auf Wunsch.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Diktier einfach drauflos.</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="dock glass">
+            <div class="type-pill" style="background:oklch(0.62 0.22 25 / 0.08); border-color:oklch(0.62 0.22 25 / 0.22); color:var(--fg)">
+              <span class="reddot"></span>
+              <div class="wave"><i style="--h:12px"></i><i style="--h:18px;animation-delay:.1s"></i><i style="--h:8px;animation-delay:.2s"></i><i style="--h:16px;animation-delay:.05s"></i><i style="--h:11px;animation-delay:.25s"></i><i style="--h:19px;animation-delay:.15s"></i><i style="--h:9px;animation-delay:.3s"></i></div>
+              <span class="timer" style="margin-left:auto">0:07</span>
+            </div>
+            <div class="mic-lg rec">__STOP__</div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state rec">Recording</div>
+      <div class="label">Aufnahme</div>
+      <div class="desc">Mic wird rot (Stop). Das Feld zeigt Pegel + Timer. Antippen beendet &amp; fügt ein.</div>
+    </div>
+
+  </div>
+
+  <!-- ============ VARIANT B ============ -->
+  <div class="section-title">B · Tap-to-Expand</div>
+  <div class="section-note">Maximal reduziert: eine einzige Kapsel. Tippen lässt sie nach oben zum vollen Composer wachsen — wie ein Button, der sich entfaltet.</div>
+  <div class="grid">
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble u">Und der Kalender für morgen?</div>
+          <div class="bubble a">Morgen hast du 3 Termine — soll ich sie vorlesen?</div>
+        </div>
+        <div class="freed">
+          <div class="freed-label">Schnellzugriff</div>
+          <div class="sugs">
+            <div class="sug">__MIC_S__ Antwort diktieren</div>
+            <div class="sug">__PLUS__ Foto</div>
+            <div class="sug">__SPARK__ Vorlesen</div>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="capsule glass">
+            <span class="hint">Nachricht — oder Mic gedrückt halten</span>
+            <div class="mic-sm">__MIC__</div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state">Collapsed · Default</div>
+      <div class="label">Eine Kapsel</div>
+      <div class="desc">Minimaler Footprint. Hold-to-talk am Mic; tippen aufs Feld klappt auf.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Morgen hast du 3 Termine — soll ich sie vorlesen?</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer glass">
+            <div class="ta placeholder">Nachricht…</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<span class="chev">__CHEV__</span></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send off">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state open">Expanded</div>
+      <div class="label">Entfaltet</div>
+      <div class="desc">Aus der Kapsel wächst der volle Composer. Schließt wieder, wenn das Feld leer ist &amp; den Fokus verliert.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Morgen hast du 3 Termine — soll ich sie vorlesen?</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="capsule glass" style="padding-left:16px; background:oklch(0.62 0.22 25 / 0.08); border-color:oklch(0.62 0.22 25 / 0.22)">
+            <span class="reddot"></span>
+            <div class="wave" style="flex:1; justify-content:flex-start"><i style="--h:12px"></i><i style="--h:20px;animation-delay:.1s"></i><i style="--h:8px;animation-delay:.2s"></i><i style="--h:17px;animation-delay:.05s"></i><i style="--h:11px;animation-delay:.25s"></i><i style="--h:21px;animation-delay:.15s"></i><i style="--h:9px;animation-delay:.3s"></i><i style="--h:15px;animation-delay:.12s"></i></div>
+            <span class="timer">0:12</span>
+            <div class="mic-sm" style="background:oklch(0.62 0.22 25 / 0.16); border-color:oklch(0.62 0.22 25 / 0.35); color:var(--red)">__CHECK__</div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state rec">Recording</div>
+      <div class="label">Aufnahme (gehalten)</div>
+      <div class="desc">Halten füllt die Kapsel mit Pegel + Timer; loslassen fügt das Transkript ein.</div>
+    </div>
+
+  </div>
+
+  <!-- ============ VARIANT C ============ -->
+  <div class="section-title">C · Floating Mic</div>
+  <div class="section-note">Radikal: gar keine Leiste. Ein großer schwebender Mic (62px) unten rechts, ein kleiner Tastatur-Knopf daneben. Der Chat bekommt die volle Höhe.</div>
+  <div class="grid">
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat" style="padding-bottom:64px">
+          <div class="bubble a">Hier sind die wichtigsten Punkte aus dem Meeting:</div>
+          <div class="bubble a">1 · Budget bis Freitag finalisieren</div>
+          <div class="bubble u">Und wer macht das Deck?</div>
+          <div class="bubble a">Lena übernimmt das Deck bis Mittwoch.</div>
+        </div>
+        <div class="fab-hint">__KBD_S__ Großer Knopf spricht · kleiner tippt</div>
+        <div class="fab-stack">
+          <div class="fab-kbd glass" style="border-radius:50%">__KBD__</div>
+          <div class="fab-mic">__MIC_BIG__</div>
+        </div>
+      </div>
+      <div class="badge-state">Collapsed · Default</div>
+      <div class="label">Kein Balken</div>
+      <div class="desc">Maximaler Chat-Platz. Mic immer griffbereit unten rechts (Daumenzone), Tastatur-Knopf daneben.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Lena übernimmt das Deck bis Mittwoch.</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer glass">
+            <div class="ta placeholder">Nachricht…</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<span class="chev">__CHEV__</span></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send off">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state open">Expanded (Sheet)</div>
+      <div class="label">Tastatur-Knopf → Sheet</div>
+      <div class="desc">Tipp auf den Tastatur-Knopf schiebt den vollen Composer als Bottom-Sheet hoch. Schließt nach dem Senden wieder.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat" style="padding-bottom:64px">
+          <div class="bubble a">Lena übernimmt das Deck bis Mittwoch.</div>
+        </div>
+        <div class="fab-hint" style="color:var(--red)"><span class="reddot"></span> 0:09 · zum Stoppen tippen</div>
+        <div class="fab-stack">
+          <div class="fab-mic" style="background:linear-gradient(180deg, oklch(0.66 0.22 25), oklch(0.58 0.22 25)); color:#fff; box-shadow:0 10px 28px oklch(0.62 0.22 25 / 0.5)">
+            __STOP__
+          </div>
+        </div>
+        <div style="position:absolute; left:16px; right:96px; bottom:24px;">
+          <div class="wave" style="justify-content:flex-start"><i style="--h:12px"></i><i style="--h:20px;animation-delay:.1s"></i><i style="--h:8px;animation-delay:.2s"></i><i style="--h:17px;animation-delay:.05s"></i><i style="--h:11px;animation-delay:.25s"></i><i style="--h:21px;animation-delay:.15s"></i><i style="--h:9px;animation-delay:.3s"></i><i style="--h:15px;animation-delay:.12s"></i><i style="--h:19px;animation-delay:.18s"></i></div>
+        </div>
+      </div>
+      <div class="badge-state rec">Recording</div>
+      <div class="label">Aufnahme</div>
+      <div class="desc">Der FAB wird rot; ein dezenter Pegel + Timer erscheint daneben. Antippen stoppt &amp; sendet.</div>
+    </div>
+
+  </div>
+
+  <!-- ============ VARIANT D ============ -->
+  <div class="section-title">D · Segmented</div>
+  <div class="section-note">Eine Kapsel, klar zweigeteilt: links „Sprechen“, rechts „Tippen“. Symmetrisch, eindeutig, gut mit dem Daumen treffbar.</div>
+  <div class="grid">
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Womit kann ich helfen?</div>
+        </div>
+        <div class="freed">
+          <div class="freed-label">Zuletzt</div>
+          <div class="sugs">
+            <div class="sug">__SPARK__ Reise-Notizen</div>
+            <div class="sug">__SPARK__ Einkaufsliste</div>
+          </div>
+        </div>
+        <div class="composer-wrap">
+          <div class="seg glass">
+            <div class="half voice">__MIC__ Sprechen</div>
+            <div class="vsep"></div>
+            <div class="half kbd">__KBD__ Tippen</div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state">Collapsed · Default</div>
+      <div class="label">Zwei klare Wege</div>
+      <div class="desc">Voice ist die hervorgehobene Hälfte. „Tippen“ klappt den vollen Composer auf.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Womit kann ich helfen?</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="composer glass">
+            <div class="ta text">Plan mir die Woche</div>
+            <div class="toolbar">
+              <div class="tb-left">
+                <div class="pill"><span class="dot" style="background:oklch(0.6 0.14 255)"></span>Auto<span class="chev">__CHEV__</span></div>
+                <div class="sep"></div>
+                <div class="ibtn">__PAPERCLIP__</div>
+                <div class="ibtn">__AT__</div>
+              </div>
+              <div class="tb-right">
+                <div class="ibtn active">__MIC__</div>
+                <div class="send on">__SEND__</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state open">Expanded</div>
+      <div class="label">„Tippen“ aufgeklappt</div>
+      <div class="desc">Voller Composer; die Segment-Kapsel weicht ihm. Mic bleibt rechts in der Toolbar.</div>
+    </div>
+
+    <div class="cell">
+      <div class="frame">
+        <div class="chat">
+          <div class="bubble a">Womit kann ich helfen?</div>
+        </div>
+        <div class="composer-wrap">
+          <div class="seg glass" style="background:oklch(0.62 0.22 25 / 0.08); border-color:oklch(0.62 0.22 25 / 0.22)">
+            <div class="half" style="flex:none; padding-left:18px; color:var(--red)"><span class="reddot"></span></div>
+            <div class="half" style="gap:8px">
+              <div class="wave"><i style="--h:12px"></i><i style="--h:20px;animation-delay:.1s"></i><i style="--h:8px;animation-delay:.2s"></i><i style="--h:17px;animation-delay:.05s"></i><i style="--h:11px;animation-delay:.25s"></i><i style="--h:21px;animation-delay:.15s"></i></div>
+              <span class="timer">0:05</span>
+            </div>
+            <div class="vsep"></div>
+            <div class="half" style="flex:none; padding:0 18px; color:var(--red)">__CHECK__</div>
+          </div>
+        </div>
+      </div>
+      <div class="badge-state rec">Recording</div>
+      <div class="label">Aufnahme</div>
+      <div class="desc">„Sprechen“ aktiv → Kapsel wird zur Aufnahme: Pegel + Timer, rechts Bestätigen.</div>
+    </div>
+
+  </div>
+
+<script>
+  const ICONS = {
+    __MIC__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+    __MIC_S__: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+    __MIC_BIG__: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+    __SEND__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>',
+    __STOP__: '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="3"/></svg>',
+    __KBD__: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>',
+    __KBD_S__: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>',
+    __CHEV__: '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>',
+    __PAPERCLIP__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
+    __AT__: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>',
+    __PLUS__: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+    __CHECK__: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+    __SPARK__: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/></svg>',
+  };
+  document.body.innerHTML = document.body.innerHTML.replace(/__[A-Z_]+__/g, (m) => ICONS[m] || m);
+</script>
+</body>
+</html>
