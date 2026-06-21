@@ -7,6 +7,13 @@ import { buildRecentRouterMessages, MAIN_THREAD_ID } from './jane/store.ts'
 
 const CLAVUS_BUNDLE_ID = 'win.random-hamster.clavus'
 
+// A dictation only goes to Jane if it explicitly names her. Paste-vs-Jane is the
+// one call a model can't read from a few spoken words — it depends on intent in
+// the user's head — and "not paste" used to be the default exit, so it over-filed
+// into conversations. The literal name is a hard, predictable gate; only then do
+// we spend an LLM call to pick WHICH conversation.
+const JANE_MENTION = /\bjane\b/i
+
 /** Compact routing shape sent back to the desktop overlay. The overlay only
  *  needs `target` (paste vs Jane-directed); the rest rides along for display. */
 function trimRouting(d: RouterDecision) {
@@ -178,7 +185,7 @@ export function desktopDictationPlugin() {
         // overlay branches on `routing.target`. Fail-open — never block the
         // transcript if routing hiccups (overlay then keeps its paste default).
         let routing: ReturnType<typeof trimRouting> | null = null
-        if (parsed?.text && resp.ok) {
+        if (parsed?.text && resp.ok && JANE_MENTION.test(parsed.text)) {
           try {
             const decision = await routeUtterance({
               utterance: parsed.text,
@@ -187,6 +194,7 @@ export function desktopDictationPlugin() {
               bundleId: bundleId || undefined,
               source: 'desktop-dictation',
               focusedInClavus: bundleId === CLAVUS_BUNDLE_ID,
+              conservative: true,
             })
             routing = trimRouting(decision)
             parsed.routing = routing
@@ -194,6 +202,7 @@ export function desktopDictationPlugin() {
             // Best-effort; the overlay treats absent routing as "paste as usual".
           }
         }
+        // Jane not named → routing stays null and the overlay pastes as usual.
 
         if (!fs.existsSync(THREADS_DATA_DIR)) fs.mkdirSync(THREADS_DATA_DIR, { recursive: true })
         const headerNum = (name: string): number | undefined => {
