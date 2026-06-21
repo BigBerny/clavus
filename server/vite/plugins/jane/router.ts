@@ -21,10 +21,11 @@ export interface RouterInput {
   /** true when the user is focused inside Clavus (typed sends, or dictation
    *  while Clavus is frontmost) — suppresses `paste`. */
   focusedInClavus: boolean
-  /** When the user has already, explicitly committed this input to Jane (e.g. a
-   *  dictation that names her), the only open question is WHICH conversation.
-   *  Suppresses `paste` entirely and biases hard toward `main` — never spin up a
-   *  branch for an ordinary question/follow-up. */
+  /** Set when we reached the router via the cheap "Jane is named" dictation gate.
+   *  A mention is not a command: `paste` stays available so the model can still
+   *  recognise "Jane talked about in passing" and paste instead of filing. What
+   *  conservative DOES do is bias hard toward `main` — never spin up a branch for
+   *  an ordinary question, quick task, or follow-up. */
   conservative?: boolean
 }
 
@@ -94,13 +95,13 @@ function buildSystemPrompt(input: RouterInput, registryText: string): string {
   const appLine = input.appName || input.bundleId
     ? `Focused app: ${input.appName || ''}${input.bundleId ? ` (${input.bundleId})` : ''}.`
     : 'Focused app: unknown.'
-  const pasteRule = input.conservative
-    ? 'The user has already explicitly addressed Jane, so this input IS for Jane — "paste" is NOT available, never choose it. Your only job is to pick WHICH conversation.'
-    : input.focusedInClavus
+  const pasteRule = input.focusedInClavus
     ? 'The user is inside Clavus, so "paste" is NOT available — never choose it.'
+    : input.conservative
+    ? 'The user is dictating into another app and the word "Jane" appears somewhere in the utterance. A mention is NOT a command: choose "paste" (send the text into the focused app as-is) UNLESS the user is actually addressing Jane or asking her to do something. If "Jane" only appears in passing — talking ABOUT her, quoting, telling someone else her name — it is NOT for Jane, so choose "paste".'
     : 'The user is dictating into another app. "paste" sends the text into that focused app (e.g. a Telegram/iMessage reply, a doc). Choose "paste" when the utterance is clearly meant for that app and NOT a request to the assistant Jane.'
   const conservativeRule = input.conservative
-    ? 'BE CONSERVATIVE. Strongly prefer "main". Only choose "new-branch" when the input is unmistakably a distinct, standalone project that clearly does not belong to the ongoing main conversation. Never create a branch for an ordinary question, a follow-up, or a quick task. When in any doubt, choose "main".'
+    ? 'When the input IS for Jane, BE CONSERVATIVE about creating conversations: strongly prefer "main". A quick task or request ("Jane, schreib mir eine Slack-Nachricht", a question, a one-off) belongs in "main", NOT a new branch. Only choose "new-branch" when the user clearly wants to start a distinct collaborative project ("lass uns zusammen etwas draften/ausarbeiten"). When in any doubt, choose "main".'
     : ''
 
   return [
@@ -154,9 +155,9 @@ export async function routeUtterance(input: RouterInput): Promise<RouterDecision
   let target = (typeof parsed.target === 'string' ? parsed.target : '') as RouteTarget
   if (!['paste', 'main', 'branch', 'new-branch', 'ask'].includes(target)) target = input.focusedInClavus ? 'main' : 'paste'
 
-  // paste is impossible when focused inside Clavus, or when the user already
-  // committed this input to Jane — treat as main.
-  if (target === 'paste' && (input.focusedInClavus || input.conservative)) target = 'main'
+  // paste is impossible only when focused inside Clavus — treat as main. In the
+  // conservative dictation path paste stays valid (Jane mentioned ≠ addressed).
+  if (target === 'paste' && input.focusedInClavus) target = 'main'
 
   const decision: RouterDecision = { target, modelId, reasoning, label, rationale }
 

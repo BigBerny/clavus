@@ -2,17 +2,11 @@ import fs from 'fs'
 import nodePath from 'path'
 
 import { ELEVENLABS_KEY, THREADS_DATA_DIR } from '../serverEnv.ts'
+import { mentionsJane } from './jane/gate.ts'
 import { routeUtterance, type RouterDecision } from './jane/router.ts'
 import { buildRecentRouterMessages, MAIN_THREAD_ID } from './jane/store.ts'
 
 const CLAVUS_BUNDLE_ID = 'win.random-hamster.clavus'
-
-// A dictation only goes to Jane if it explicitly names her. Paste-vs-Jane is the
-// one call a model can't read from a few spoken words — it depends on intent in
-// the user's head — and "not paste" used to be the default exit, so it over-filed
-// into conversations. The literal name is a hard, predictable gate; only then do
-// we spend an LLM call to pick WHICH conversation.
-const JANE_MENTION = /\bjane\b/i
 
 /** Compact routing shape sent back to the desktop overlay. The overlay only
  *  needs `target` (paste vs Jane-directed); the rest rides along for display. */
@@ -185,7 +179,7 @@ export function desktopDictationPlugin() {
         // overlay branches on `routing.target`. Fail-open — never block the
         // transcript if routing hiccups (overlay then keeps its paste default).
         let routing: ReturnType<typeof trimRouting> | null = null
-        if (parsed?.text && resp.ok && JANE_MENTION.test(parsed.text)) {
+        if (parsed?.text && resp.ok && mentionsJane(parsed.text)) {
           try {
             const decision = await routeUtterance({
               utterance: parsed.text,
