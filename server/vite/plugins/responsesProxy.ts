@@ -10,7 +10,7 @@ import {
   subscribe as bufferSubscribe,
 } from '../../responseEventBuffer.ts'
 import { initGatewayWs, getGatewayWs } from '../../gatewayWs.ts'
-import { workspaceContextBlock } from '../../workspaceContext.ts'
+import { rewindLastTurn, workspaceContextBlock } from '../../workspaceContext.ts'
 import { createSseParser, formatSseFrame } from '../../../src/lib/sseParse.ts'
 import {
   CHAT_API_TARGET,
@@ -517,7 +517,14 @@ export function responsesProxyPlugin() {
   }
 
   /** Cancel the in-flight gateway run behind a responseId. 202 when an abort
-   *  was dispatched, 404 when there is nothing running (already finished). */
+   *  was dispatched, 404 when there is nothing running (already finished).
+   *
+   *  After a successful abort, also rewind the cancelled turn's contribution
+   *  to (a) Trova's per-thread state so the resend gets a fresh pack pass, and
+   *  (b) the gateway's agent session so the staged user message + injected
+   *  workspace_context don't bleed into the next turn. Without this the user
+   *  sees the resend reply still referencing the cancelled (often misheard)
+   *  question — the exact symptom the cancel path exists to prevent. */
   function handleCancel(res: any, responseId: string | null) {
     const abort = responseId ? activeRuns.get(responseId) : undefined
     res.setHeader('Content-Type', 'application/json')
@@ -527,6 +534,17 @@ export function responsesProxyPlugin() {
       return
     }
     abort()
+
+    const threadId = responseId ? getBuffer(responseId)?.threadId : undefined
+    if (threadId) {
+      rewindLastTurn(threadId)
+      try {
+        getGatewayWs().rollbackSessionLastTurn(`clavus:${threadId}`)
+      } catch {
+        // Fire-and-forget; no-op if the gateway lacks the RPC.
+      }
+    }
+
     res.statusCode = 202
     res.end(JSON.stringify({ ok: true, responseId }))
   }

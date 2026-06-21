@@ -420,6 +420,23 @@ class GatewayWsClient {
       this.eventHandlers.add(handler)
     })
   }
+
+  /**
+   * Ask the gateway to drop the most recent turn from a session's agent
+   * context. Complements `sessions.abort`: abort stops generation, but the
+   * staged user message and any prepended workspace_context block stay in the
+   * session and leak into the next turn — which is what causes a stale-ASR or
+   * mistranscribed cancelled question to bleed into the edited resend's reply.
+   *
+   * Fire-and-forget. The gateway must implement `sessions.rollbackLastTurn`
+   * (params: `{ sessionKey }`) for this to take effect; until then the catch
+   * swallows the error and only the local Trova rewind protects the next pack
+   * pass. See responsesProxy.handleCancel for the call site.
+   */
+  rollbackSessionLastTurn(sessionKey: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    this.rpc('sessions.rollbackLastTurn', { sessionKey }, 10_000).catch(() => {})
+  }
 }
 
 // --- Singleton ---

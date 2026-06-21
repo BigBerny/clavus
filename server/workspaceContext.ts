@@ -19,13 +19,27 @@ interface SessionState {
   window: string[]
   injected: Set<string>
   lastSeen: number
+  // Most recent turn's contribution, recorded so an explicit `rewindLastTurn`
+  // (called on Stop/edit/regenerate) can undo it before the next pack runs.
+  // Why: without this, a cancelled turn's message keeps biasing the window
+  // query and its injected notes stay in the exclude set — so the edited
+  // re-send neither re-surfaces the right notes nor matches what the user
+  // actually meant.
+  lastTurnMessage: string | null
+  lastTurnAddedInjects: string[]
 }
 const sessions = new Map<string, SessionState>()
 
 function getSession(key: string): SessionState {
   let s = sessions.get(key)
   if (!s) {
-    s = { window: [], injected: new Set(), lastSeen: Date.now() }
+    s = {
+      window: [],
+      injected: new Set(),
+      lastSeen: Date.now(),
+      lastTurnMessage: null,
+      lastTurnAddedInjects: [],
+    }
     sessions.set(key, s)
   }
   s.lastSeen = Date.now()
@@ -126,8 +140,17 @@ export async function workspaceContextBlock(threadId: string | undefined, messag
     if (!res.ok) return { block: null, files: [] }
     const r = (await res.json()) as PackResult
     if (session) {
-      for (const u of r.inject ?? []) session.injected.add(u.path)
-      for (const s of r.suggest ?? []) session.injected.add(s.path)
+      const addedThisTurn: string[] = []
+      for (const u of r.inject ?? []) {
+        if (!session.injected.has(u.path)) addedThisTurn.push(u.path)
+        session.injected.add(u.path)
+      }
+      for (const s of r.suggest ?? []) {
+        if (!session.injected.has(s.path)) addedThisTurn.push(s.path)
+        session.injected.add(s.path)
+      }
+      session.lastTurnMessage = message
+      session.lastTurnAddedInjects = addedThisTurn
     }
     return { block: formatBlock(r), files: collectFiles(r) }
   } catch {
@@ -135,4 +158,35 @@ export async function workspaceContextBlock(threadId: string | undefined, messag
   } finally {
     clearTimeout(timer)
   }
+}
+
+/**
+ * Undo the most recent turn's contribution to a thread's Trova state.
+ * Call when the user cancels (Stop / edit-and-resend / regenerate) before a
+ * useful reply landed — otherwise the cancelled message keeps biasing the
+ * query window and its injected notes stay in the exclude set, so the resend
+ * gets a contaminated pack result.
+ *
+ * Idempotent and safe to call when nothing is recorded.
+ */
+export function rewindLastTurn(threadId: string): void {
+  const session = sessions.get(threadId)
+  if (!session) return
+
+  // Window may have rotated past this entry via WINDOW_CHARS trimming, in which
+  // case there's nothing to pop. Only remove if it's still the tail.
+  if (
+    session.lastTurnMessage != null
+    && session.window.length > 0
+    && session.window[session.window.length - 1] === session.lastTurnMessage
+  ) {
+    session.window.pop()
+  }
+
+  for (const path of session.lastTurnAddedInjects) {
+    session.injected.delete(path)
+  }
+
+  session.lastTurnMessage = null
+  session.lastTurnAddedInjects = []
 }
