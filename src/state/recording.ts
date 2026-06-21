@@ -220,6 +220,7 @@ async function transcribe(blob: Blob) {
       'OpenClaw', 'Markdown', 'Cloudflare',
       'Tailscale', 'Tauri',
       'ElevenLabs', 'Spotify', 'Tiptap',
+      'Trova', 'Topo',
       'Badi',
       'Dennlerstrasse', 'Buckhauserstrasse',
       'Wollishofen', 'Rodersdorf', 'Rütihof',
