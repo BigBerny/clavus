@@ -328,7 +328,7 @@ export async function syncFromServer(): Promise<boolean> {
   try {
     const res = await fetch('/api/threads/sync')
     if (!res.ok) return false
-    const data = await res.json() as { threads: Thread[], messages: Record<string, Message[]>, queues?: Record<string, unknown> }
+    const data = await res.json() as { threads: Thread[], messages: Record<string, Message[]>, queues?: Record<string, unknown>, deleted?: Record<string, number> }
     
     const localThreads = loadThreads()
     const serverThreads: Thread[] = data.threads || []
@@ -347,8 +347,11 @@ export async function syncFromServer(): Promise<boolean> {
       }
     }
     
-    const mergedThreads = Array.from(merged.values())
-    
+    // Drop threads tombstoned on any device, so a delete elsewhere can't be
+    // resurrected by our still-present local copy.
+    const deletedIds = data.deleted || {}
+    const mergedThreads = Array.from(merged.values()).filter((t) => !deletedIds[t.id])
+
     // Save merged threads to localStorage
     try {
       localStorage.setItem(THREADS_KEY, JSON.stringify(mergedThreads))
@@ -658,8 +661,13 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         activeThreadId = threads.length > 0 ? threads[0].id : ''
       }
 
-      saveThreads(threads)
+      // Persist the trimmed list locally for instant UI. We do NOT rely on a
+      // PUT to remove it (the server now merges and never drops); deletion goes
+      // through the explicit tombstoning DELETE endpoint, which also broadcasts
+      // thread-deleted to other devices.
+      try { localStorage.setItem(THREADS_KEY, JSON.stringify(threads)) } catch { /* ignore */ }
       saveActiveThreadId(activeThreadId)
+      fetch(`/api/threads/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => { /* offline; best-effort */ })
       return { threads, activeThreadId }
     })
   },

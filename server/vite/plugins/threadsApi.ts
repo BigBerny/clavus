@@ -56,6 +56,50 @@ export function threadsApiPlugin() {
     fs.writeFileSync(threadsFile, JSON.stringify(threads), 'utf-8')
   }
 
+  // ── Deletion tombstones ────────────────────────────────────────────────
+  // `threads.json` has many concurrent writers (every device/tab + server-side
+  // branch/push/append). A blind full-replace PUT silently drops threads added
+  // elsewhere. We instead MERGE on PUT (never drop) — but then a deleted thread
+  // would be resurrected by any device that still has it. Tombstones record
+  // deleted ids so the merge can filter them out regardless of who PUTs.
+  const deletedFile = nodePath.join(THREADS_DATA_DIR, 'threads-deleted.json')
+  const TOMBSTONE_TTL_MS = 60 * 24 * 60 * 60 * 1000 // 60 days
+  function readDeleted(): Record<string, number> {
+    try {
+      const d = fs.existsSync(deletedFile) ? JSON.parse(fs.readFileSync(deletedFile, 'utf-8')) : {}
+      return d && typeof d === 'object' && !Array.isArray(d) ? d : {}
+    } catch {
+      return {}
+    }
+  }
+  function writeDeleted(map: Record<string, number>) {
+    const now = Date.now()
+    const pruned: Record<string, number> = {}
+    for (const [id, ts] of Object.entries(map)) if (now - ts < TOMBSTONE_TTL_MS) pruned[id] = ts
+    try { fs.writeFileSync(deletedFile, JSON.stringify(pruned), 'utf-8') } catch { /* ignore */ }
+  }
+
+  /** Upsert-merge two thread lists by id (never drops), then strip tombstoned
+   *  ids. Newer `updatedAt` wins on conflict (>= so same-timestamp field edits
+   *  like archive/rename still apply); `lastSeenAt` takes the max. Because the
+   *  read→merge→write runs synchronously in one request handler, concurrent
+   *  PUTs serialize cleanly and nothing is lost. */
+  function mergeThreadLists(existing: any[], incoming: any[], tombstones: Record<string, number>): any[] {
+    const byId = new Map<string, any>()
+    for (const t of existing) if (t && t.id) byId.set(t.id, t)
+    for (const t of incoming) {
+      if (!t || !t.id) continue
+      const prev = byId.get(t.id)
+      if (!prev) { byId.set(t.id, t); continue }
+      const winner = (t.updatedAt ?? 0) >= (prev.updatedAt ?? 0) ? { ...prev, ...t } : { ...t, ...prev }
+      const ls = Math.max(prev.lastSeenAt ?? 0, t.lastSeenAt ?? 0)
+      if (ls) winner.lastSeenAt = ls
+      byId.set(t.id, winner)
+    }
+    for (const id of Object.keys(tombstones)) byId.delete(id)
+    return Array.from(byId.values())
+  }
+
   // Bootstrap the persistent Main ("Jane") conversation so every device that
   // syncs adopts the same stable thread id.
   function ensureMainThread() {
@@ -154,9 +198,35 @@ export function threadsApiPlugin() {
 
           if (req.url === '/api/threads' && req.method === 'PUT') {
             const body = await readBody(req)
-            fs.writeFileSync(threadsFile, body, 'utf-8')
+            let incoming: any[]
+            try { incoming = JSON.parse(body) } catch { incoming = [] }
+            if (!Array.isArray(incoming)) incoming = []
+            // Merge (never drop), filtering tombstoned ids — see mergeThreadLists.
+            const merged = mergeThreadLists(readThreads(), incoming, readDeleted())
+            writeThreads(merged)
             res.end(JSON.stringify({ ok: true }))
             broadcast({ type: 'threads' }, originClientId)
+            return
+          }
+
+          // Explicit thread deletion: tombstone the id (so a merge can't bring it
+          // back), drop it from the list, and remove its message + queue files.
+          // Single-segment path only — `/api/threads/messages/…` etc. are matched
+          // earlier and have an extra segment, so they never reach this.
+          const threadIdMatch = req.url.match(/^\/api\/threads\/([^/?]+)$/)
+          const RESERVED_SEGMENTS = new Set(['sync', 'search', 'push', 'append', 'branch', 'events'])
+          if (threadIdMatch && req.method === 'DELETE' && !RESERVED_SEGMENTS.has(threadIdMatch[1])) {
+            const threadId = decodeURIComponent(threadIdMatch[1])
+            const tombstones = readDeleted()
+            tombstones[threadId] = Date.now()
+            writeDeleted(tombstones)
+            writeThreads(readThreads().filter((t: any) => t?.id !== threadId))
+            const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
+            if (fs.existsSync(msgFile)) fs.unlinkSync(msgFile)
+            const qFile = queueFile(threadId)
+            if (fs.existsSync(qFile)) fs.unlinkSync(qFile)
+            res.end(JSON.stringify({ ok: true }))
+            broadcast({ type: 'thread-deleted', threadId }, originClientId)
             return
           }
 
@@ -344,7 +414,7 @@ export function threadsApiPlugin() {
               const queued = readQueue(t.id)
               if (queued) allQueues[t.id] = queued
             }
-            res.end(JSON.stringify({ threads, messages: allMessages, queues: allQueues }))
+            res.end(JSON.stringify({ threads, messages: allMessages, queues: allQueues, deleted: readDeleted() }))
             return
           }
 
