@@ -10,7 +10,7 @@ import { useChatSettingsStore } from '../state/chatSettings.ts'
 import { useAutoClassifyStore } from '../state/autoClassify.ts'
 import { classifyMessage } from '../gateway/classify.ts'
 import { resolveChatRoutingSelection } from '../lib/chatRouting.ts'
-import type { ChatCompletionMessage } from '../gateway/chat.ts'
+import type { ChatCompletionMessage, RouteContextMessage } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
 import { markStreamActivity } from '../lib/streamActivity.ts'
@@ -25,6 +25,10 @@ const LOCK_RETRY_BASE = 2000
 const LOCK_RETRY_MAX = 15000
 const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/g
 const ROUTE_CONTEXT_LIMIT = 8
+// Fork-rewind seed: how many recent turns of surviving history to carry into a
+// forked branch's empty gateway session. Larger than ROUTE_CONTEXT_LIMIT since
+// this is a full-history rewind, not a routing hint. Server caps to match.
+const SEED_CONTEXT_LIMIT = 24
 
 function buildMediaUrl(filePath: string): string {
   return buildWorkspaceMediaUrl(filePath)
@@ -65,7 +69,7 @@ export function useChat() {
   const store = useChatStore
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[]; files?: import('../state/chat').PendingFile[] }[]>([])
-  const sendRef = useRef<((threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount?: number, idempotencyKey?: string) => Promise<void>) | undefined>(undefined)
+  const sendRef = useRef<((threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount?: number, idempotencyKey?: string, seedContext?: RouteContextMessage[]) => Promise<void>) | undefined>(undefined)
   // Forward-declared so `send`'s onDone callback (created earlier) can invoke
   // the drain helper (created later) without a circular useCallback dep.
   const drainQueueIfAnyRef = useRef<((threadId: string) => void) | null>(null)
@@ -99,7 +103,7 @@ export function useChat() {
     }
   }, [setConnectionStatus])
 
-  const send = useCallback(async (inputThreadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string) => {
+  const send = useCallback(async (inputThreadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string, seedContext?: RouteContextMessage[]) => {
     if (!content.trim() && (!images || images.length === 0) && (!files || files.length === 0)) return
 
     // Mutable: Jane's server-side router may refile this turn into a different
@@ -398,6 +402,9 @@ export function useChat() {
           // Opt typed Main sends into Jane's server-side router (first attempt
           // only; retries target whatever thread we already resolved to).
           route: retryCount === 0 && inputThreadId === MAIN_THREAD_ID,
+          // Fork-rewind: seed a freshly forked branch's empty gateway session
+          // with the prior transcript. Carried across retries via the param.
+          seedContext,
         },
       )
     } catch (error) {
@@ -435,7 +442,7 @@ export function useChat() {
           // Keep the recovery sweep from also re-sending this thread while we back off.
           markStreamActivity(threadId)
           await delay(Math.min(LOCK_RETRY_BASE * 2 ** retryCount, LOCK_RETRY_MAX))
-          return sendRef.current?.(threadId, content, images, files, retryCount + 1, idemKey)
+          return sendRef.current?.(threadId, content, images, files, retryCount + 1, idemKey, seedContext)
         }
         setConnectionStatus('connected')
         store.getState().addMessage(threadId, {
@@ -564,46 +571,94 @@ export function useChat() {
     sendRef.current?.(threadId, queued.content, queued.images, queued.files)
   }, [store, stopActiveRun])
 
-  /** Regenerate: remove the target assistant message and its preceding user
-   *  message, then re-send the original user content. */
-  const regenerate = useCallback((threadId: string, assistantMessageId: string) => {
-    const ts = store.getState().getThreadState(threadId)
-    const messages = ts.messages
-    const targetIdx = messages.findIndex((m) => m.id === assistantMessageId)
-    if (targetIdx < 0) return
+  /** Fork-rewind primitive — the only way to truly "go back" given the gateway
+   *  keeps an append-only session server-side (it only ever receives the latest
+   *  user turn and accumulates its own history; there is no truncate RPC). So a
+   *  rewind spins off a fresh BRANCH thread: new threadId ⇒ new sessionKey ⇒
+   *  empty gateway session, which means the dropped tail is genuinely gone
+   *  model-side, not just hidden in the UI.
+   *
+   *  Clones the history strictly BEFORE `forkBeforeMessageId` for display, seeds
+   *  the new session with that history (so it isn't cold), archives the original
+   *  (except Main — the non-archivable home), and sends `newContent` as the
+   *  first real turn. Returns the new threadId so the caller can switch the UI
+   *  to it (null if the fork point vanished).
+   *
+   *  Powers edit ("rewind to this message, send edited"), regenerate ("rewind to
+   *  the question, ask again"), and "ignore last". */
+  const forkRewindAndSend = useCallback((
+    sourceThreadId: string,
+    forkBeforeMessageId: string,
+    newContent: string,
+    images?: string[],
+    files?: import('../state/chat').PendingFile[],
+  ): string | null => {
+    const sourceState = store.getState().getThreadState(sourceThreadId)
+    const idx = sourceState.messages.findIndex((m) => m.id === forkBeforeMessageId)
+    if (idx < 0) return null
 
-    // Find the user message that preceded this assistant response
+    // Everything strictly before the fork point survives as the branch's visible
+    // history + gateway seed. The fork-point message and the whole tail are dropped.
+    const kept = sourceState.messages.slice(0, idx)
+
+    // Kill any in-flight run on the source first — a live stream would keep
+    // writing into the now-abandoned source session.
+    stopActiveRun(sourceThreadId)
+
+    const threadsApi = useThreadsStore.getState()
+    const sourceThread = threadsApi.threads.find((t) => t.id === sourceThreadId)
+    const newThreadId = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    threadsApi.ensureBranchThread(newThreadId, sourceThread?.title || 'Conversation', sourceThreadId)
+
+    // Clone surviving history for display (fresh ids so the threads don't share
+    // message objects; index in the id avoids same-millisecond collisions).
+    const stamp = Date.now()
+    const clonedHistory: Message[] = kept.map((m, i) => ({
+      ...m,
+      id: `msg-${stamp}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+      streaming: false,
+    }))
+    store.getState().setThreadMessages(newThreadId, clonedHistory)
+
+    // Seed the empty gateway session with the surviving transcript (text only).
+    const seedContext: RouteContextMessage[] = kept
+      .filter((m): m is Message & { role: 'user' | 'assistant' } =>
+        (m.role === 'user' || m.role === 'assistant') && m.content.trim().length > 0)
+      .slice(-SEED_CONTEXT_LIMIT)
+      .map((m) => ({ role: m.role, content: m.content.slice(0, 2500) }))
+
+    // Archive the original so the rewind "replaces" it. Never Main — it's the
+    // persistent home thread and not archivable.
+    if (sourceThreadId !== MAIN_THREAD_ID) threadsApi.archiveThread(sourceThreadId)
+
+    sendRef.current?.(newThreadId, newContent, images, files, 0, undefined, seedContext)
+    return newThreadId
+  }, [store, stopActiveRun])
+
+  /** Regenerate: rewind to the question that produced `assistantMessageId` and
+   *  ask it again in a fresh branch session. Returns the new threadId. */
+  const regenerate = useCallback((threadId: string, assistantMessageId: string): string | null => {
+    const messages = store.getState().getThreadState(threadId).messages
+    const targetIdx = messages.findIndex((m) => m.id === assistantMessageId)
+    if (targetIdx < 0) return null
+
     let userMsg: Message | null = null
     for (let i = targetIdx - 1; i >= 0; i--) {
-      if (messages[i].role === 'user') {
-        userMsg = messages[i]
-        break
-      }
+      if (messages[i].role === 'user') { userMsg = messages[i]; break }
     }
-    if (!userMsg) return
+    if (!userMsg) return null
 
-    // Kill any in-flight run first — otherwise it keeps generating into the
-    // agent's session context and the regenerated answer references a reply
-    // the user never saw.
-    stopActiveRun(threadId)
+    return forkRewindAndSend(threadId, userMsg.id, userMsg.content, userMsg.images, userMsg.attachments)
+  }, [store, forkRewindAndSend])
 
-    // Remove from the user message onward (inclusive)
-    store.getState().truncateMessagesFrom(threadId, userMsg.id)
+  /** Edit a user message: rewind to it and send the edited text as the first
+   *  turn of a fresh branch session (so the model never sees the original).
+   *  Returns the new threadId. */
+  const editAndResend = useCallback((threadId: string, messageId: string, newContent: string): string | null => {
+    return forkRewindAndSend(threadId, messageId, newContent)
+  }, [forkRewindAndSend])
 
-    // Re-send the user message content (including any file attachments)
-    sendRef.current?.(threadId, userMsg.content, userMsg.images, userMsg.attachments)
-  }, [store, stopActiveRun])
-
-  /** Edit a user message: truncate from that message onward and re-send with
-   *  new content. Cancels any in-flight run for the thread first (same reason
-   *  as regenerate). */
-  const editAndResend = useCallback((threadId: string, messageId: string, newContent: string) => {
-    stopActiveRun(threadId)
-    store.getState().truncateMessagesFrom(threadId, messageId)
-    sendRef.current?.(threadId, newContent)
-  }, [store, stopActiveRun])
-
-  return { send, abort, sendNow, regenerate, editAndResend }
+  return { send, abort, sendNow, regenerate, editAndResend, forkRewindAndSend }
 }
 
 function generateTitleIfNeeded(threadId: string) {

@@ -1020,21 +1020,36 @@ export function App() {
   }, [visiblePanel, sendNow])
 
   const handleRegenerate = useCallback((threadId: string, assistantMessageId: string) => {
-    regenerate(threadId, assistantMessageId)
-  }, [regenerate])
+    // Regenerate now forks into a fresh branch (true rewind); follow the user
+    // to the new thread so they see the re-asked turn streaming there.
+    const newThreadId = regenerate(threadId, assistantMessageId)
+    if (newThreadId) {
+      const title = useThreadsStore.getState().threads.find((t) => t.id === newThreadId)?.title || 'Conversation'
+      ensureChatTab(newThreadId, title)
+      setVisiblePanel(newThreadId)
+    }
+  }, [regenerate, setVisiblePanel])
 
   /** User clicked "Edit" on a sent message — load it into the main InputBar. */
   const handleStartEditMessage = useCallback((threadId: string, messageId: string, content: string) => {
     setEditingMessage({ threadId, messageId, originalContent: content })
   }, [])
 
-  /** Submit the edited message: truncate from this msg onward and re-send. */
+  /** Submit the edited message: fork into a fresh branch (true rewind) starting
+   *  from this message, send the edited text there, archive the original, and
+   *  follow the user to the new thread. Fires only on submit — editing in place
+   *  does nothing until then. */
   const handleSubmitEditMessage = useCallback((newContent: string) => {
     if (!editingMessage) return
     const { threadId, messageId } = editingMessage
     setEditingMessage(null)
-    editAndResend(threadId, messageId, newContent)
-  }, [editingMessage, editAndResend])
+    const newThreadId = editAndResend(threadId, messageId, newContent)
+    if (newThreadId) {
+      const title = useThreadsStore.getState().threads.find((t) => t.id === newThreadId)?.title || 'Conversation'
+      ensureChatTab(newThreadId, title)
+      setVisiblePanel(newThreadId)
+    }
+  }, [editingMessage, editAndResend, setVisiblePanel])
 
   const handleCancelEditMessage = useCallback(() => {
     setEditingMessage(null)

@@ -22,6 +22,20 @@ import { routeUtterance } from './jane/router.ts'
 import { MAIN_THREAD_ID } from './jane/store.ts'
 import { screenCaptureHint } from './screenCapture.ts'
 
+/** Render the client-supplied prior transcript (clavusSeedContext) into a single
+ *  text block used to seed a freshly forked branch's empty gateway session.
+ *  Mirrors the new-branch routing seed shape (User:/Assistant: lines). Returns
+ *  '' when there's nothing usable so plain (non-fork) sends are untouched. */
+function renderSeedContext(raw: unknown): string {
+  if (!Array.isArray(raw)) return ''
+  const lines = raw
+    .filter((m: any) => (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string' && m.content.trim())
+    .slice(-24)
+    .map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 2500)}`)
+  if (!lines.length) return ''
+  return `Earlier conversation, continued from a previous thread (context only — do not re-answer it):\n\n${lines.join('\n\n')}`
+}
+
 /** Image attachments from a request body: array of { mimeType, content(base64) }. */
 function readAttachments(parsed: any): Array<{ mimeType: string; content: string }> {
   const raw = parsed?.attachments
@@ -280,6 +294,15 @@ export function responsesProxyPlugin() {
     // nothing injected, so plain web turns are unaffected.
     const capHint = screenCaptureHint()
     if (capHint) agentMessage = `${capHint}\n\n${agentMessage}`
+
+    // Fork-rewind seed: a freshly forked branch has an EMPTY gateway session
+    // (the gateway only ever receives the latest user turn and accumulates its
+    // own history). When the client forks a thread — edit/regenerate "rewind",
+    // or "ignore last" — it ships the prior transcript here so the new session
+    // starts with the backstory instead of cold. Prepended outermost so it
+    // reads as context that precedes the current turn.
+    const seedBlock = renderSeedContext((parsed as { clavusSeedContext?: unknown }).clavusSeedContext)
+    if (seedBlock) agentMessage = `${seedBlock}\n\n${agentMessage}`
 
     const sessionKey = typeof parsed.user === 'string' ? parsed.user
       : typeof req.headers['x-openclaw-session-key'] === 'string' ? req.headers['x-openclaw-session-key']

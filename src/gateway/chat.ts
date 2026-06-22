@@ -10,7 +10,7 @@ export interface ChatCompletionMessage {
   content: string | ContentPart[]
 }
 
-interface RouteContextMessage {
+export interface RouteContextMessage {
   role: 'user' | 'assistant'
   content: string
 }
@@ -504,6 +504,11 @@ export interface SendOptions {
   /** Opt this send into Jane's server-side routing (sends X-Clavus-Route: 1).
    *  Set only for typed sends from Main. */
   route?: boolean
+  /** Prior-conversation context to seed a freshly forked branch session with.
+   *  Sent as `clavusSeedContext` and prepended to the agent input server-side,
+   *  so a fork-rewind branch carries the backstory the empty gateway session
+   *  otherwise lacks (the gateway only ever receives the latest user turn). */
+  seedContext?: RouteContextMessage[]
 }
 
 /** Server-side routing decision surfaced via response headers on a routed send. */
@@ -606,6 +611,7 @@ async function sendResponsesStream(
         ? { attachments: openClawAttachments }
         : {}),
       ...(options.route ? { clavusRouteContext: buildRouteContext(messages) } : {}),
+      ...(options.seedContext && options.seedContext.length ? { clavusSeedContext: options.seedContext } : {}),
     }),
     signal,
   })
