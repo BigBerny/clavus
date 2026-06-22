@@ -325,7 +325,7 @@ export function useChat() {
         store.getState().addMessage(sourceThreadId, {
           role: 'assistant',
           meta: 'routing',
-          content: `Jane answered this in [${title || 'another conversation'}](clavus://thread/${routed}).`,
+          content: `Jane answered this in [${title || 'another conversation'}](clavus://thread/${routed})`,
         })
         // Hand the streaming slot from the source thread to the routed one.
         store.getState().setStreaming(sourceThreadId, false)

@@ -4,6 +4,7 @@ import Markdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import { getFileTypeInfo, type FileViewerKind } from '../../lib/fileTypes'
+import { normalizeClavusThreadMarkdown } from '../../lib/clavusLinks'
 
 // react-markdown's default URL sanitizer strips unknown schemes, which would
 // blank out our `clavus://` deep links (file cards, thread breadcrumbs). Pass
@@ -377,8 +378,9 @@ export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId, i
     () => ({ code: CodeBlock, a: ExternalLink(threadId, isStreaming), table: TableBlock }),
     [threadId, isStreaming],
   )
+  const normalizedContent = normalizeClavusThreadMarkdown(content)
   if (remarkPluginsGfmOnly) {
-    return <Markdown remarkPlugins={[remarkGfm]} components={GFM_ONLY_COMPONENTS}>{content}</Markdown>
+    return <Markdown remarkPlugins={[remarkGfm]} components={GFM_ONLY_COMPONENTS}>{normalizedContent}</Markdown>
   }
   return (
     <Markdown
@@ -387,7 +389,7 @@ export function RichMessageRenderer({ content, remarkPluginsGfmOnly, threadId, i
       urlTransform={clavusUrlTransform}
       components={components}
     >
-      {content}
+      {normalizedContent}
     </Markdown>
   )
 }

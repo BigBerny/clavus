@@ -1,4 +1,5 @@
 /** Text helpers shared by the home screen and the desktop overlay home. */
+import { stripClavusThreadLinks } from './clavusLinks'
 
 export function greeting(date: Date): string {
   const h = date.getHours()
@@ -26,7 +27,7 @@ export function relativeTime(timestamp: number): string {
 }
 
 export function stripMarkdown(text: string): string {
-  return text
+  return stripClavusThreadLinks(text)
     .replace(/^:::copy\s*$/gm, '')
     .replace(/^:::\s*$/gm, '')
     .replace(/^#{1,6}\s+/gm, '')
