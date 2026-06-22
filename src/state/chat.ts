@@ -59,6 +59,9 @@ export interface Message {
   usage?: MessageUsage
   media?: MediaAttachment[]
   attachments?: PendingFile[]
+  /** How this (user) message was produced + its origin context (typed/dictated,
+   *  focused app, dictation telemetry). Rendered into the agent input on send. */
+  clientMeta?: import('../gateway/chat.ts').ClientMeta
   backendResponseId?: string
   /** @deprecated use backendResponseId */
   hermesResponseId?: string

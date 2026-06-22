@@ -10,7 +10,7 @@ import { useChatSettingsStore } from '../state/chatSettings.ts'
 import { useAutoClassifyStore } from '../state/autoClassify.ts'
 import { classifyMessage } from '../gateway/classify.ts'
 import { resolveChatRoutingSelection } from '../lib/chatRouting.ts'
-import type { ChatCompletionMessage, RouteContextMessage } from '../gateway/chat.ts'
+import type { ChatCompletionMessage, RouteContextMessage, ClientMeta } from '../gateway/chat.ts'
 import { buildWorkspaceMediaUrl, mediaTypeFromPath } from '../lib/media.ts'
 import { normalizeToolCalls } from '../lib/toolCalls.ts'
 import { markStreamActivity } from '../lib/streamActivity.ts'
@@ -69,7 +69,7 @@ export function useChat() {
   const store = useChatStore
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)
   const offlineQueueRef = useRef<{ threadId: string; content: string; images?: string[]; files?: import('../state/chat').PendingFile[] }[]>([])
-  const sendRef = useRef<((threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount?: number, idempotencyKey?: string, seedContext?: RouteContextMessage[]) => Promise<void>) | undefined>(undefined)
+  const sendRef = useRef<((threadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount?: number, idempotencyKey?: string, seedContext?: RouteContextMessage[], clientMeta?: ClientMeta) => Promise<void>) | undefined>(undefined)
   // Forward-declared so `send`'s onDone callback (created earlier) can invoke
   // the drain helper (created later) without a circular useCallback dep.
   const drainQueueIfAnyRef = useRef<((threadId: string) => void) | null>(null)
@@ -103,7 +103,7 @@ export function useChat() {
     }
   }, [setConnectionStatus])
 
-  const send = useCallback(async (inputThreadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string, seedContext?: RouteContextMessage[]) => {
+  const send = useCallback(async (inputThreadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string, seedContext?: RouteContextMessage[], clientMeta?: ClientMeta) => {
     if (!content.trim() && (!images || images.length === 0) && (!files || files.length === 0)) return
 
     // Mutable: Jane's server-side router may refile this turn into a different
@@ -150,7 +150,7 @@ export function useChat() {
     }
 
     if (retryCount === 0) {
-      userMsgId = addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files })
+      userMsgId = addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files, clientMeta })
       // Claim the streaming slot before any awaits so a concurrent recovery sweep
       // (or a second submit) doesn't see "last message is user, isStreaming=false"
       // and kick off a duplicate run. Auto-classify below can await up to 3s.
@@ -405,6 +405,8 @@ export function useChat() {
           // Fork-rewind: seed a freshly forked branch's empty gateway session
           // with the prior transcript. Carried across retries via the param.
           seedContext,
+          // Per-message client metadata (typed/dictated, app, dictation info).
+          clientMeta,
         },
       )
     } catch (error) {
@@ -442,7 +444,7 @@ export function useChat() {
           // Keep the recovery sweep from also re-sending this thread while we back off.
           markStreamActivity(threadId)
           await delay(Math.min(LOCK_RETRY_BASE * 2 ** retryCount, LOCK_RETRY_MAX))
-          return sendRef.current?.(threadId, content, images, files, retryCount + 1, idemKey, seedContext)
+          return sendRef.current?.(threadId, content, images, files, retryCount + 1, idemKey, seedContext, clientMeta)
         }
         setConnectionStatus('connected')
         store.getState().addMessage(threadId, {

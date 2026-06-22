@@ -15,6 +15,20 @@ export interface RouteContextMessage {
   content: string
 }
 
+/** Per-message client metadata: how the message was produced and the context it
+ *  came from. Sent as `clavusClientMeta` and rendered into a compact note before
+ *  the agent input server-side (so the model knows e.g. it was voice-dictated
+ *  while the user was focused on a particular app). Never the routing/rewind
+ *  channel — those are separate. */
+export interface ClientMeta {
+  /** How this message was produced. */
+  source?: 'typed' | 'dictated' | 'talk' | 'desktop' | 'interactive'
+  /** Speech telemetry when the message (partly) came from dictation. */
+  dictation?: { transcriptionId?: string; durationMs?: number; language?: string }
+  /** Foreground app context (desktop dictation/compose). */
+  app?: { name?: string; bundleId?: string; fieldType?: string }
+}
+
 export interface UsageData {
   inputTokens: number
   outputTokens: number
@@ -509,6 +523,10 @@ export interface SendOptions {
    *  so a fork-rewind branch carries the backstory the empty gateway session
    *  otherwise lacks (the gateway only ever receives the latest user turn). */
   seedContext?: RouteContextMessage[]
+  /** Per-message client metadata (typed/dictated, app context, dictation info).
+   *  Sent as `clavusClientMeta` and rendered into a compact note before the
+   *  agent input server-side. */
+  clientMeta?: ClientMeta
 }
 
 /** Server-side routing decision surfaced via response headers on a routed send. */
@@ -612,6 +630,7 @@ async function sendResponsesStream(
         : {}),
       ...(options.route ? { clavusRouteContext: buildRouteContext(messages) } : {}),
       ...(options.seedContext && options.seedContext.length ? { clavusSeedContext: options.seedContext } : {}),
+      ...(options.clientMeta ? { clavusClientMeta: options.clientMeta } : {}),
     }),
     signal,
   })

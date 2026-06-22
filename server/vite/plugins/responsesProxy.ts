@@ -36,6 +36,24 @@ function renderSeedContext(raw: unknown): string {
   return `Earlier conversation, continued from a previous thread (context only — do not re-answer it):\n\n${lines.join('\n\n')}`
 }
 
+/** Render per-message client metadata (clavusClientMeta) into a compact note
+ *  prepended to the agent input — so the model knows the message was e.g.
+ *  voice-dictated while the user was focused on a specific app. Returns '' for
+ *  plain typed messages with no extra context, so ordinary turns stay clean. */
+function renderClientMeta(raw: unknown): string {
+  if (!raw || typeof raw !== 'object') return ''
+  const m = raw as { source?: string; dictation?: { language?: string }; app?: { name?: string; bundleId?: string; fieldType?: string } }
+  const bits: string[] = []
+  const dictated = m.source === 'dictated' || m.source === 'talk'
+  if (dictated) bits.push('voice-dictated')
+  if (m.app?.name) bits.push(`focused app: ${m.app.name}${m.app.bundleId ? ` (${m.app.bundleId})` : ''}`)
+  else if (m.source === 'desktop') bits.push('sent from the desktop app')
+  if (m.app?.fieldType && m.app.fieldType !== 'generic') bits.push(`field: ${m.app.fieldType}`)
+  if (dictated && m.dictation?.language) bits.push(`language: ${m.dictation.language}`)
+  if (!bits.length) return ''
+  return `[Message context — ${bits.join('; ')}.]`
+}
+
 /** Image attachments from a request body: array of { mimeType, content(base64) }. */
 function readAttachments(parsed: any): Array<{ mimeType: string; content: string }> {
   const raw = parsed?.attachments
@@ -303,6 +321,11 @@ export function responsesProxyPlugin() {
     // reads as context that precedes the current turn.
     const seedBlock = renderSeedContext((parsed as { clavusSeedContext?: unknown }).clavusSeedContext)
     if (seedBlock) agentMessage = `${seedBlock}\n\n${agentMessage}`
+
+    // Per-message client metadata (typed/dictated, focused app, dictation info).
+    // A compact note so the agent knows how/where the message originated.
+    const metaNote = renderClientMeta((parsed as { clavusClientMeta?: unknown }).clavusClientMeta)
+    if (metaNote) agentMessage = `${metaNote}\n\n${agentMessage}`
 
     const sessionKey = typeof parsed.user === 'string' ? parsed.user
       : typeof req.headers['x-openclaw-session-key'] === 'string' ? req.headers['x-openclaw-session-key']

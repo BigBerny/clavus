@@ -41,7 +41,7 @@ import { decideOpenTarget, recordLastChat, recordVisiblePanel, readVisiblePanel 
 
 export function App() {
   useVisualViewport()
-  const { send, abort, sendNow, regenerate, editAndResend } = useChat()
+  const { send, abort, sendNow, regenerate, editAndResend, forkRewindAndSend } = useChat()
   const { checkRecovery } = useResponseRecovery({
     // Auto-resend the user's last message when recovery confirms the assistant
     // never produced anything (e.g. stream killed before any persist). Pass
@@ -944,18 +944,40 @@ export function App() {
     return tab?.type === 'chat' ? visiblePanel : null
   }, [createConversationFromHome, isHomeVisible, sortedTabs, visiblePanel])
 
-  // Handle sending from any panel — thread-scoped
-  const handleSend = useCallback((text: string, images?: string[], files?: import('./state/chat').PendingFile[]) => {
+  // Handle sending from any panel — thread-scoped. `clientMeta` carries how the
+  // message was produced (typed/dictated, focused app). `supersedePrevious`
+  // ("ignore last") forks the thread before its last user turn so the dropped
+  // turn is gone model-side, then sends the new message into the fresh branch.
+  const handleSend = useCallback((
+    text: string,
+    images?: string[],
+    files?: import('./state/chat').PendingFile[],
+    clientMeta?: import('./gateway/chat.ts').ClientMeta,
+    supersedePrevious?: boolean,
+  ) => {
+    if (supersedePrevious && !isHomeVisible() && visiblePanel !== 'home') {
+      const msgs = useChatStore.getState().getThreadState(visiblePanel).messages
+      const lastUser = [...msgs].reverse().find((m) => m.role === 'user')
+      if (lastUser) {
+        const newThreadId = forkRewindAndSend(visiblePanel, lastUser.id, text, images, files)
+        if (newThreadId) {
+          const title = useThreadsStore.getState().threads.find((t) => t.id === newThreadId)?.title || 'Conversation'
+          ensureChatTab(newThreadId, title)
+          setVisiblePanel(newThreadId)
+        }
+        return
+      }
+    }
     if (isHomeVisible()) {
       const newThreadId = createConversationFromHome()
-      send(newThreadId, text, images, files)
+      send(newThreadId, text, images, files, 0, undefined, undefined, clientMeta)
     } else {
       // Send to the visible thread directly (only for chat tabs)
       if (visiblePanel !== 'home') {
         const tab = sortedTabs.find(t => t.id === visiblePanel)
         if (tab?.type === 'chat') {
           switchThread(visiblePanel)
-          send(visiblePanel, text, images, files)
+          send(visiblePanel, text, images, files, 0, undefined, undefined, clientMeta)
         } else {
           // Silent-drop guard: should not happen because InputBar only renders
           // when isVisibleChat is true, but if it does the user sees nothing.
@@ -970,18 +992,18 @@ export function App() {
         console.warn('[Clavus] handleSend dropped — visiblePanel is home but isHomeVisible() was false')
       }
     }
-  }, [createConversationFromHome, isHomeVisible, visiblePanel, send, switchThread, sortedTabs])
+  }, [createConversationFromHome, isHomeVisible, visiblePanel, send, switchThread, sortedTabs, forkRewindAndSend, setVisiblePanel])
 
   useEffect(() => {
     const handleInteractiveSend = (event: Event) => {
-      const detail = (event as CustomEvent<{ content?: string; images?: string[] }>).detail
+      const detail = (event as CustomEvent<{ content?: string; images?: string[]; clientMeta?: import('./gateway/chat.ts').ClientMeta; supersedePrevious?: boolean }>).detail
       const content = detail?.content?.trim() ?? ''
       const rawImages = Array.isArray(detail?.images) ? detail.images : []
       if (!content && rawImages.length === 0) return
       // Compress screenshots (native captures are full-res PNGs) before sending,
       // matching the composer's attach path, then send text + images as one message.
       Promise.all(rawImages.map((img) => compressImageToDataUrl(img).catch(() => img)))
-        .then((images) => handleSend(content, images.length ? images : undefined))
+        .then((images) => handleSend(content, images.length ? images : undefined, undefined, detail?.clientMeta, detail?.supersedePrevious))
     }
     window.addEventListener('clavus:interactive-send', handleInteractiveSend)
     return () => window.removeEventListener('clavus:interactive-send', handleInteractiveSend)
@@ -992,14 +1014,16 @@ export function App() {
   // re-files it into main/branch/new-branch/ask exactly like a typed Main send.
   useEffect(() => {
     const handleJaneDictation = (event: Event) => {
-      const detail = (event as CustomEvent<{ content?: string; images?: string[] }>).detail
+      const detail = (event as CustomEvent<{ content?: string; images?: string[]; clientMeta?: import('./gateway/chat.ts').ClientMeta }>).detail
       const content = detail?.content?.trim() ?? ''
       const rawImages = Array.isArray(detail?.images) ? detail.images : []
       if (!content && rawImages.length === 0) return
+      // Desktop dictation → tag as dictated (carry app context if present).
+      const meta: import('./gateway/chat.ts').ClientMeta = { source: 'dictated', ...detail?.clientMeta }
       pushHash({ kind: 'chat', threadId: MAIN_THREAD_ID })
       switchThread(MAIN_THREAD_ID)
       Promise.all(rawImages.map((img) => compressImageToDataUrl(img).catch(() => img)))
-        .then((images) => send(MAIN_THREAD_ID, content, images.length ? images : undefined))
+        .then((images) => send(MAIN_THREAD_ID, content, images.length ? images : undefined, undefined, 0, undefined, undefined, meta))
     }
     window.addEventListener('clavus:jane-dictation', handleJaneDictation)
     return () => window.removeEventListener('clavus:jane-dictation', handleJaneDictation)

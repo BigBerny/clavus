@@ -36,7 +36,7 @@ import { SlashCommandsModal } from './SlashCommandsModal'
 import { VoiceWaveform } from '../voice/VoiceWaveform'
 
 interface Props {
-  onSend: (message: string, images?: string[], files?: PendingFile[]) => void
+  onSend: (message: string, images?: string[], files?: PendingFile[], clientMeta?: import('../../gateway/chat.ts').ClientMeta) => void
   onAbort: () => void
   /** Abort the current stream and immediately send the queued message. */
   onSendNow?: () => void
@@ -73,6 +73,8 @@ const MAX_FILE_SIZE = 2 * 1024 * 1024 // 2MB per file
 
 type SubmitOptions = {
   refocus?: boolean
+  /** How this submission was produced (typed by default; dictated from voice). */
+  clientMeta?: import('../../gateway/chat.ts').ClientMeta
 }
 
 async function uploadFile(file: File, threadId?: string | null): Promise<{ path: string } | null> {
@@ -437,7 +439,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     setSendAnim(true)
     setTimeout(() => setSendAnim(false), 300)
     haptic.tap()
-    onSend(trimmed.slice(0, 100000), pendingImages.length > 0 ? pendingImages : undefined, pendingFiles.length > 0 ? pendingFiles : undefined)
+    onSend(trimmed.slice(0, 100000), pendingImages.length > 0 ? pendingImages : undefined, pendingFiles.length > 0 ? pendingFiles : undefined, options?.clientMeta ?? { source: 'typed' })
     setValue('')
     setPendingImages([])
     setPendingFiles([])
@@ -458,7 +460,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       // and slash commands still work.
       const current = value.trim()
       const finalText = current ? current + ' ' + text : text
-      handleSubmitRef.current?.(finalText, { refocus: false })
+      handleSubmitRef.current?.(finalText, { refocus: false, clientMeta: { source: 'dictated' } })
       haptic.tap()
     },
     onInsertTranscription: (text) => {
