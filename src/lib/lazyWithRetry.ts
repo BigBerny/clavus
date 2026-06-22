@@ -44,11 +44,11 @@ async function probeModuleUrl(name: string, url: string) {
 // (dev-server restarts behind the Cloudflare tunnel, brief tunnel drops):
 // retry with backoff + cache-bust, then reload the page once to re-sync the
 // module graph.
-export function lazyWithRetry<T extends ComponentType<unknown>>(
+export function lazyWithRetry<TModule, TComponent extends ComponentType<any>>(
   name: string,
-  importFn: () => Promise<Record<string, unknown>>,
-  pick: (mod: Record<string, unknown>) => T,
-): LazyExoticComponent<T> {
+  importFn: () => Promise<TModule>,
+  pick: (mod: TModule) => TComponent,
+): LazyExoticComponent<TComponent> {
   return lazy(async () => {
     let lastError: unknown
     let moduleUrl: string | null = null
@@ -59,7 +59,7 @@ export function lazyWithRetry<T extends ComponentType<unknown>>(
           ? await import(/* @vite-ignore */ `${moduleUrl}${moduleUrl.includes('?') ? '&' : '?'}retry=${Date.now()}`)
           : await importFn()
         try { sessionStorage.removeItem(reloadGuardKey(name)) } catch { /* ignore */ }
-        return { default: pick(mod as Record<string, unknown>) }
+        return { default: pick(mod as TModule) }
       } catch (err) {
         lastError = err
         if (!moduleUrl) {
