@@ -429,6 +429,18 @@ html:not(.dark) .chat-bg {
   animation: voicePulse 1.5s ease-in-out infinite;
 }
 
+/* Composer (V2) — idle floating record button breathing ring */
+@keyframes composerBreathe {
+  0%, 100% { transform: scale(1); opacity: 0.5; }
+  50% { transform: scale(1.16); opacity: 0; }
+}
+.composer-breathe-ring {
+  animation: composerBreathe 3.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer-breathe-ring { animation: none; opacity: 0.32; }
+}
+
 @keyframes streamingPulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3); }
   50% { box-shadow: 0 0 0 6px rgba(99, 102, 241, 0); }

@@ -338,9 +338,6 @@ export function OverlayApp() {
               acceptScreenshots={!chatOpen}
             />
           </div>
-          <div className="ovl-hints">
-            <span><b>↵</b> send</span><span><b>⇧↵</b> new line</span><span><b>/</b> commands</span><span><b>@</b> mention</span>
-          </div>
         </div>
 
         {/* ---------- CHAT pane (pages in from the right) ---------- */}
@@ -366,9 +363,6 @@ export function OverlayApp() {
                 onAbort={() => threadId && abort(threadId)}
                 acceptScreenshots={chatOpen}
               />
-            </div>
-            <div className="ovl-hints">
-              <span><b>↵</b> send</span><span><b>⇧↵</b> new line</span><span><b>esc</b> back</span>
             </div>
           </div>
         )}

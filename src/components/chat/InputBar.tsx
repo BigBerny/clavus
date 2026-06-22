@@ -18,13 +18,14 @@ import {
 } from '../../lib/slashCommands'
 import {
   AtSignMini,
+  FloatButton,
   IconBtn,
   MicMini,
-  ModelPill,
+  ModelMenu,
   PaperclipMini,
-  ReasoningPill,
-  SendBtn,
-  StopMini,
+  PencilMini,
+  ReasoningMenu,
+  StopSquare,
 } from './InputBarControls'
 import { InputBarTalkMode, type InputBarTalkModeState } from './InputBarTalkMode'
 import { CaptureMenu } from './CaptureMenu'
@@ -109,6 +110,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     }
     lastDraftKey.current = draftKey
     setValue(draftKey ? useDraftsStore.getState().getDraft(draftKey) : '')
+    setComposing(false)
   }, [draftKey])
 
   // Persist edits whenever the draftKey is set (debounced inside the store).
@@ -163,6 +165,11 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     editingMessageIdRef.current = current
   }, [editingMessage])
   const [sendAnim, setSendAnim] = useState(false)
+  // Composer collapse/expand (V2 design): the bar rests as a compact tray + a
+  // floating record button. Tapping the compose pencil (or @, or adding any
+  // content) expands the text field above the tray. `composing` latches that
+  // intent for the empty-but-focused case; content/edit force-expand on their own.
+  const [composing, setComposing] = useState(false)
   const [pendingImages, setPendingImages] = useState<string[]>([])
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([])
   const [slashIndex, setSlashIndex] = useState(0)
@@ -588,6 +595,50 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     fileInputRef.current?.click()
   }, [])
 
+  // Expand the composer (mount the text field) and focus it.
+  const handleCompose = useCallback(() => {
+    setComposing(true)
+    haptic.tap()
+    requestAnimationFrame(() => textareaRef.current?.focus())
+  }, [])
+
+  // Expand, then insert an "@" so the mention palette opens naturally.
+  const triggerMention = useCallback(() => {
+    setComposing(true)
+    requestAnimationFrame(() => {
+      const ta = textareaRef.current
+      if (!ta) return
+      ta.focus()
+      const caret = ta.selectionStart
+      const before = value.slice(0, caret)
+      const needsSpace = caret > 0 && !/\s/.test(value[caret - 1])
+      const ins = needsSpace ? ' @' : '@'
+      const next = before + ins + value.slice(caret)
+      setValue(next)
+      requestAnimationFrame(() => {
+        const pos = (before + ins).length
+        ta.setSelectionRange(pos, pos)
+        setAtQuery('')
+        setAtIndex(0)
+      })
+    })
+  }, [value])
+
+  // Collapse back to the resting tray when the field is left empty. Guard
+  // against collapsing when focus moves to another control inside the bar
+  // (e.g. opening the model/reasoning menu).
+  const handleTextareaBlur = useCallback((e: React.FocusEvent) => {
+    const next = e.relatedTarget as Node | null
+    if (next && barRef.current?.contains(next)) return
+    setTimeout(() => {
+      const active = document.activeElement
+      if (active && barRef.current?.contains(active)) return
+      if (valueRef.current.trim() === '' && pendingImages.length === 0 && pendingFiles.length === 0 && !editingMessage) {
+        setComposing(false)
+      }
+    }, 120)
+  }, [pendingImages.length, pendingFiles.length, editingMessage])
+
   const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files) return
@@ -714,6 +765,9 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
 
   const hasText = value.trim().length > 0
   const hasContent = hasText || pendingImages.length > 0 || pendingFiles.length > 0
+  // Writing mode: text field is shown above the tray. Recording overrides the
+  // tray display entirely (handled separately below).
+  const expanded = !!editingMessage || hasContent || composing
 
   if (talkMode?.active) {
     return <InputBarTalkMode talkMode={talkMode} />
@@ -735,7 +789,7 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           </div>
         </div>
       )}
-      <div className="max-w-[900px] mx-auto p-3 pointer-events-auto">
+      <div className="max-w-[640px] mx-auto p-3 pointer-events-auto">
 
         <ToastRow message={toast} />
         <AtMentionPalette
@@ -761,14 +815,14 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
         />
 
         {isStreaming && (
-          <div className="mb-2 flex justify-end animate-[fadeSlideIn_0.2s_ease-out]">
+          <div className="mb-2.5 flex justify-end w-full max-w-[420px] mx-auto animate-[fadeSlideIn_0.2s_ease-out]">
             <button
               type="button"
               onClick={handleAbortClick}
-              className="inline-btn w-9 h-9 rounded-full glass flex items-center justify-center text-red-400 hover:bg-red-500/10 active:scale-95 transition-all"
+              className="inline-btn w-[60px] h-[60px] rounded-full glass-heavy flex items-center justify-center text-red-400 hover:bg-red-500/10 active:scale-95 transition-all"
               aria-label="Stop generating"
             >
-              <StopMini />
+              <StopSquare size={21} />
             </button>
           </div>
         )}
@@ -801,126 +855,108 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
           aria-hidden="true"
         />
 
-        {/* ─── Unified composer card ────────────────────────────────── */}
-        <div className="relative rounded-3xl glass-heavy transition-shadow focus-within:shadow-md focus-within:border-[var(--glass-border-strong)]">
-          {isRecording ? (
-            <div className="flex items-center gap-3 px-4 py-3">
-              <div className="w-2 h-2 rounded-full bg-red-500 recording-pulse flex-shrink-0" />
-              <span className="text-[13px] text-foreground/85">Recording</span>
-              <div className="flex-1 flex items-center justify-center h-5">
-                <VoiceWaveform bars={32} maxPx={20} minPx={3} className="h-full" />
-              </div>
-              <span className="text-[12px] text-muted-foreground font-mono tabular-nums flex-shrink-0">
-                {voice.formattedDuration}
-              </span>
+        {/* ─── Composer · V2 "Floating Record" ──────────────────────────
+            At rest: a compact glass tray + a separate floating record button.
+            Tapping compose (or @, or adding content) grows the text field
+            above the tray; the floating button becomes Send. Recording swaps
+            the tray for a slim level bar. */}
+        <div className="flex flex-col items-center gap-2.5">
+          {/* Text field — only mounted while writing. Wider than the control
+              island so it reads as the focus on desktop. */}
+          {expanded && !isRecording && (
+            <div className="relative w-full rounded-[22px] glass-heavy px-4 pt-3 pb-2.5 transition-shadow focus-within:shadow-md animate-[fadeSlideIn_0.18s_ease-out]">
+              <textarea
+                ref={textareaRef}
+                value={value}
+                onChange={(e) => {
+                  setValue(e.target.value)
+                  detectAtTrigger(e.target.value, e.target.selectionStart)
+                }}
+                onKeyDown={(e) => {
+                  if (atQuery !== null && atMatches.length > 0) {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault()
+                      setAtIndex((i) => (i + 1) % atMatches.length)
+                      return
+                    }
+                    if (e.key === 'ArrowUp') {
+                      e.preventDefault()
+                      setAtIndex((i) => (i - 1 + atMatches.length) % atMatches.length)
+                      return
+                    }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault()
+                      insertAtMention(atMatches[atIndex].path)
+                      return
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault()
+                      setAtQuery(null)
+                      return
+                    }
+                  }
+                  handleKeyDown(e)
+                }}
+                onPaste={handlePaste}
+                onFocus={() => { setComposing(true); onFocusInput?.() }}
+                onBlur={handleTextareaBlur}
+                placeholder={isHome ? 'Ask anything, or type / for commands…' : 'Message…'}
+                rows={1}
+                disabled={isTranscribing}
+                aria-label="Chat message input"
+                maxLength={100000}
+                className="w-full bg-transparent resize-none focus:outline-none placeholder:text-muted-foreground/70 text-[15px] leading-[1.5] text-foreground"
+              />
+              {value.length > 90000 && (
+                <div className={`absolute right-3 -top-5 text-[11px] font-mono tabular-nums ${
+                  value.length > 98000 ? 'text-red-400' : 'text-muted-foreground/60'
+                }`}>
+                  {value.length.toLocaleString()}/100,000
+                </div>
+              )}
             </div>
-          ) : (
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => {
-                setValue(e.target.value)
-                detectAtTrigger(e.target.value, e.target.selectionStart)
-              }}
-              onKeyDown={(e) => {
-                if (atQuery !== null && atMatches.length > 0) {
-                  if (e.key === 'ArrowDown') {
-                    e.preventDefault()
-                    setAtIndex((i) => (i + 1) % atMatches.length)
-                    return
-                  }
-                  if (e.key === 'ArrowUp') {
-                    e.preventDefault()
-                    setAtIndex((i) => (i - 1 + atMatches.length) % atMatches.length)
-                    return
-                  }
-                  if (e.key === 'Enter' || e.key === 'Tab') {
-                    e.preventDefault()
-                    insertAtMention(atMatches[atIndex].path)
-                    return
-                  }
-                  if (e.key === 'Escape') {
-                    e.preventDefault()
-                    setAtQuery(null)
-                    return
-                  }
-                }
-                handleKeyDown(e)
-              }}
-              onPaste={handlePaste}
-              onFocus={() => { onFocusInput?.() }}
-              placeholder={isHome ? 'Ask anything, or type / for commands…' : 'Message…'}
-              rows={1}
-              disabled={isTranscribing}
-              aria-label="Chat message input"
-              maxLength={100000}
-              className="w-full bg-transparent resize-none focus:outline-none placeholder:text-muted-foreground/70 px-4 pt-3 pb-1 text-[15px] leading-[1.5] text-foreground"
-            />
           )}
 
-          {/* Toolbar row */}
-          <div className="flex items-end justify-between gap-2 px-2 pb-2 pt-1">
-            <div className="flex items-center gap-0.5 min-w-0">
-              {/* Model picker */}
-              <ModelPill
-                modelId={selectedModelId}
-                onChange={setSelectedModelId}
-                threadId={threadId}
-              />
-              {/* Reasoning picker */}
-              <ReasoningPill threadId={threadId ?? null} modelId={selectedModelId} />
-              <div className="w-px h-4 bg-border mx-1.5 hidden sm:block" />
-              {/* Attach file */}
-              <IconBtn
-                title="Attach file"
-                onClick={handleAttachClick}
-                disabled={pendingImages.length >= MAX_IMAGES && pendingFiles.length >= MAX_FILES}
-              >
-                <PaperclipMini />
-              </IconBtn>
-              {/* @ mention trigger */}
-              <IconBtn
-                title="Mention a file (@)"
-                onClick={() => {
-                  const ta = textareaRef.current
-                  if (!ta) return
-                  ta.focus()
-                  // Insert "@" so detectAtTrigger fires naturally
-                  const caret = ta.selectionStart
-                  const before = value.slice(0, caret)
-                  const needsSpace = caret > 0 && !/\s/.test(value[caret - 1])
-                  const ins = needsSpace ? ' @' : '@'
-                  const next = before + ins + value.slice(caret)
-                  setValue(next)
-                  requestAnimationFrame(() => {
-                    const pos = (before + ins).length
-                    ta.setSelectionRange(pos, pos)
-                    setAtQuery('')
-                    setAtIndex(0)
-                  })
-                }}
-              >
-                <AtSignMini />
-              </IconBtn>
-              {/* Screenshot capture (Clavus desktop only) */}
-              <CaptureMenu
-                disabled={pendingImages.length >= MAX_IMAGES}
-                onCaptured={(dataUrl) => setPendingImages((prev) => [...prev, dataUrl].slice(0, MAX_IMAGES))}
-              />
-            </div>
-
-            <div className="flex items-center gap-1 flex-none">
-              {isRecording ? (
-                <>
-                  <IconBtn title="Stop & insert" onClick={() => voice.stopAndInsert()}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                  </IconBtn>
-                  <SendBtn onClick={stopVoiceAndSend} />
-                </>
-              ) : (
-                <>
+          {/* Bottom row: tray (or recording bar) + floating record/send.
+              Capped narrow + centered so it stays mobile-sized on desktop
+              instead of stretching to the full composer width. */}
+          <div className="flex items-center gap-2.5 w-full max-w-[420px]">
+            {isRecording ? (
+              <div className="flex-1 min-w-0 flex items-center gap-2.5 h-[60px] pl-4 pr-2 rounded-full glass-heavy">
+                <span
+                  className="w-2.5 h-2.5 rounded-full recording-pulse shrink-0"
+                  style={{ background: 'var(--color-destructive)', boxShadow: '0 0 0 4px color-mix(in oklch, var(--color-destructive) 16%, transparent)' }}
+                />
+                <span className="text-[13.5px] tabular-nums text-foreground/85 shrink-0">{voice.formattedDuration}</span>
+                <div className="flex-1 min-w-0 flex items-center overflow-hidden h-5">
+                  <VoiceWaveform bars={28} maxPx={18} minPx={3} barClassName="bg-[var(--color-cat-voice)]" />
+                </div>
+                <IconBtn title="Stop & insert" onClick={() => voice.stopAndInsert()}>
+                  <StopSquare />
+                </IconBtn>
+              </div>
+            ) : (
+              <div className="flex-1 min-w-0 flex items-center justify-between gap-0.5 h-[60px] px-2 rounded-full glass-heavy">
+                <IconBtn
+                  title="Attach file"
+                  onClick={handleAttachClick}
+                  disabled={pendingImages.length >= MAX_IMAGES && pendingFiles.length >= MAX_FILES}
+                >
+                  <PaperclipMini />
+                </IconBtn>
+                <IconBtn title="Mention a file (@)" onClick={triggerMention}>
+                  <AtSignMini />
+                </IconBtn>
+                <CaptureMenu
+                  disabled={pendingImages.length >= MAX_IMAGES}
+                  onCaptured={(dataUrl) => setPendingImages((prev) => [...prev, dataUrl].slice(0, MAX_IMAGES))}
+                />
+                <ModelMenu modelId={selectedModelId} onChange={setSelectedModelId} threadId={threadId} />
+                <ReasoningMenu threadId={threadId ?? null} modelId={selectedModelId} />
+                {expanded ? (
                   <IconBtn
                     title="Voice input (tap or hold)"
+                    accent="voice"
                     onClick={handleMicClick}
                     onPointerDown={handleMicPointerDown}
                     onPointerUp={handleMicPointerUp}
@@ -929,38 +965,37 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
                   >
                     <MicMini />
                   </IconBtn>
-                  <SendBtn
-                    onClick={handleSubmit}
-                    disabled={!hasContent || isTranscribing}
-                    pulse={sendAnim}
-                    label={isStreaming ? 'Queue message' : 'Send'}
-                  />
-                </>
-              )}
-            </div>
-          </div>
+                ) : (
+                  <IconBtn title="Write a message" onClick={handleCompose}>
+                    <PencilMini />
+                  </IconBtn>
+                )}
+              </div>
+            )}
 
-          {/* Character count near limit (overlay top-right of toolbar) */}
-          {value.length > 90000 && (
-            <div className={`absolute right-3 -top-5 text-[11px] font-mono tabular-nums ${
-              value.length > 98000 ? 'text-red-400' : 'text-muted-foreground/60'
-            }`}>
-              {value.length.toLocaleString()}/100,000
-            </div>
-          )}
+            {isRecording ? (
+              <FloatButton variant="send" title="Stop & send" onClick={stopVoiceAndSend} />
+            ) : expanded ? (
+              <FloatButton
+                variant="send"
+                title={isStreaming ? 'Queue message' : 'Send'}
+                onClick={handleSubmit}
+                disabled={!hasContent || isTranscribing}
+                pulse={sendAnim}
+              />
+            ) : (
+              <FloatButton
+                variant="record"
+                title="Voice input (tap or hold)"
+                onClick={handleMicClick}
+                onPointerDown={handleMicPointerDown}
+                onPointerUp={handleMicPointerUp}
+                onPointerLeave={handleMicPointerUp}
+                disabled={isTranscribing}
+              />
+            )}
+          </div>
         </div>
-
-        {/* Hint row — desktop only (mouse + keyboard hints don't apply on touch).
-            Every key gets the same kbd chip so the row reads as one system. */}
-        {!isRecording && !isTranscribing && (
-          <div className="hidden md:flex text-[10.5px] text-muted-foreground/80 mt-2 px-1 items-center gap-3 flex-wrap">
-            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">↵</kbd> to send</span>
-            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">⇧↵</kbd> for new line</span>
-            <span className="opacity-50">·</span>
-            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">/</kbd> commands</span>
-            <span className="inline-flex items-center gap-1.5"><kbd className="px-1 py-0.5 rounded-[5px] bg-muted/80 border border-border/60 font-mono text-[10px] leading-none text-muted-foreground">@</kbd> attach a file</span>
-          </div>
-        )}
       </div>
       {statusOpen && (
         <StatusModal threadId={threadId ?? null} onClose={() => setStatusOpen(false)} />
