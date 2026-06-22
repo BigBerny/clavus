@@ -8,6 +8,20 @@ import { buildRecentRouterMessages, MAIN_THREAD_ID } from './jane/store.ts'
 
 const CLAVUS_BUNDLE_ID = 'win.random-hamster.clavus'
 
+/** Pull compact word-level timestamps out of an ElevenLabs Scribe response.
+ *  Scribe returns a `words` array (`{ text, start, end, type }`, times in
+ *  seconds) by default. We keep only spoken words (drop spacing/audio events)
+ *  as `{ text, start, end }` so a dictation transcript can later be aligned to
+ *  the screen-capture frames by time. Returns undefined when absent. */
+function extractWords(parsed: any): Array<{ text: string; start: number; end: number }> | undefined {
+  const raw = parsed?.words
+  if (!Array.isArray(raw)) return undefined
+  const words = raw
+    .filter((w: any) => w && typeof w.text === 'string' && (w.type === 'word' || w.type === undefined))
+    .map((w: any) => ({ text: String(w.text), start: Number(w.start) || 0, end: Number(w.end) || 0 }))
+  return words.length ? words : undefined
+}
+
 /** Compact routing shape sent back to the desktop overlay. The overlay only
  *  needs `target` (paste vs Jane-directed); the rest rides along for display. */
 function trimRouting(d: RouterDecision) {
@@ -76,6 +90,7 @@ export function elevenLabsProxy() {
                 durationMs: Date.now() - startedAt,
                 text: parsed.text,
                 transcriptionId: parsed.transcription_id || '',
+                words: extractWords(parsed),
               }) + '\n')
             } catch {
               // Logging is best-effort; never fail the response if disk write hiccups.
@@ -220,6 +235,7 @@ export function desktopDictationPlugin() {
           durationMs: Date.now() - startedAt,
           text: parsed?.text || '',
           transcriptionId: parsed?.transcription_id || '',
+          words: extractWords(parsed),
           routing,
         }) + '\n')
 

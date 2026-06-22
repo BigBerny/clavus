@@ -126,7 +126,7 @@ server.registerTool(
     title: 'Get screen capture',
     description:
       'Fetch one screenshot in full resolution and return it as an image you can see. '
-      + 'Pass a timestamp from list_screen_captures (the nearest captured frame is used). '
+      + 'Pass a timestamp from list_screen_captures (the most recent frame at or before that time is used — the screen as it was when the user spoke). '
       + 'The full frame lives on the user\'s laptop and is fetched on demand, so this may take a moment.',
     inputSchema: {
       timestamp: z.number().describe('Epoch-ms timestamp of the frame to fetch (from list_screen_captures).'),
@@ -142,10 +142,23 @@ server.registerTool(
     if (!frames.length) {
       return { content: [{ type: 'text', text: `Session ${session.sessionId} has no frames.` }], isError: true }
     }
-    // Snap to the nearest captured frame so the model doesn't have to echo an
-    // exact ts byte-for-byte.
-    const target = frames.reduce((best, f) =>
-      Math.abs(f.tsMs - timestamp) < Math.abs(best.tsMs - timestamp) ? f : best, frames[0])
+    // Prefer the most recent frame AT OR BEFORE the requested timestamp — that's
+    // the screen the user was actually looking at when they spoke; a frame
+    // captured *after* the moment may already show a changed screen (scrolled,
+    // refocused, typed). frames are sorted ascending by tsMs. Fall back to the
+    // nearest frame when none precede the timestamp, or when the preceding frame
+    // is staler than the cap (a gap in capture — the "before" frame is too old
+    // to trust, so the closest available frame is the better answer).
+    const STALENESS_CAP_MS = 4000
+    let target = null
+    for (const f of frames) {
+      if (f.tsMs <= timestamp) target = f
+      else break
+    }
+    if (!target || timestamp - target.tsMs > STALENESS_CAP_MS) {
+      target = frames.reduce((best, f) =>
+        Math.abs(f.tsMs - timestamp) < Math.abs(best.tsMs - timestamp) ? f : best, frames[0])
+    }
     const tsMs = target.tsMs
 
     let framePath = findFrameFile(session.dir, tsMs)
