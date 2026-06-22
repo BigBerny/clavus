@@ -17,6 +17,8 @@ export interface RouterInput {
   recentMessages?: { role: 'user' | 'assistant'; content: string }[]
   appName?: string
   bundleId?: string
+  fieldType?: string
+  fieldEditable?: boolean
   source: string
   /** true when the user is focused inside Clavus (typed sends, or dictation
    *  while Clavus is frontmost) — suppresses `paste`. */
@@ -95,8 +97,17 @@ function buildSystemPrompt(input: RouterInput, registryText: string): string {
   const appLine = input.appName || input.bundleId
     ? `Focused app: ${input.appName || ''}${input.bundleId ? ` (${input.bundleId})` : ''}.`
     : 'Focused app: unknown.'
+  const fieldLine = typeof input.fieldEditable === 'boolean'
+    ? `Focused field: ${input.fieldEditable ? 'editable' : 'not editable'}${input.fieldType ? ` (${input.fieldType})` : ''}.`
+    : input.fieldType
+    ? `Focused field type: ${input.fieldType}; editability unknown.`
+    : 'Focused field: unknown.'
   const pasteRule = input.focusedInClavus
     ? 'The user is inside Clavus, so "paste" is NOT available — never choose it.'
+    : input.conservative && input.fieldEditable === true
+    ? 'STRONG INPUT-FIELD SIGNAL: the user is focused in an editable field. That usually means they want to dictate into that field. Choose "paste" unless the utterance clearly addresses Jane as the assistant or asks Jane to do something. A passing mention of the word "Jane" is still "paste".'
+    : input.conservative && input.fieldEditable === false
+    ? 'No editable field was detected. If the utterance addresses Jane or asks for assistant help, prefer "main"; choose "paste" only when Jane is merely mentioned/quoted or the wording is clearly meant for the current app.'
     : input.conservative
     ? 'The user is dictating into another app and the word "Jane" appears somewhere in the utterance. A mention is NOT a command: choose "paste" (send the text into the focused app as-is) UNLESS the user is actually addressing Jane or asking her to do something. If "Jane" only appears in passing — talking ABOUT her, quoting, telling someone else her name — it is NOT for Jane, so choose "paste".'
     : 'The user is dictating into another app. "paste" sends the text into that focused app (e.g. a Telegram/iMessage reply, a doc). Choose "paste" when the utterance is clearly meant for that app and NOT a request to the assistant Jane.'
@@ -117,6 +128,7 @@ function buildSystemPrompt(input: RouterInput, registryText: string): string {
     pasteRule,
     ...(conservativeRule ? [conservativeRule] : []),
     appLine,
+    fieldLine,
     '',
     'Open conversations (most recent first):',
     registryText,

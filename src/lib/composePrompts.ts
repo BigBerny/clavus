@@ -254,8 +254,18 @@ const MESSAGING_BUNDLES = new Set<string>([
 const PROMPT_OPTIMISER_BUNDLES = new Set<string>([
   'com.todesktop.230313mzl4w4u92', // Cursor
   'com.openai.chat',                // ChatGPT desktop
+  'com.openai.codex',               // Codex desktop
   'com.anthropic.claudefordesktop', // Claude desktop
   'com.exafunction.windsurf',
+])
+
+const PROMPT_OPTIMISER_APP_NAMES = new Set<string>([
+  'chatgpt',
+  'claude',
+  'claude code',
+  'codex',
+  'cursor',
+  'windsurf',
 ])
 
 const TERMINAL_BUNDLES = new Set<string>([
@@ -263,6 +273,10 @@ const TERMINAL_BUNDLES = new Set<string>([
   'com.apple.Terminal',
   'dev.warp.Warp-Stable',
   'co.zeit.hyper',
+])
+
+const ALWAYS_ENGLISH_BUNDLES = new Set<string>([
+  'com.linear',
 ])
 
 // Apps where Mundart output never makes sense (force DE or EN).
@@ -455,24 +469,76 @@ Frog / Bitte: \`Chasch du d Aline froge, bitte?\` / \`Sölli no öbbis mitbringe
 // Language inference
 // ---------------------------------------------------------------------------
 //
-// Design (May 2026): we no longer try to detect language from the transcript
-// or conversation messages with marker arrays. Modern small models (Gemini
-// Flash, GPT-4o-mini) do this reliably on their own when given a sentence
-// and any available conversation context. The function below only picks the
-// *default* output language for the channel; the model can (and is told to)
-// switch from that default when the dictation or conversation context is
-// clearly in a different language. See `languageInstruction()` for the
-// per-language switch rules in the prompt.
+// Design (June 2026): "Auto" should normally mean "the language Janis just
+// dictated", not "English unless the model decides otherwise". We therefore
+// use a lightweight transcript-language detector for the default language and
+// reserve hard app defaults for explicit exceptions such as Linear. The model
+// still sees the full dictation and can handle mixed language, but the system
+// prompt no longer nudges German dictation toward English.
 //
 // Defaults are based on Janis's observed usage:
 //   - Messaging (WhatsApp, iMessage, Telegram):  ~95% Baseldütsch  → ch-bs
 //   - Mail (Apple Mail, Outlook, Superhuman):    German or English → de
 //                                                (never Mundart in email)
-//   - Slack:                                     mixed             → en
-//   - Browsers / Notion / editors / unknowns:    mostly English    → en
+//   - Linear:                                    always English    → en
+//   - Slack / browsers / editors / unknowns:     match dictation   → de/en
 //   - Prompt optimiser:                          match dictation   → de/en
 //                                                (prompts are easier to read
 //                                                 in the language Janis spoke)
+
+const GERMAN_LANGUAGE_MARKERS = new Set([
+  'aber', 'auch', 'auf', 'aus', 'bei', 'bin', 'bisschen', 'bitte', 'da', 'dann',
+  'das', 'dass', 'dem', 'den', 'der', 'des', 'deutsch', 'deutsche', 'deutschen',
+  'die', 'du', 'ein', 'eine', 'einen', 'einer', 'einmal', 'englisch', 'er',
+  'es', 'etwas', 'für', 'gerne', 'habe', 'haben', 'hat', 'ich', 'ihn', 'im',
+  'in', 'irgendwie', 'ist', 'ja', 'kann', 'kannst', 'könnte', 'machen', 'mal',
+  'man', 'meinen', 'mit', 'muss', 'nicht', 'noch', 'oder', 'schau', 'sein',
+  'soll', 'sollte', 'sprache', 'und', 'vielleicht', 'wenn', 'wie', 'wir',
+  'wurde', 'wäre', 'zu', 'zum', 'zur', 'über',
+])
+
+const ENGLISH_LANGUAGE_MARKERS = new Set([
+  'a', 'about', 'actually', 'and', 'are', 'as', 'can', 'could', 'do', 'does',
+  'english', 'for', 'from', 'german', 'have', 'how', 'i', 'if', 'in', 'is',
+  'it', 'language', 'make', 'maybe', 'me', 'not', 'of', 'on', 'please',
+  'prompt', 'research', 'should', 'that', 'the', 'this', 'to', 'use', 'want',
+  'we', 'what', 'when', 'with', 'would', 'you',
+])
+
+function normaliseAppName(name?: string): string {
+  return (name ?? '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+function isAlwaysEnglishApp(ctx: ContextSnapshot): boolean {
+  return Boolean(
+    (ctx.bundleId && ALWAYS_ENGLISH_BUNDLES.has(ctx.bundleId)) ||
+    normaliseAppName(ctx.appName) === 'linear',
+  )
+}
+
+function isPromptOptimiserApp(ctx: ContextSnapshot): boolean {
+  return Boolean(
+    (ctx.bundleId && PROMPT_OPTIMISER_BUNDLES.has(ctx.bundleId)) ||
+    PROMPT_OPTIMISER_APP_NAMES.has(normaliseAppName(ctx.appName)),
+  )
+}
+
+function detectDictationLanguage(transcript: string): OutputLanguage | undefined {
+  const text = ` ${transcript.toLowerCase()} `
+  const tokens = text.match(/[a-zäöüß]+/g) ?? []
+  if (tokens.length === 0) return undefined
+
+  let germanScore = /[äöüß]/.test(text) ? 2 : 0
+  let englishScore = 0
+  for (const token of tokens) {
+    if (GERMAN_LANGUAGE_MARKERS.has(token)) germanScore += 1
+    if (ENGLISH_LANGUAGE_MARKERS.has(token)) englishScore += 1
+  }
+
+  if (germanScore >= 2 && germanScore >= englishScore + 1) return 'de'
+  if (englishScore >= 2 && englishScore >= germanScore + 1) return 'en'
+  return undefined
+}
 
 /**
  * Pick the *default* output language for a (transcript, context) pair. The
@@ -484,27 +550,29 @@ Frog / Bitte: \`Chasch du d Aline froge, bitte?\` / \`Sölli no öbbis mitbringe
  * precedence: it captures user-curated knowledge the model can't infer.
  */
 export function inferOutputLanguage(
-  _transcript: string,
+  transcript: string,
   ctx: ContextSnapshot,
   opts?: { recipientFallback?: (ctx: ContextSnapshot) => OutputLanguage | undefined },
 ): OutputLanguage {
-  // 1. Curated recipient overrides win — user knows their contacts.
+  // 1. Explicit app defaults win. Linear tasks are written in English even
+  // when the dictated brief is German.
+  if (isAlwaysEnglishApp(ctx)) return 'en'
+
+  // 2. Curated recipient overrides win — user knows their contacts.
   const fromRecipient = opts?.recipientFallback?.(ctx)
   if (fromRecipient) return fromRecipient
 
-  // 2. Per-channel default.
+  // 3. Per-channel default, biased by the language Janis just dictated.
+  const fromTranscript = detectDictationLanguage(transcript)
   const isMessaging =
     (ctx.bundleId && MESSAGING_BUNDLES.has(ctx.bundleId)) || ctx.appHint === 'messaging'
-  if (isMessaging) return 'ch-bs'
+  if (isMessaging) return fromTranscript ?? 'ch-bs'
 
   const isMail =
     (ctx.bundleId && FORMAL_BUNDLES.has(ctx.bundleId)) || ctx.appHint === 'email'
-  if (isMail) return 'de'
+  if (isMail) return fromTranscript ?? 'de'
 
-  // Slack, Notion, browsers, editors — default English.
-  // The model picks the actual output language at runtime from the dictation
-  // and the [recent-messages-from-conversation] block (if present).
-  return 'en'
+  return fromTranscript ?? 'en'
 }
 
 /**
@@ -522,35 +590,7 @@ export function inferOutputLanguage(
  * because prompt optimiser targets coding-assistant prompts rather than chat.
  */
 function inferPromptOptimiserLanguage(transcript: string, fallback: OutputLanguage): OutputLanguage {
-  const text = ` ${transcript.toLowerCase()} `
-  const tokens = text.match(/[a-zäöüß]+/g) ?? []
-  if (tokens.length === 0) return fallback
-
-  const germanMarkers = new Set([
-    'aber', 'auch', 'auf', 'aus', 'bei', 'bin', 'bisschen', 'bitte', 'da', 'dann',
-    'das', 'dass', 'dem', 'den', 'der', 'des', 'die', 'du', 'ein', 'eine', 'einen',
-    'einer', 'einmal', 'es', 'für', 'gerne', 'habe', 'haben', 'hat', 'ich',
-    'irgendwie', 'ist', 'kann', 'kannst', 'könnte', 'machen', 'mal', 'man', 'mit',
-    'muss', 'nicht', 'noch', 'oder', 'plan', 'recherche', 'schau', 'und', 'vielleicht',
-    'wir', 'zu', 'zum', 'zur', 'über',
-  ])
-  const englishMarkers = new Set([
-    'a', 'about', 'and', 'are', 'as', 'can', 'could', 'do', 'does', 'for', 'from',
-    'have', 'how', 'i', 'in', 'is', 'it', 'make', 'maybe', 'me', 'not', 'of', 'on',
-    'plan', 'please', 'research', 'that', 'the', 'this', 'to', 'use', 'we', 'with',
-    'would', 'you',
-  ])
-
-  let germanScore = /[äöüß]/.test(text) ? 2 : 0
-  let englishScore = 0
-  for (const token of tokens) {
-    if (germanMarkers.has(token)) germanScore += 1
-    if (englishMarkers.has(token)) englishScore += 1
-  }
-
-  if (germanScore >= 2 && germanScore >= englishScore + 1) return 'de'
-  if (englishScore >= 2 && englishScore >= germanScore + 1) return 'en'
-  return fallback
+  return detectDictationLanguage(transcript) ?? fallback
 }
 
 // ---------------------------------------------------------------------------
@@ -579,9 +619,11 @@ export function resolveChannel(ctx: ContextSnapshot): ResolvedChannel {
       return placeholderLooksLikeReply || hasThreadParent ? 'slack-thread-reply' : 'slack'
     }
     if (MESSAGING_BUNDLES.has(ctx.bundleId)) return 'messaging'
-    if (PROMPT_OPTIMISER_BUNDLES.has(ctx.bundleId)) return 'prompt-optimiser'
+    if (isPromptOptimiserApp(ctx)) return 'prompt-optimiser'
     if (TERMINAL_BUNDLES.has(ctx.bundleId)) return 'code'
   }
+
+  if (isPromptOptimiserApp(ctx)) return 'prompt-optimiser'
 
   switch (ctx.appHint) {
     case 'email': return 'email'
@@ -852,6 +894,10 @@ export function buildUserMessageV2(
   if (ctx.appName) lines.push(`app: ${ctx.appName}`)
   if (ctx.bundleId) lines.push(`bundleId: ${ctx.bundleId}`)
   else if (ctx.appHint) lines.push(`appHint: ${ctx.appHint}`)
+  lines.push(`fieldType: ${ctx.fieldType}`)
+  if (typeof ctx.fieldEditable === 'boolean') {
+    lines.push(`fieldEditable: ${ctx.fieldEditable ? 'true' : 'false'}`)
+  }
   if (ctx.recipient) lines.push(`recipient: ${ctx.recipient}`)
   if (ctx.windowTitle) lines.push(`windowTitle: ${ctx.windowTitle}`)
   if (ctx.pageUrl) lines.push(`pageUrl: ${ctx.pageUrl}`)

@@ -34,6 +34,20 @@ function trimRouting(d: RouterDecision) {
   }
 }
 
+function headerString(headers: Record<string, unknown>, name: string): string {
+  const v = headers[name]
+  if (typeof v === 'string') return v
+  if (Array.isArray(v) && typeof v[0] === 'string') return v[0]
+  return ''
+}
+
+function headerBool(headers: Record<string, unknown>, name: string): boolean | undefined {
+  const v = headerString(headers, name).toLowerCase()
+  if (v === 'true') return true
+  if (v === 'false') return false
+  return undefined
+}
+
 export function elevenLabsProxy() {
   const transcriptsFile = nodePath.join(THREADS_DATA_DIR, 'desktop-dictations.jsonl')
 
@@ -186,8 +200,10 @@ export function desktopDictationPlugin() {
         let parsed: any = null
         try { parsed = JSON.parse(responseText) } catch {}
 
-        const appName = typeof req.headers['x-clavus-app-name'] === 'string' ? req.headers['x-clavus-app-name'] : ''
-        const bundleId = typeof req.headers['x-clavus-bundle-id'] === 'string' ? req.headers['x-clavus-bundle-id'] : ''
+        const appName = headerString(req.headers, 'x-clavus-app-name')
+        const bundleId = headerString(req.headers, 'x-clavus-bundle-id')
+        const fieldType = headerString(req.headers, 'x-clavus-field-type')
+        const fieldEditable = headerBool(req.headers, 'x-clavus-field-editable')
 
         // Jane's server-side router: decide where this dictation belongs (paste
         // into the focused app vs. main/branch/new-branch/ask). The desktop
@@ -201,6 +217,8 @@ export function desktopDictationPlugin() {
               recentMessages: buildRecentRouterMessages(MAIN_THREAD_ID),
               appName: appName || undefined,
               bundleId: bundleId || undefined,
+              fieldType: fieldType || undefined,
+              fieldEditable,
               source: 'desktop-dictation',
               focusedInClavus: bundleId === CLAVUS_BUNDLE_ID,
               conservative: true,
@@ -225,6 +243,8 @@ export function desktopDictationPlugin() {
           source: 'clavus-desktop',
           appName,
           bundleId,
+          fieldType: fieldType || undefined,
+          fieldEditable,
           audioBytes: body.length,
           audioDurationMs: headerNum('x-clavus-audio-duration-ms'),
           audioFormat: typeof req.headers['x-clavus-audio-format'] === 'string'
