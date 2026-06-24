@@ -6,7 +6,7 @@ import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
 import { useThreadsStore, syncFromServer, archiveStaleThreads, refreshThreadsMetadata, MAIN_THREAD_ID } from './state/threads.ts'
 import { useChatStore, refreshThreadMessages } from './state/chat.ts'
-import { startThreadsSync } from './state/sync.ts'
+import { restartThreadsSync, startThreadsSync } from './state/sync.ts'
 import { useTabsStore, ensureChatTab, openOrFocusFinderTab, type ChatTab, type FileTab, type MarksenseTab, type FinderTab } from './state/tabs.ts'
 import { applyRoute, getCurrentRoute, onRouteChange, pushHash, type Route } from './state/router.ts'
 import { PullDownDismissable } from './components/layout/PullDownDismissable.tsx'
@@ -38,6 +38,25 @@ import {
 import { ChatViewPanel } from './components/chat/ChatViewPanel.tsx'
 import { waitForScrollSettle } from './lib/scrollSettle.ts'
 import { decideOpenTarget, recordLastChat, recordVisiblePanel, readVisiblePanel } from './lib/openTarget.ts'
+
+const CONNECTION_RELOAD_GUARD_KEY = 'clavus-connection-reload-attempted-at'
+const CONNECTION_RELOAD_COOLDOWN_MS = 60_000
+
+function shouldHardReloadForConnectionRetry(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(CONNECTION_RELOAD_GUARD_KEY) || '0')
+    const now = Date.now()
+    if (Number.isFinite(last) && now - last < CONNECTION_RELOAD_COOLDOWN_MS) return false
+    sessionStorage.setItem(CONNECTION_RELOAD_GUARD_KEY, String(now))
+    return true
+  } catch {
+    return true
+  }
+}
+
+function clearConnectionReloadGuard() {
+  try { sessionStorage.removeItem(CONNECTION_RELOAD_GUARD_KEY) } catch { /* ignore */ }
+}
 
 export function App() {
   useVisualViewport()
@@ -359,25 +378,65 @@ export function App() {
   }, [setGatewayToken])
 
   const retryInFlightRef = useRef(false)
+  const refreshAfterConnectionRestored = useCallback(() => {
+    clearConnectionReloadGuard()
+    restartThreadsSync()
+    refreshThreadsMetadata()
+    const activeId = useThreadsStore.getState().getActiveThread()?.id
+    if (activeId) {
+      refreshThreadMessages(activeId)
+      checkRecovery(activeId)
+    }
+  }, [checkRecovery])
+
+  const runConnectionCheck = useCallback(async () => {
+    const config = getConfig()
+    let ok = await checkGateway(config)
+    if (!ok) {
+      // Give a poisoned HTTP/2 pool one chance to retry with a fresh socket
+      // before escalating. A single transient stall should not look like the
+      // Retry button did nothing.
+      await new Promise((r) => setTimeout(r, 1500))
+      ok = await checkGateway(config)
+    }
+    if (ok) refreshAfterConnectionRestored()
+    return ok
+  }, [refreshAfterConnectionRestored])
+
   const handleRetryConnection = useCallback(async () => {
     if (retryInFlightRef.current) return
     retryInFlightRef.current = true
     try {
       setConnectionStatus('reconnecting')
-      const config = getConfig()
-      let ok = await checkGateway(config)
-      if (!ok) {
-        // Give a poisoned HTTP/2 pool one chance to retry with a fresh socket
-        // before flipping the banner back to "Connection lost." — without this
-        // a single transient stall looks like Retry did nothing.
-        await new Promise((r) => setTimeout(r, 1500))
-        ok = await checkGateway(config)
+      const ok = await runConnectionCheck()
+      if (!ok && navigator.onLine !== false && shouldHardReloadForConnectionRetry()) {
+        // Tauri/WKWebView can keep a bad Cloudflare/Tailscale connection pool
+        // alive across app sleep. If the soft reconnect fails, do the same
+        // recovery the user currently performs manually with Cmd+R.
+        window.setTimeout(() => location.reload(), 80)
+        return
       }
       setConnectionStatus(ok ? 'connected' : 'disconnected')
     } finally {
       retryInFlightRef.current = false
     }
-  }, [setConnectionStatus])
+  }, [runConnectionCheck, setConnectionStatus])
+
+  const resumeConnectionCheckInFlightRef = useRef(false)
+  const reconnectAfterResumeIfNeeded = useCallback(async () => {
+    if (needsToken || resumeConnectionCheckInFlightRef.current) return
+    const status = useUIStore.getState().connectionStatus
+    if (status === 'connected' || status === 'checking' || status === 'reconnecting') return
+
+    resumeConnectionCheckInFlightRef.current = true
+    try {
+      setConnectionStatus('reconnecting')
+      const ok = await runConnectionCheck()
+      setConnectionStatus(ok ? 'connected' : 'disconnected')
+    } finally {
+      resumeConnectionCheckInFlightRef.current = false
+    }
+  }, [needsToken, runConnectionCheck, setConnectionStatus])
 
   // Check gateway connectivity + periodic retry when disconnected
   useEffect(() => {
@@ -386,17 +445,21 @@ export function App() {
     setConnectionStatus('checking')
     checkGateway(config).then((ok) => {
       setConnectionStatus(ok ? 'connected' : 'disconnected')
+      if (ok) refreshAfterConnectionRestored()
     })
 
     const interval = setInterval(async () => {
       const status = useUIStore.getState().connectionStatus
       if (status === 'disconnected') {
         const ok = await checkGateway(getConfig())
-        if (ok) setConnectionStatus('connected')
+        if (ok) {
+          setConnectionStatus('connected')
+          refreshAfterConnectionRestored()
+        }
       }
     }, 30000)
     return () => clearInterval(interval)
-  }, [setConnectionStatus, needsToken])
+  }, [setConnectionStatus, needsToken, refreshAfterConnectionRestored])
 
   // Prevent pull-to-refresh in standalone PWA (iOS)
   useEffect(() => {
@@ -554,6 +617,7 @@ export function App() {
         // covers the "EventSource never recovered" case on mobile WebKit.
         refreshThreadsMetadata()
         if (activeId) refreshThreadMessages(activeId)
+        void reconnectAfterResumeIfNeeded()
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
@@ -561,6 +625,7 @@ export function App() {
     const handleAppResume = () => {
       const activeId = useThreadsStore.getState().getActiveThread()?.id
       if (activeId) checkRecovery(activeId)
+      void reconnectAfterResumeIfNeeded()
     }
     window.addEventListener('clavus:app-resume', handleAppResume)
 
@@ -617,7 +682,7 @@ export function App() {
       window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, pagerMode, checkRecovery, setVisiblePanel])
+  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, pagerMode, checkRecovery, setVisiblePanel, reconnectAfterResumeIfNeeded])
 
   // Initial scroll. If the app was opened via a deep link, land directly
   // on that file/chat panel. Otherwise start on Home — the leftmost panel

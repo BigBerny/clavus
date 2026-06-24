@@ -138,3 +138,12 @@ export function startThreadsSync() {
     if (activeId) refreshThreadMessages(activeId)
   }
 }
+
+/** Re-open the live sync channel after an explicit connection retry/resume. */
+export function restartThreadsSync() {
+  if (!started) {
+    startThreadsSync()
+    return
+  }
+  if (document.visibilityState === 'visible') open()
+}

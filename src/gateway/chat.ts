@@ -936,6 +936,15 @@ export async function recoverResponse(threadId: string, config?: GatewayConfig):
 
 // --- Health check ---
 
+function createTimeoutSignal(ms: number): { signal: AbortSignal; clear: () => void } {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), ms)
+  return {
+    signal: controller.signal,
+    clear: () => window.clearTimeout(timer),
+  }
+}
+
 export async function checkGateway(config: GatewayConfig): Promise<boolean> {
   if (!config.token) return false
 
@@ -943,15 +952,18 @@ export async function checkGateway(config: GatewayConfig): Promise<boolean> {
   // re-handshake or gateway restart the browser's connection pool can hold a
   // dead socket that silently stalls every reused fetch.
   const url = `${apiPath(config, '/v1/models')}?_=${Date.now()}`
+  const timeout = createTimeoutSignal(10000)
 
   try {
     const res = await fetch(url, {
       headers: backendHeaders(config),
       cache: 'no-store',
-      signal: AbortSignal.timeout(10000),
+      signal: timeout.signal,
     })
     return res.ok
   } catch {
     return false
+  } finally {
+    timeout.clear()
   }
 }
