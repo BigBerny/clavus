@@ -51,10 +51,12 @@ function getSession(key: string): SessionState {
 }
 
 interface PackResult {
-  inject: { path: string; breadcrumb: string; text: string }[]
-  suggest: { path: string; title: string; abstract: string; updated?: string }[]
+  inject: { path: string; breadcrumb: string; text: string; status?: WorkspaceStatus }[]
+  suggest: { path: string; title: string; abstract: string; updated?: string; status?: WorkspaceStatus }[]
   guidance: string | null
 }
+
+type WorkspaceStatus = 'active' | 'archived' | 'superseded'
 
 /** A workspace note Trova surfaced for a turn — surfaced to the UI under the sent message. */
 export interface WorkspaceContextFile {
@@ -63,6 +65,7 @@ export interface WorkspaceContextFile {
   title: string
   /** `inject` = excerpt was put into the prompt; `suggest` = related note, not injected. */
   kind: 'inject' | 'suggest'
+  status?: WorkspaceStatus
   /** The injected excerpt, or the note abstract for suggestions. */
   excerpt?: string
 }
@@ -86,13 +89,13 @@ function collectFiles(r: PackResult): WorkspaceContextFile[] {
       files[at].excerpt = prev ? `${prev}\n\n${u.text}` : u.text
     } else {
       idxByPath.set(u.path, files.length)
-      files.push({ path: u.path, title: u.breadcrumb || u.path, kind: 'inject', excerpt: u.text })
+      files.push({ path: u.path, title: u.breadcrumb || u.path, kind: 'inject', status: u.status, excerpt: u.text })
     }
   }
   for (const s of r.suggest ?? []) {
     if (idxByPath.has(s.path)) continue
     idxByPath.set(s.path, files.length)
-    files.push({ path: s.path, title: s.title || s.path, kind: 'suggest', excerpt: s.abstract || undefined })
+    files.push({ path: s.path, title: s.title || s.path, kind: 'suggest', status: s.status, excerpt: s.abstract || undefined })
   }
   return files
 }
@@ -102,10 +105,10 @@ function formatBlock(r: PackResult): string | null {
   if (r.guidance) parts.push(r.guidance)
   if (r.inject?.length) {
     parts.push('Relevant excerpts from the user’s workspace notes:')
-    for (const u of r.inject) parts.push(`### ${u.breadcrumb || u.path}\n${u.text}`)
+    for (const u of r.inject) parts.push(`### ${u.breadcrumb || u.path}\nStatus: ${u.status ?? 'active'}\n${u.text}`)
   } else if (r.suggest?.length) {
     parts.push('Possibly-relevant existing workspace notes:')
-    for (const s of r.suggest) parts.push(`- \`${s.path}\`${s.abstract ? ` — ${s.abstract}` : ''}`)
+    for (const s of r.suggest) parts.push(`- \`${s.path}\` [${s.status ?? 'active'}]${s.abstract ? ` — ${s.abstract}` : ''}`)
   }
   if (!parts.length) return null
   return `<workspace_context>\n${parts.join('\n\n')}\n</workspace_context>`

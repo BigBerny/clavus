@@ -26,6 +26,7 @@ export interface WorkspaceFile {
   path: string
   title: string
   kind: 'inject' | 'suggest'
+  status?: 'active' | 'archived' | 'superseded'
   excerpt?: string
 }
 

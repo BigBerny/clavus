@@ -400,8 +400,8 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     if (!trimmed && pendingImages.length === 0 && pendingFiles.length === 0) return
 
     // Editing a previously-sent message: route through onEditSubmit instead of
-    // creating a new message. Attachments and slash commands are bypassed —
-    // the edit just replaces the message text and re-runs from that point.
+    // creating a new message. Composer attachments and slash commands are
+    // bypassed; the resend path preserves the original message attachments.
     if (editingMessage && onEditSubmit) {
       if (!trimmed) return
       onEditSubmit(trimmed.slice(0, 100000))

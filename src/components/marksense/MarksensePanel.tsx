@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, Suspense, Component, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useState, useRef, Suspense, Component, type ReactNode } from 'react'
 import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
 import { openOrFocusFinderTab } from '../../state/tabs'
 import { lazyWithRetry } from '../../lib/lazyWithRetry'
@@ -32,6 +32,34 @@ const MarksenseEditorInstance = lazyWithRetry(
   m => (m as typeof import('@clavus/marksense-core')).MarksenseEditorInstance,
 )
 
+type ScrollSnapshot = {
+  top: number
+}
+
+const MARKSENSE_SCROLL_SELECTOR = '.notion-like-editor-wrapper'
+
+function getMarksenseScrollElement(root: HTMLElement | null): HTMLElement | null {
+  if (!root) return null
+  return root.querySelector<HTMLElement>(MARKSENSE_SCROLL_SELECTOR) ?? root
+}
+
+function captureMarksenseScroll(root: HTMLElement | null): ScrollSnapshot | null {
+  const scrollElement = getMarksenseScrollElement(root)
+  if (!scrollElement) return null
+  return { top: scrollElement.scrollTop }
+}
+
+function restoreMarksenseScroll(root: HTMLElement | null, snapshot: ScrollSnapshot): boolean {
+  const scrollElement = getMarksenseScrollElement(root)
+  if (!scrollElement) return false
+
+  const maxTop = Math.max(0, scrollElement.scrollHeight - scrollElement.clientHeight)
+  if (snapshot.top > 0 && maxTop === 0) return false
+
+  scrollElement.scrollTop = Math.min(snapshot.top, maxTop)
+  return true
+}
+
 export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitToggle }: {
   path?: string
   /** @deprecated Legacy URL-based prop */
@@ -55,9 +83,8 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   // Bumped only when the server reports an external change AND the on-disk
-  // content actually differs from what we have in memory. The fetch effect
-  // depends on this; the editor's `instanceId` includes it so a real change
-  // remounts the editor with the new content.
+  // content actually differs from what we have in memory. The editor's
+  // `instanceId` includes it so a real change remounts with the new content.
   const [revision, setRevision] = useState(0)
   // Tracks the last time we (or our autosave) wrote this file so we can ignore
   // file-watch echoes from OneDrive sync or macOS FSEvents fired without an
@@ -66,7 +93,8 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
   // Holds the content currently shown by the editor — used to decide if an
   // external change is real or a no-op echo.
   const currentContentRef = useRef<string | null>(null)
-  currentContentRef.current = content
+  const editorContainerRef = useRef<HTMLDivElement>(null)
+  const pendingScrollRestoreRef = useRef<ScrollSnapshot | null>(null)
 
   // If the path changed under us, drop the stale content immediately so the
   // editor doesn't mount with the wrong file's text.
@@ -76,6 +104,8 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
 
   useEffect(() => {
     if (!isVisible || !path) return
+    pendingScrollRestoreRef.current = null
+    currentContentRef.current = null
     setLoading(true)
     setContent(null)
     setLoadedFor(null)
@@ -92,6 +122,7 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
         if (typeof data.content !== 'string') {
           throw new Error('Document response did not include text content')
         }
+        currentContentRef.current = data.content
         setContent(data.content)
         setLoadedFor(path)
         setLoading(false)
@@ -100,11 +131,12 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
         if (controller.signal.aborted) return
         console.error('[MarksensePanel] load failed:', err)
         setError(err instanceof Error ? err.message : 'Failed to load document')
+        currentContentRef.current = null
         setContent(null)
         setLoading(false)
       })
     return () => controller.abort()
-  }, [path, isVisible, revision])
+  }, [path, isVisible])
 
   // Subscribe to server-side file-change events. The Vite workspace plugin
   // suppresses echoes of our own POST writes within its own 2s window; we add a
@@ -126,6 +158,12 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
         const fresh = await r.json().catch(() => ({}))
         if (typeof fresh?.content !== 'string') return
         if (fresh.content === currentContentRef.current) return
+        pendingScrollRestoreRef.current = captureMarksenseScroll(editorContainerRef.current)
+        currentContentRef.current = fresh.content
+        setError('')
+        setContent(fresh.content)
+        setLoadedFor(currentPath)
+        setLoading(false)
         setRevision(rev => rev + 1)
       } catch {
         // Network blip — skip; the next event will retry.
@@ -136,7 +174,6 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
 
   // Suppress color-transition flash: start with transitions disabled, enable after first paint.
   const [suppressTransitions, setSuppressTransitions] = useState(true)
-  const editorContainerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!suppressTransitions) return
     const raf = requestAnimationFrame(() => setSuppressTransitions(false))
@@ -149,6 +186,32 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null)
 
   const instanceId = `marksense-tab-${path || 'none'}-r${revision}`
+
+  useLayoutEffect(() => {
+    if (effectiveLoading || effectiveContent === null) return
+    const snapshot = pendingScrollRestoreRef.current
+    if (!snapshot) return
+
+    let raf = 0
+    let attempts = 0
+    let cancelled = false
+
+    const restore = () => {
+      if (cancelled) return
+      attempts += 1
+      if (restoreMarksenseScroll(editorContainerRef.current, snapshot) || attempts >= 12) {
+        pendingScrollRestoreRef.current = null
+        return
+      }
+      raf = requestAnimationFrame(restore)
+    }
+
+    raf = requestAnimationFrame(restore)
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(raf)
+    }
+  }, [effectiveContent, effectiveLoading, instanceId])
 
   const openBrowser = () => {
     if (onOpenFinder) {

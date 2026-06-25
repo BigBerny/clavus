@@ -1,6 +1,10 @@
-import { lazy, type ComponentType, type LazyExoticComponent } from 'react'
+import { lazy, type LazyExoticComponent } from 'react'
 
 const RETRY_DELAYS_MS = [500, 1500]
+
+type LazyComponent = Parameters<typeof lazy>[0] extends () => Promise<{ default: infer TComponent }>
+  ? TComponent
+  : never
 
 function reloadGuardKey(name: string) {
   return `clavus-lazy-reload:${name}`
@@ -44,7 +48,7 @@ async function probeModuleUrl(name: string, url: string) {
 // (dev-server restarts behind the Cloudflare tunnel, brief tunnel drops):
 // retry with backoff + cache-bust, then reload the page once to re-sync the
 // module graph.
-export function lazyWithRetry<TModule, TComponent extends ComponentType<any>>(
+export function lazyWithRetry<TModule, TComponent extends LazyComponent>(
   name: string,
   importFn: () => Promise<TModule>,
   pick: (mod: TModule) => TComponent,

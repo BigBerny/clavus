@@ -21,6 +21,7 @@ function TrovaFileRow({ file }: { file: WorkspaceFile }) {
   const [expanded, setExpanded] = useState(false)
   const { name, folder } = pathParts(file.path)
   const hasExcerpt = !!file.excerpt?.trim()
+  const historicalStatus = file.status && file.status !== 'active' ? file.status : null
 
   return (
     <div>
@@ -35,6 +36,9 @@ function TrovaFileRow({ file }: { file: WorkspaceFile }) {
           <span className="shrink-0 truncate text-text-light-muted/40 dark:text-text-dark-muted/40">{folder}</span>
           {file.kind === 'suggest' && (
             <span className="shrink-0 text-[8.5px] uppercase tracking-wider text-text-light-muted/30 dark:text-text-dark-muted/30">related</span>
+          )}
+          {historicalStatus && (
+            <span className="shrink-0 text-[8.5px] uppercase tracking-wider text-text-light-muted/35 dark:text-text-dark-muted/35">{historicalStatus}</span>
           )}
         </button>
         {hasExcerpt && (

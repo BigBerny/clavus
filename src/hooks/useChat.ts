@@ -653,12 +653,13 @@ export function useChat() {
     return forkRewindAndSend(threadId, userMsg.id, userMsg.content, userMsg.images, userMsg.attachments)
   }, [store, forkRewindAndSend])
 
-  /** Edit a user message: rewind to it and send the edited text as the first
-   *  turn of a fresh branch session (so the model never sees the original).
-   *  Returns the new threadId. */
+  /** Edit a user message: rewind to it and send the edited text with the
+   *  original attachments as the first turn of a fresh branch session (so the
+   *  model never sees the original text). Returns the new threadId. */
   const editAndResend = useCallback((threadId: string, messageId: string, newContent: string): string | null => {
-    return forkRewindAndSend(threadId, messageId, newContent)
-  }, [forkRewindAndSend])
+    const original = store.getState().getThreadState(threadId).messages.find((m) => m.id === messageId)
+    return forkRewindAndSend(threadId, messageId, newContent, original?.images, original?.attachments)
+  }, [store, forkRewindAndSend])
 
   return { send, abort, sendNow, regenerate, editAndResend, forkRewindAndSend }
 }
