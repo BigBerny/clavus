@@ -331,6 +331,7 @@ class GatewayWsClient {
       agentId?: string
       attachments?: Array<{ mimeType: string; content: string }>
       idempotencyKey?: string
+      timeoutSeconds?: number
     },
     callbacks: AgentRunCallbacks,
     abortFn?: (abort: () => void) => void,
@@ -344,6 +345,9 @@ class GatewayWsClient {
     if (params.thinking) rpcParams.thinking = params.thinking
     if (params.agentId) rpcParams.agentId = params.agentId
     if (params.attachments && params.attachments.length) rpcParams.attachments = params.attachments
+    if (typeof params.timeoutSeconds === 'number' && Number.isFinite(params.timeoutSeconds) && params.timeoutSeconds >= 0) {
+      rpcParams.timeout = Math.floor(params.timeoutSeconds)
+    }
 
     // Register the late-response handler before sending: the gateway answers
     // the agent RPC a second time (same id) when the run finishes, and that

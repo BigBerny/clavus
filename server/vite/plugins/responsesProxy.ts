@@ -22,6 +22,8 @@ import { screenCaptureHint } from './screenCapture.ts'
 import { recoverOpenClawAnnouncementsForThread } from './jane/openclawAnnounceRecovery.ts'
 import { readThreadMessages } from './jane/store.ts'
 
+const OPENCLAW_AGENT_RUN_TIMEOUT_SECONDS = 15 * 60
+
 /** Render the client-supplied prior transcript (clavusSeedContext) into a single
  *  text block used to seed a freshly forked branch's empty gateway session.
  *  Mirrors the fork-rewind seed shape (User:/Assistant: lines). Returns
@@ -340,6 +342,7 @@ export function responsesProxyPlugin() {
           agentId,
           attachments,
           idempotencyKey,
+          timeoutSeconds: OPENCLAW_AGENT_RUN_TIMEOUT_SECONDS,
         },
         {
           onThinking: (delta) => {
