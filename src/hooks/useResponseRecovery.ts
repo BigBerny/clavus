@@ -58,6 +58,14 @@ function needsRecovery(threadId: string): boolean {
   return false
 }
 
+function previousUserTimestamp(messages: Message[], beforeIndex: number): number | undefined {
+  for (let i = beforeIndex - 1; i >= 0; i--) {
+    const msg = messages[i]
+    if (msg.role === 'user') return msg.timestamp
+  }
+  return undefined
+}
+
 async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   console.log('[Recovery] Attempting recovery for', threadId)
 
@@ -77,6 +85,8 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   let assistantId: string | null = assistantMsg?.id || null
   const responseId = assistantMsg?.backendResponseId ?? assistantMsg?.hermesResponseId
   const fromSeq = typeof assistantMsg?.lastEventSeq === 'number' ? assistantMsg.lastEventSeq + 1 : 0
+  const assistantIndex = assistantMsg ? ts.messages.findIndex(m => m.id === assistantMsg.id) : ts.messages.length
+  const minCreatedAt = previousUserTimestamp(ts.messages, assistantIndex >= 0 ? assistantIndex : ts.messages.length)
 
   // Clean up any stale connection-failed system messages before re-streaming
   const messages = [...ts.messages]
@@ -182,7 +192,7 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   }
 
   const tryResumeBuffer = async (
-    request: { responseId?: string; threadId: string; fromSeq?: number },
+    request: { responseId?: string; threadId: string; fromSeq?: number; minCreatedAt?: number },
     label: string,
   ): Promise<boolean> => {
     resumeReceivedEvent = false
@@ -206,7 +216,12 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     return false
   }
 
-  const recoveredFromResponseId = await tryResumeBuffer({ responseId, threadId, fromSeq }, responseId ? 'response id' : 'thread')
+  const recoveredFromResponseId = await tryResumeBuffer({
+    responseId,
+    threadId,
+    fromSeq,
+    minCreatedAt: responseId ? undefined : minCreatedAt,
+  }, responseId ? 'response id' : 'thread')
   if (recoveredFromResponseId) return 'recovered'
 
   if (responseId) {
@@ -214,7 +229,7 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     // to the best thread-level buffer; it may be an older partial response with
     // real text or tool activity that should be shown instead.
     useChatStore.getState().setStreaming(threadId, true)
-    const recoveredFromThread = await tryResumeBuffer({ threadId, fromSeq: 0 }, 'thread fallback')
+    const recoveredFromThread = await tryResumeBuffer({ threadId, fromSeq: 0, minCreatedAt }, 'thread fallback')
     if (recoveredFromThread) return 'recovered'
   }
 

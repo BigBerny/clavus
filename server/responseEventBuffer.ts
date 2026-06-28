@@ -369,7 +369,7 @@ function threadEntryTime(entry: BufferEntry): number {
 }
 
 /** Find the best active or recoverable buffer for a thread. */
-export function findByThread(threadId: string): BufferEntry | null {
+export function findByThread(threadId: string, options: { minCreatedAt?: number } = {}): BufferEntry | null {
   initEventBuffer()
 
   const candidates: BufferEntry[] = []
@@ -378,7 +378,11 @@ export function findByThread(threadId: string): BufferEntry | null {
     if (seen.has(responseId)) return
     seen.add(responseId)
     const entry = buffers.get(responseId) || loadFromDisk(responseId)
-    if (entry?.threadId === threadId) candidates.push(entry)
+    if (entry?.threadId !== threadId) return
+    if (typeof options.minCreatedAt === 'number' && Number.isFinite(options.minCreatedAt)) {
+      if (entry.createdAt < options.minCreatedAt) return
+    }
+    candidates.push(entry)
   }
 
   const mappedResponseId = threadToResponse.get(threadId)

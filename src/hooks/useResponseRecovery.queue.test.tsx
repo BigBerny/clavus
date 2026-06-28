@@ -150,4 +150,84 @@ describe('useResponseRecovery queue drain', () => {
     expect(gatewayMocks.resumeChatStream.mock.calls[1][0]).toMatchObject({ threadId: thread.id, fromSeq: 0 })
     expect(gatewayMocks.resumeChatStream.mock.calls[1][0]).not.toHaveProperty('responseId')
   })
+
+  it('bounds thread fallback recovery to the current user turn', async () => {
+    const pendingTimestamp = Date.now() - 30_000
+    useChatStore.setState({
+      threadStates: {
+        [thread.id]: {
+          messages: [
+            makeMessage({ id: 'msg-old-user', role: 'user', content: 'Old question', timestamp: pendingTimestamp - 60_000 }),
+            makeMessage({
+              id: 'msg-old-assistant',
+              role: 'assistant',
+              content: 'Old answer',
+              timestamp: pendingTimestamp - 55_000,
+              backendResponseId: 'resp_old',
+            }),
+            makeMessage({ id: 'msg-user', role: 'user', content: 'New question', timestamp: pendingTimestamp }),
+            makeMessage({
+              id: 'msg-assistant',
+              role: 'assistant',
+              content: '',
+              timestamp: pendingTimestamp + 1,
+              backendResponseId: 'resp_failed_empty',
+            }),
+          ],
+          isStreaming: false,
+          abortController: null,
+          queuedMessage: null,
+        },
+      },
+    })
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([
+      { id: 'msg-old-user', role: 'user', content: 'Old question', timestamp: pendingTimestamp - 60_000 },
+      {
+        id: 'msg-old-assistant',
+        role: 'assistant',
+        content: 'Old answer',
+        timestamp: pendingTimestamp - 55_000,
+        backendResponseId: 'resp_old',
+      },
+      { id: 'msg-user', role: 'user', content: 'New question', timestamp: pendingTimestamp },
+      {
+        id: 'msg-assistant',
+        role: 'assistant',
+        content: '',
+        timestamp: pendingTimestamp + 1,
+        backendResponseId: 'resp_failed_empty',
+      },
+    ]), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+
+    gatewayMocks.resumeChatStream
+      .mockImplementationOnce(async (
+        _request: unknown,
+        callbacks: StreamCallbacks,
+      ) => {
+        callbacks.onSeq?.(2)
+        callbacks.onError?.(new Error('model did not respond'))
+      })
+      .mockImplementationOnce(async (
+        _request: unknown,
+        callbacks: StreamCallbacks,
+      ) => {
+        callbacks.onSeq?.(0)
+        callbacks.onError?.(new Error('model did not respond'))
+      })
+
+    const { result } = renderHook(() => useResponseRecovery())
+
+    result.current.checkRecovery(thread.id)
+
+    await waitFor(() => {
+      expect(gatewayMocks.resumeChatStream).toHaveBeenCalledTimes(2)
+    })
+
+    expect(gatewayMocks.resumeChatStream.mock.calls[1][0]).toMatchObject({
+      threadId: thread.id,
+      fromSeq: 0,
+      minCreatedAt: pendingTimestamp,
+    })
+  })
 })

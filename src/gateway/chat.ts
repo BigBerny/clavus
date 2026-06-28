@@ -643,7 +643,7 @@ async function sendResponsesStream(
  * the response finishes. Drives the same callbacks as `sendChatStream`.
  */
 export async function resumeChatStream(
-  opts: { responseId?: string; threadId: string; fromSeq?: number },
+  opts: { responseId?: string; threadId: string; fromSeq?: number; minCreatedAt?: number },
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
 ): Promise<void> {
@@ -652,7 +652,13 @@ export async function resumeChatStream(
     : `/v1/responses/by-thread/${encodeURIComponent(opts.threadId)}/stream`
   const fromSeq = typeof opts.fromSeq === 'number' && opts.fromSeq > 0 ? opts.fromSeq : 0
   const lastEventId = fromSeq > 0 ? fromSeq - 1 : -1
-  const url = lastEventId >= 0 ? `${path}?last_event_id=${lastEventId}` : path
+  const params = new URLSearchParams()
+  if (lastEventId >= 0) params.set('last_event_id', String(lastEventId))
+  if (!opts.responseId && typeof opts.minCreatedAt === 'number' && Number.isFinite(opts.minCreatedAt)) {
+    params.set('min_created_at', String(Math.floor(opts.minCreatedAt)))
+  }
+  const query = params.toString()
+  const url = query ? `${path}?${query}` : path
 
   const res = await fetch(url, {
     method: 'GET',

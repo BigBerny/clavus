@@ -628,7 +628,13 @@ export function responsesProxyPlugin() {
   }
 
   function handleGetStreamByThread(req: any, res: any, threadId: string) {
-    const entry = findByThread(threadId)
+    const url = new URL(req.url, 'http://localhost')
+    const minCreatedAtRaw = url.searchParams.get('min_created_at')
+      ?? url.searchParams.get('after')
+    const minCreatedAt = minCreatedAtRaw !== null ? Number(minCreatedAtRaw) : undefined
+    const entry = findByThread(threadId, {
+      minCreatedAt: typeof minCreatedAt === 'number' && Number.isFinite(minCreatedAt) ? minCreatedAt : undefined,
+    })
     if (!entry) {
       res.statusCode = 404
       res.setHeader('Content-Type', 'application/json')

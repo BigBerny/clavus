@@ -57,4 +57,31 @@ describe('responseEventBuffer thread recovery selection', () => {
 
     expect(entry?.responseId).toBe('resp_partial')
   })
+
+  it('does not recover a response started before the pending user turn', async () => {
+    const threadId = 'thread-stale'
+    writeBuffer(
+      'resp_previous_turn',
+      { threadId, status: 'completed', createdAt: 1000, finishedAt: 2000 },
+      [
+        { name: 'response.created', data: JSON.stringify({ type: 'response.created', response: { id: 'resp_previous_turn' } }) },
+        { name: 'response.output_text.delta', data: JSON.stringify({ delta: 'Previous turn answer' }) },
+      ],
+    )
+    writeBuffer(
+      'resp_failed_current_turn',
+      { threadId, status: 'failed', createdAt: 3100, finishedAt: 3200 },
+      [
+        { name: 'response.created', data: JSON.stringify({ type: 'response.created', response: { id: 'resp_failed_current_turn' } }) },
+        { name: 'response.failed', data: JSON.stringify({ error: { message: 'model did not respond' } }) },
+      ],
+    )
+
+    const { initEventBuffer, findByThread } = await import('./responseEventBuffer')
+    initEventBuffer()
+
+    const entry = findByThread(threadId, { minCreatedAt: 3000 })
+
+    expect(entry?.responseId).toBe('resp_failed_current_turn')
+  })
 })
