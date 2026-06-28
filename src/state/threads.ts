@@ -382,14 +382,19 @@ export async function syncFromServer(): Promise<boolean> {
     }
 
     // Hydrate queued composer messages into localStorage so lazy thread load
-    // restores them — covers the cold-start case on a different device.
+    // restores them. If this device already has a local queue but the server
+    // does not, keep the local copy and mirror it back: a Cmd+R can cancel the
+    // debounced PUT that normally makes the server copy authoritative.
     const serverQueues = data.queues || {}
     for (const t of mergedThreads) {
-      const q = serverQueues[t.id]
-      if (q) persistQueuedMessageLocal(t.id, q)
-      else if (loadQueuedMessageLocal(t.id)) {
-        // Local cache outlived the server entry (drained elsewhere). Drop it.
-        persistQueuedMessageLocal(t.id, null)
+      if (Object.prototype.hasOwnProperty.call(serverQueues, t.id)) {
+        persistQueuedMessageLocal(t.id, serverQueues[t.id] ?? null)
+        continue
+      }
+
+      const localQueue = loadQueuedMessageLocal(t.id)
+      if (localQueue) {
+        syncQueuedMessageToServer(t.id, localQueue)
       }
     }
     
