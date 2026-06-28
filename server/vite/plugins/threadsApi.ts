@@ -4,6 +4,7 @@ import nodePath from 'path'
 import { THREADS_DATA_DIR, sendPushToAll } from '../serverEnv.ts'
 import { registerThreadBroadcaster } from './jane/bus.ts'
 import { scheduleThreadMetadataRefresh } from './jane/metadata.ts'
+import { recoverOpenClawAnnouncementsForThread } from './jane/openclawAnnounceRecovery.ts'
 import { routeStart } from './jane/router.ts'
 import {
   appendThreadMessage,
@@ -247,6 +248,8 @@ export function threadsApiPlugin() {
           const msgMatch = req.url.match(/^\/api\/threads\/messages\/([^/?]+)/)
           if (msgMatch && req.method === 'GET') {
             const threadId = decodeURIComponent(msgMatch[1])
+            const recovered = recoverOpenClawAnnouncementsForThread(threadId)
+            if (recovered.added > 0) scheduleThreadMetadataRefresh(threadId)
             const msgFile = nodePath.join(messagesDir, `${threadId}.json`)
             const data = fs.existsSync(msgFile)
               ? JSON.parse(fs.readFileSync(msgFile, 'utf-8'))

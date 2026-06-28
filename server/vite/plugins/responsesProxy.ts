@@ -19,6 +19,8 @@ import {
   OPENCLAW_API_TARGET,
 } from '../serverEnv.ts'
 import { screenCaptureHint } from './screenCapture.ts'
+import { recoverOpenClawAnnouncementsForThread } from './jane/openclawAnnounceRecovery.ts'
+import { readThreadMessages } from './jane/store.ts'
 
 /** Render the client-supplied prior transcript (clavusSeedContext) into a single
  *  text block used to seed a freshly forked branch's empty gateway session.
@@ -32,6 +34,28 @@ function renderSeedContext(raw: unknown): string {
     .map((m: any) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${String(m.content).slice(0, 2500)}`)
   if (!lines.length) return ''
   return `Earlier conversation, continued from a previous thread (context only — do not re-answer it):\n\n${lines.join('\n\n')}`
+}
+
+/** Hidden OpenClaw announce turns can produce a final assistant result without
+ *  landing in the gateway transcript. Once Clavus has recovered those messages
+ *  into its durable thread store, include them as context on later sends so the
+ *  parent agent does not keep believing the background work is still running. */
+function renderRecoveredAnnouncementContext(threadId: string): string {
+  const messages = readThreadMessages(threadId)
+    .filter((m) => m.role === 'assistant' && m.meta === 'openclaw-announce' && typeof m.content === 'string' && m.content.trim())
+    .slice(-3)
+  if (messages.length === 0) return ''
+
+  const lines = messages.map((m) => {
+    const ts = Number.isFinite(m.timestamp) ? new Date(m.timestamp).toISOString() : 'unknown time'
+    return `Assistant background completion (${ts}): ${m.content.trim().slice(0, 3000)}`
+  })
+  return [
+    'Recovered background completion context.',
+    'These assistant messages were produced by OpenClaw background/subagent announcements and are already visible in Clavus, but may be absent from the gateway transcript. Treat them as prior assistant context, not as a new task.',
+    '',
+    ...lines,
+  ].join('\n\n')
 }
 
 /** Render per-message client metadata (clavusClientMeta) into a compact note
@@ -217,6 +241,12 @@ export function responsesProxyPlugin() {
     // reads as context that precedes the current turn.
     const seedBlock = renderSeedContext((parsed as { clavusSeedContext?: unknown }).clavusSeedContext)
     if (seedBlock) agentMessage = `${seedBlock}\n\n${agentMessage}`
+
+    if (threadId) {
+      recoverOpenClawAnnouncementsForThread(threadId)
+      const announceContext = renderRecoveredAnnouncementContext(threadId)
+      if (announceContext) agentMessage = `${announceContext}\n\n${agentMessage}`
+    }
 
     // Per-message client metadata (typed/dictated, focused app, dictation info).
     // A compact note so the agent knows how/where the message originated.

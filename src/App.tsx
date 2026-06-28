@@ -212,6 +212,20 @@ export function App() {
     }
   }, [visiblePanel, checkRecovery])
 
+  // Background OpenClaw callbacks (subagents, Council, long tasks) can finish
+  // after the visible stream has yielded. Poll the active thread's durable
+  // messages; the server reconciles hidden announce completions before serving.
+  useEffect(() => {
+    if (visiblePanel === 'home' || !visiblePanel.startsWith('thread-')) return
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return
+      const ts = useChatStore.getState().threadStates[visiblePanel]
+      if (ts?.isStreaming) return
+      refreshThreadMessages(visiblePanel)
+    }, 15_000)
+    return () => window.clearInterval(timer)
+  }, [visiblePanel])
+
   // Desktop detection (>= 768px)
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768)
   useEffect(() => {
