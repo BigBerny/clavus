@@ -13,7 +13,7 @@ export function buildSortedTabs(tabs: Tab[], threads: Thread[]): Tab[] {
   }
 
   const chatTabs: ChatTab[] = threads
-    .filter((thread) => !thread.archived)
+    .filter((thread) => !thread.archived && (!thread.parentThreadId || thread.favorite || tabByThreadId.has(thread.id)))
     .map((thread) => {
       const existing = tabByThreadId.get(thread.id)
       return {

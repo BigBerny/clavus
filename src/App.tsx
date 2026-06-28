@@ -40,6 +40,7 @@ import { waitForScrollSettle } from './lib/scrollSettle.ts'
 import { decideOpenTarget, recordLastChat, recordVisiblePanel, readVisiblePanel } from './lib/openTarget.ts'
 import { createServerThread, routeConversationStart, type RouteStartResponse, type RouteStartSource } from './lib/conversationRouting.ts'
 import { getFileTypeInfo } from './lib/fileTypes.ts'
+import { parseChildThreadIntent } from './lib/childThreadIntent.ts'
 
 const CONNECTION_RELOAD_GUARD_KEY = 'clavus-connection-reload-attempted-at'
 const CONNECTION_RELOAD_COOLDOWN_MS = 60_000
@@ -55,6 +56,7 @@ type PendingRouteSelection = {
   candidates: Extract<RouteStartResponse, { action: 'ask' }>['candidates']
   suggestedTitle?: string
   suggestedDescription?: string
+  parentThreadId?: string | null
 }
 
 function shouldHardReloadForConnectionRetry(): boolean {
@@ -76,6 +78,10 @@ function clearConnectionReloadGuard() {
 function isMarkdownPath(path: string): boolean {
   const filename = path.split('/').filter(Boolean).pop() || path
   return getFileTypeInfo(filename).kind === 'markdown'
+}
+
+function createLocalThreadId(): string {
+  return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 export function App() {
@@ -1076,8 +1082,82 @@ export function App() {
       return serverThread.id
     }
 
+    if (parentThreadId) {
+      const localThreadId = createLocalThreadId()
+      useThreadsStore.getState().ensureBranchThread(localThreadId, title, parentThreadId)
+      useThreadsStore.getState().updateThreadModel(localThreadId, homeModelId)
+      if (homeReasoning) useThreadsStore.getState().updateThreadReasoning(localThreadId, homeReasoning)
+      return localThreadId
+    }
+
     return createConversationFromHome(title)
   }, [createConversationFromHome, openThreadPanel])
+
+  const createChildThreadFromRequest = useCallback(async (
+    parentThreadId: string,
+    text: string,
+    images?: string[],
+    files?: PendingFile[],
+    clientMeta?: ClientMeta,
+  ): Promise<boolean> => {
+    const intent = parseChildThreadIntent(text)
+    if (!intent) return false
+
+    const parentThread = useThreadsStore.getState().threads.find((t) => t.id === parentThreadId)
+    const modelId = parentThread?.modelId || useModelStore.getState().selectedModelId
+    const reasoningLevel = parentThread?.reasoningLevel || useChatSettingsStore.getState().globalReasoning
+
+    useChatStore.getState().addMessage(parentThreadId, {
+      role: 'user',
+      content: text.trim(),
+      images,
+      attachments: files,
+      clientMeta,
+    })
+
+    let childThread = await createServerThread({
+      title: intent.title,
+      description: intent.description,
+      parentThreadId,
+      modelId,
+      reasoningLevel,
+    })
+
+    if (!childThread) {
+      const localThreadId = createLocalThreadId()
+      useThreadsStore.getState().ensureBranchThread(localThreadId, intent.title, parentThreadId)
+      useThreadsStore.getState().updateThreadModel(localThreadId, modelId)
+      if (reasoningLevel) useThreadsStore.getState().updateThreadReasoning(localThreadId, reasoningLevel)
+      childThread = useThreadsStore.getState().threads.find((t) => t.id === localThreadId) || {
+        id: localThreadId,
+        title: intent.title,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        lastMessagePreview: '',
+        parentThreadId,
+        kind: 'branch',
+      }
+    } else {
+      useThreadsStore.getState().upsertThread(childThread)
+    }
+
+    useChatStore.getState().addMessage(parentThreadId, {
+      role: 'system',
+      meta: 'child-thread-card',
+      content: `Child thread created: ${childThread.title || intent.title}`,
+      childThread: {
+        threadId: childThread.id,
+        title: childThread.title || intent.title,
+        description: intent.description,
+        status: 'running',
+      },
+    })
+
+    // Run the actual task inside the child thread. The parent stays clean and
+    // only shows the handoff card.
+    void send(childThread.id, intent.prompt, images, files, 0, undefined, undefined, clientMeta)
+    return true
+  }, [send])
 
   const ensureVoiceThread = useCallback(() => {
     if (isHomeVisible()) return createConversationFromHome()
@@ -1108,6 +1188,7 @@ export function App() {
     const decision = await routeConversationStart({
       text,
       source,
+      currentThreadId: source === 'conversation-spawn' && visiblePanel !== 'home' ? visiblePanel : undefined,
       imagesCount: images?.length || 0,
       appContext: clientMeta?.app
         ? {
@@ -1119,8 +1200,11 @@ export function App() {
     })
 
     if (!decision) {
-      const threadId = await createRoutedConversation()
-      sendToThread(threadId, 'New conversation', text, images, files, clientMeta)
+      const fallbackDecision = source === 'conversation-spawn' && visiblePanel !== 'home'
+        ? { action: 'new' as const, confidence: 'high' as const, parentThreadId: visiblePanel }
+        : undefined
+      const threadId = await createRoutedConversation(fallbackDecision)
+      sendToThread(threadId, fallbackDecision ? 'Child thread' : 'New conversation', text, images, files, clientMeta)
       return
     }
 
@@ -1136,7 +1220,7 @@ export function App() {
 
     if (decision.action === 'new') {
       const threadId = await createRoutedConversation(decision)
-      sendToThread(threadId, decision.suggestedTitle || 'New conversation', text, images, files, clientMeta)
+      sendToThread(threadId, decision.suggestedTitle || (decision.parentThreadId ? 'Child thread' : 'New conversation'), text, images, files, clientMeta)
       return
     }
 
@@ -1149,8 +1233,9 @@ export function App() {
       candidates: decision.candidates.slice(0, 3),
       suggestedTitle: decision.suggestedTitle,
       suggestedDescription: decision.suggestedDescription,
+      parentThreadId: source === 'conversation-spawn' && visiblePanel !== 'home' ? visiblePanel : null,
     })
-  }, [createRoutedConversation, sendToThread])
+  }, [createRoutedConversation, sendToThread, visiblePanel])
 
   const chooseRouteCandidate = useCallback((threadId: string) => {
     const pending = routeSelection
@@ -1165,7 +1250,7 @@ export function App() {
     if (!pending) return
     setRouteSelection(null)
     const threadId = await createRoutedConversation(pending)
-    sendToThread(threadId, pending.suggestedTitle || 'New conversation', pending.text, pending.images, pending.files, pending.clientMeta)
+    sendToThread(threadId, pending.suggestedTitle || (pending.source === 'conversation-spawn' ? 'Child thread' : 'New conversation'), pending.text, pending.images, pending.files, pending.clientMeta)
   }, [createRoutedConversation, routeSelection, sendToThread])
 
   // Handle sending from any panel — thread-scoped. `clientMeta` carries how the
@@ -1199,23 +1284,26 @@ export function App() {
       if (visiblePanel !== 'home') {
         const tab = sortedTabs.find(t => t.id === visiblePanel)
         if (tab?.type === 'chat') {
-          switchThread(visiblePanel)
-          send(visiblePanel, text, images, files, 0, undefined, undefined, clientMeta)
-        } else {
-          // Silent-drop guard: should not happen because InputBar only renders
-          // when isVisibleChat is true, but if it does the user sees nothing.
-          console.warn('[Clavus] handleSend dropped — visiblePanel has no chat tab', {
-            visiblePanel,
-            tabFound: !!tab,
-            tabType: tab?.type,
-            tabIds: sortedTabs.map((t) => t.id),
+          void createChildThreadFromRequest(visiblePanel, text, images, files, clientMeta).then((handled) => {
+            if (handled) return
+            switchThread(visiblePanel)
+            send(visiblePanel, text, images, files, 0, undefined, undefined, clientMeta)
           })
+          return
         }
+        // Silent-drop guard: should not happen because InputBar only renders
+        // when isVisibleChat is true, but if it does the user sees nothing.
+        console.warn('[Clavus] handleSend dropped — visiblePanel has no chat tab', {
+          visiblePanel,
+          tabFound: !!tab,
+          tabType: tab?.type,
+          tabIds: sortedTabs.map((t) => t.id),
+        })
       } else {
         console.warn('[Clavus] handleSend dropped — visiblePanel is home but isHomeVisible() was false')
       }
     }
-  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs, forkRewindAndSend, setVisiblePanel, routeAndSendStart])
+  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs, forkRewindAndSend, setVisiblePanel, routeAndSendStart, createChildThreadFromRequest])
 
   useEffect(() => {
     const handleInteractiveSend = (event: Event) => {
@@ -2113,7 +2201,9 @@ export function App() {
                 onClick={chooseRouteNew}
                 className="mt-1 block w-full rounded-md px-3 py-2 text-left hover:bg-surface-light-2 dark:hover:bg-surface-dark-3"
               >
-                <div className="text-sm font-medium text-foreground">Start new conversation</div>
+                <div className="text-sm font-medium text-foreground">
+                  {routeSelection.source === 'conversation-spawn' ? 'Start child thread' : 'Start new conversation'}
+                </div>
                 {routeSelection.suggestedTitle && (
                   <div className="mt-0.5 truncate text-xs text-text-light-muted dark:text-text-dark-muted">
                     {routeSelection.suggestedTitle}

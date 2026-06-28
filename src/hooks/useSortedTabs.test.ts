@@ -65,4 +65,24 @@ describe('buildSortedTabs', () => {
 
     expect(result.map((tab) => tab.id)).toEqual(['doc-free', 'file-1', 'thread-1'])
   })
+
+  it('hides child threads until they are explicitly opened', () => {
+    const threads = [
+      thread({ id: 'parent', title: 'Parent', createdAt: 10, updatedAt: 20 }),
+      thread({ id: 'child', title: 'Child', createdAt: 15, updatedAt: 30, parentThreadId: 'parent', kind: 'branch' }),
+    ]
+
+    expect(buildSortedTabs([], threads).map((tab) => tab.id)).toEqual(['parent'])
+
+    const result = buildSortedTabs([{
+      id: 'child',
+      type: 'chat',
+      title: 'Child',
+      threadId: 'child',
+      openedAt: 40,
+      updatedAt: 40,
+    }], threads)
+
+    expect(result.map((tab) => tab.id)).toEqual(['parent', 'child'])
+  })
 })

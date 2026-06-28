@@ -37,6 +37,13 @@ export interface MediaAttachment {
   mimeType?: string
 }
 
+export interface ChildThreadReference {
+  threadId: string
+  title: string
+  description?: string
+  status?: 'created' | 'running'
+}
+
 export interface MessageUsage {
   inputTokens: number
   outputTokens: number
@@ -59,6 +66,7 @@ export interface Message {
   model?: string
   usage?: MessageUsage
   media?: MediaAttachment[]
+  childThread?: ChildThreadReference
   attachments?: PendingFile[]
   /** How this (user) message was produced + its origin context (typed/dictated,
    *  focused app, dictation telemetry). Rendered into the agent input on send. */

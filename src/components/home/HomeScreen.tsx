@@ -133,7 +133,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
   const [allConversationsOpen, setAllConversationsOpen] = useState(false)
 
   const allConversationThreads = useMemo(
-    () => [...threads].sort((a, b) => b.updatedAt - a.updatedAt),
+    () => threads.filter((t) => !t.parentThreadId || t.favorite).sort((a, b) => b.updatedAt - a.updatedAt),
     [threads],
   )
   const allConversationCount = allConversationThreads.length
@@ -162,6 +162,7 @@ export function HomeScreen({ onCompose, onSelectTab, pushState, onEnablePush, on
       // Favorites live in their own section above — same de-duplication the
       // sidebar and overlay home apply.
       .filter((th) => !th.archived && !th.favorite && th.updatedAt > dayAgo)
+      .filter((th) => !th.parentThreadId)
       .map((th) => {
         const existing = tabByThreadId.get(th.id)
         if (existing) return { ...existing, title: th.title || existing.title, updatedAt: th.updatedAt }

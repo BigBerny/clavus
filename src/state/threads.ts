@@ -451,6 +451,7 @@ export async function syncFromServer(): Promise<boolean> {
     const recentCutoff = archiveCutoff
     const recentWithMessages = mergedThreads.filter(t => {
       if (t.archived) return false
+      if (t.parentThreadId && !t.favorite) return false
       if (t.updatedAt < recentCutoff) return false
       const msgs = loadThreadMessages(t.id)
       return msgs.length > 0

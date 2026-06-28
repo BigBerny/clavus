@@ -204,7 +204,9 @@ export const DesktopSidebar = memo(function DesktopSidebar({
     for (const tab of tabs) {
       if (tab.type === 'chat') tabByThreadId.set((tab as ChatTab).threadId, tab as ChatTab)
     }
-    const chatTabs: ChatTab[] = threads.map((thread) => {
+    const chatTabs: ChatTab[] = threads
+      .filter((thread) => !thread.parentThreadId || thread.favorite || tabByThreadId.has(thread.id))
+      .map((thread) => {
       const existing = tabByThreadId.get(thread.id)
       if (existing) {
         return {

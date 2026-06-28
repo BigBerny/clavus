@@ -1,5 +1,5 @@
 import { memo, useState, useCallback, useEffect, useRef, useMemo, Suspense } from 'react'
-import { FileText, Paperclip, Volume2 } from 'lucide-react'
+import { ArrowUpRight, GitBranch, FileText, Paperclip, Volume2 } from 'lucide-react'
 import type { Message, MessageUsage } from '../../state/chat'
 import { ToolCallCards } from './ToolCallCard.tsx'
 import { TrovaFileCards } from './TrovaFileCards.tsx'
@@ -113,6 +113,32 @@ function PendingResponseIndicator({ since }: { since: number }) {
         </span>
       )}
     </div>
+  )
+}
+
+function ChildThreadCard({ thread }: { thread: NonNullable<Message['childThread']> }) {
+  return (
+    <a
+      href={`#/chat/${encodeURIComponent(thread.threadId)}`}
+      className="block w-full max-w-[420px] rounded-xl border border-accent/18 bg-accent/[0.055] px-3.5 py-3 text-left shadow-sm transition-colors hover:bg-accent/[0.085] dark:bg-accent/[0.09] dark:hover:bg-accent/[0.13]"
+      aria-label={`Open child thread ${thread.title}`}
+    >
+      <div className="mb-1.5 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-accent/75">
+        <GitBranch className="h-3.5 w-3.5" strokeWidth={1.8} aria-hidden="true" />
+        Child thread
+      </div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-[14px] font-semibold text-foreground">{thread.title}</div>
+          {thread.description && (
+            <p className="mt-1 line-clamp-2 text-[12.5px] leading-snug text-muted-foreground">
+              {thread.description}
+            </p>
+          )}
+        </div>
+        <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-accent/70" strokeWidth={1.8} aria-hidden="true" />
+      </div>
+    </a>
   )
 }
 
@@ -537,6 +563,13 @@ export const MessageBubble = memo(function MessageBubble({ message, isSpeaking, 
 
   // System/error messages
   if (isSystem) {
+    if (message.meta === 'child-thread-card' && message.childThread) {
+      return (
+        <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out] py-1.5" role="note">
+          <ChildThreadCard thread={message.childThread} />
+        </div>
+      )
+    }
     if (isBranchContext) {
       return (
         <div className="flex justify-center animate-[fadeSlideIn_0.3s_ease-out] py-1" role="note" aria-label="Conversation context">

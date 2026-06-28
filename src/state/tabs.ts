@@ -77,11 +77,19 @@ function migrateFromThreads(): Tab[] {
   try {
     const raw = localStorage.getItem('clavus-threads')
     if (!raw) return []
-    const threads = JSON.parse(raw) as Array<{ id: string; title: string; createdAt: number; updatedAt: number }>
+    const threads = JSON.parse(raw) as Array<{
+      id: string
+      title: string
+      createdAt: number
+      updatedAt: number
+      parentThreadId?: string
+      favorite?: boolean
+    }>
     if (!Array.isArray(threads)) return []
 
     const tabs: ChatTab[] = threads
       .filter(t => {
+        if (t.parentThreadId && !t.favorite) return false
         // Only migrate threads that have messages
         const msgs = localStorage.getItem(`clavus-messages-${t.id}`)
         if (!msgs) return false
