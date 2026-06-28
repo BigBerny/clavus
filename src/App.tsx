@@ -68,6 +68,9 @@ export function App() {
     onAutoRetry: (threadId, content, images, files) => {
       send(threadId, content, images, files, 1)
     },
+    onDrainQueued: (threadId, content, images, files) => {
+      send(threadId, content, images, files)
+    },
   })
   const { state: pushState, requestPermission } = usePushNotifications()
   const setConnectionStatus = useUIStore((s) => s.setConnectionStatus)

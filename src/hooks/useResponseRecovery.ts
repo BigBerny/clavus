@@ -14,6 +14,7 @@ const autoRetriedThreads = new Set<string>()
 
 type AutoRetryCallback = (threadId: string, content: string, images?: string[], files?: PendingFile[]) => void
 let autoRetryHandler: AutoRetryCallback | null = null
+let drainQueuedHandler: AutoRetryCallback | null = null
 
 /**
  * Detects interrupted/missing assistant responses and recovers them from the
@@ -158,6 +159,7 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     onDone: () => {
       if (assistantId) useChatStore.getState().finalizeMessage(threadId, assistantId)
       useChatStore.getState().setStreaming(threadId, false)
+      drainQueuedAfterRecoveredResponse(threadId)
     },
     onError: (err: Error) => {
       console.error('[Recovery] resumeChatStream onError:', err.message)
@@ -196,6 +198,8 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
       .find(m => (m.backendResponseId ?? m.hermesResponseId) === recovered.responseId && m.content)
     if (existing) {
       console.log('[Recovery] Already have this response, skipping')
+      useChatStore.getState().setStreaming(threadId, false)
+      drainQueuedAfterRecoveredResponse(threadId)
       return 'skipped'
     }
   }
@@ -234,6 +238,8 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
       freshStore.finalizeMessage(threadId, newId)
     }
 
+    freshStore.setStreaming(threadId, false)
+    drainQueuedAfterRecoveredResponse(threadId)
     console.log('[Recovery] Response recovered via backend store for thread', threadId, recovered.responseId)
     return 'recovered'
   }
@@ -269,6 +275,16 @@ function maybeAutoRetry(threadId: string, result: RecoveryResult) {
   autoRetryHandler(threadId, pending.content, pending.images, pending.attachments)
 }
 
+function drainQueuedAfterRecoveredResponse(threadId: string) {
+  if (!drainQueuedHandler) return
+  const store = useChatStore.getState()
+  const ts = store.getThreadState(threadId)
+  if (ts.isStreaming || !ts.queuedMessage) return
+  const queued = store.pullQueuedMessage(threadId)
+  if (!queued) return
+  drainQueuedHandler(threadId, queued.content, queued.images, queued.files)
+}
+
 /** Check threads that might need recovery (e.g., on startup).
  *  Only checks non-archived threads to avoid flooding with requests,
  *  and processes them sequentially with a small delay between each. */
@@ -286,6 +302,7 @@ export function checkAllThreadsRecovery() {
     // been produced by the other surface / another device and not synced yet.
     refreshThreadMessages(thread.id).catch(() => false).then(() => {
       if (!needsRecovery(thread.id)) {
+        drainQueuedAfterRecoveredResponse(thread.id)
         setTimeout(processNext, 150)
         return
       }
@@ -301,17 +318,19 @@ export function checkAllThreadsRecovery() {
   processNext()
 }
 
-export function useResponseRecovery(options: { onAutoRetry?: AutoRetryCallback } = {}) {
+export function useResponseRecovery(options: { onAutoRetry?: AutoRetryCallback; onDrainQueued?: AutoRetryCallback } = {}) {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Stash the callback at module scope so the module-level attemptRecovery
   // path (called from startup `checkAllThreadsRecovery`) can reach it.
   useEffect(() => {
     autoRetryHandler = options.onAutoRetry ?? null
+    drainQueuedHandler = options.onDrainQueued ?? null
     return () => {
       if (autoRetryHandler === options.onAutoRetry) autoRetryHandler = null
+      if (drainQueuedHandler === options.onDrainQueued) drainQueuedHandler = null
     }
-  }, [options.onAutoRetry])
+  }, [options.onAutoRetry, options.onDrainQueued])
 
   const checkRecovery = useCallback((threadId: string) => {
     if (!threadId) return
@@ -326,6 +345,8 @@ export function useResponseRecovery(options: { onAutoRetry?: AutoRetryCallback }
           attemptRecovery(threadId).then((result) => {
             maybeAutoRetry(threadId, result)
           })
+        } else {
+          drainQueuedAfterRecoveredResponse(threadId)
         }
       })
     }, 500)
