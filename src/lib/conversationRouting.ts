@@ -54,6 +54,7 @@ export async function createServerThread(opts: {
   title?: string
   description?: string
   parentThreadId?: string | null
+  nestedInParent?: boolean
   modelId?: string
   reasoningLevel?: ReasoningLevel | null
 }): Promise<Thread | null> {
@@ -70,4 +71,3 @@ export async function createServerThread(opts: {
     return null
   }
 }
-

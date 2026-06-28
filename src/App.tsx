@@ -1119,6 +1119,7 @@ export function App() {
       title: intent.title,
       description: intent.description,
       parentThreadId,
+      nestedInParent: true,
       modelId,
       reasoningLevel,
     })
@@ -1135,9 +1136,11 @@ export function App() {
         updatedAt: Date.now(),
         lastMessagePreview: '',
         parentThreadId,
+        nestedInParent: true,
         kind: 'branch',
       }
     } else {
+      childThread = { ...childThread, nestedInParent: true }
       useThreadsStore.getState().upsertThread(childThread)
     }
 

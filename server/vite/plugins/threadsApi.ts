@@ -216,6 +216,7 @@ export function threadsApiPlugin() {
               title: typeof body.title === 'string' ? body.title : undefined,
               description: typeof body.description === 'string' ? body.description : undefined,
               parentThreadId: typeof body.parentThreadId === 'string' ? body.parentThreadId : null,
+              nestedInParent: body.nestedInParent === true,
               modelId: typeof body.modelId === 'string' ? body.modelId : undefined,
               reasoningLevel: typeof body.reasoningLevel === 'string' ? body.reasoningLevel : undefined,
             })

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useTabsStore, type ChatTab, type MarksenseTab, type Tab } from '../state/tabs.ts'
 import { useThreadsStore, type Thread } from '../state/threads.ts'
+import { shouldShowThreadAsConversation } from '../lib/threadVisibility.ts'
 
 export function buildSortedTabs(tabs: Tab[], threads: Thread[]): Tab[] {
   const linkedDocPaths = new Set<string>()
@@ -13,7 +14,7 @@ export function buildSortedTabs(tabs: Tab[], threads: Thread[]): Tab[] {
   }
 
   const chatTabs: ChatTab[] = threads
-    .filter((thread) => !thread.archived && (!thread.parentThreadId || thread.favorite || tabByThreadId.has(thread.id)))
+    .filter((thread) => !thread.archived && (shouldShowThreadAsConversation(thread) || tabByThreadId.has(thread.id)))
     .map((thread) => {
       const existing = tabByThreadId.get(thread.id)
       return {

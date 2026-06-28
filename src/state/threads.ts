@@ -38,6 +38,8 @@ export interface Thread {
   metadataUpdatedAt?: number
   /** For spawned conversations: the thread this conversation was spun off from. */
   parentThreadId?: string
+  /** Hide this thread from normal conversation lists; it is opened from a parent card. */
+  nestedInParent?: boolean
   /** Legacy conversation role. No behavior should depend on `main`. */
   kind?: 'main' | 'branch' | 'normal'
 }
@@ -109,6 +111,7 @@ function mergeThreadMetadata(local: Thread | undefined, incoming: Thread): Threa
     summary: incoming.summary ?? local.summary,
     kind: incoming.kind ?? local.kind,
     parentThreadId: incoming.parentThreadId ?? local.parentThreadId,
+    nestedInParent: incoming.nestedInParent ?? local.nestedInParent,
     lastSeenAt: Math.max(local.lastSeenAt ?? 0, incoming.lastSeenAt ?? 0) || undefined,
   })
 }
@@ -451,7 +454,7 @@ export async function syncFromServer(): Promise<boolean> {
     const recentCutoff = archiveCutoff
     const recentWithMessages = mergedThreads.filter(t => {
       if (t.archived) return false
-      if (t.parentThreadId && !t.favorite) return false
+      if (t.nestedInParent && !t.favorite) return false
       if (t.updatedAt < recentCutoff) return false
       const msgs = loadThreadMessages(t.id)
       return msgs.length > 0
@@ -542,6 +545,7 @@ export function mergeThreadsFromServer(serverThreads: Thread[]): boolean {
         || next.summary !== local.summary
         || next.kind !== local.kind
         || next.parentThreadId !== local.parentThreadId
+        || next.nestedInParent !== local.nestedInParent
         || next.lastSeenAt !== local.lastSeenAt
         || next.archived !== local.archived
       ) {

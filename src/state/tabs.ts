@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { shouldShowThreadAsConversation } from '../lib/threadVisibility'
 
 export type TabType = 'chat' | 'marksense' | 'file' | 'finder'
 
@@ -83,13 +84,14 @@ function migrateFromThreads(): Tab[] {
       createdAt: number
       updatedAt: number
       parentThreadId?: string
+      nestedInParent?: boolean
       favorite?: boolean
     }>
     if (!Array.isArray(threads)) return []
 
     const tabs: ChatTab[] = threads
       .filter(t => {
-        if (t.parentThreadId && !t.favorite) return false
+        if (!shouldShowThreadAsConversation(t)) return false
         // Only migrate threads that have messages
         const msgs = localStorage.getItem(`clavus-messages-${t.id}`)
         if (!msgs) return false

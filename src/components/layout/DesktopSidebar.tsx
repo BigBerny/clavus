@@ -4,6 +4,7 @@ import { useThreadsStore, type Thread } from '../../state/threads.ts'
 import { useThreadSearch, type SearchHit } from '../../lib/threadSearch.ts'
 import { getFileTypeInfo } from '../../lib/fileTypes.ts'
 import { ThreadStatusDot } from './ThreadStatusDot.tsx'
+import { shouldShowThreadAsConversation } from '../../lib/threadVisibility.ts'
 
 interface Props {
   tabs: Tab[]
@@ -205,7 +206,7 @@ export const DesktopSidebar = memo(function DesktopSidebar({
       if (tab.type === 'chat') tabByThreadId.set((tab as ChatTab).threadId, tab as ChatTab)
     }
     const chatTabs: ChatTab[] = threads
-      .filter((thread) => !thread.parentThreadId || thread.favorite || tabByThreadId.has(thread.id))
+      .filter((thread) => shouldShowThreadAsConversation(thread) || tabByThreadId.has(thread.id))
       .map((thread) => {
       const existing = tabByThreadId.get(thread.id)
       if (existing) {

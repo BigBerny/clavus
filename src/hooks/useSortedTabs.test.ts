@@ -66,10 +66,27 @@ describe('buildSortedTabs', () => {
     expect(result.map((tab) => tab.id)).toEqual(['doc-free', 'file-1', 'thread-1'])
   })
 
-  it('hides child threads until they are explicitly opened', () => {
+  it('keeps normal branch conversations visible', () => {
     const threads = [
       thread({ id: 'parent', title: 'Parent', createdAt: 10, updatedAt: 20 }),
       thread({ id: 'child', title: 'Child', createdAt: 15, updatedAt: 30, parentThreadId: 'parent', kind: 'branch' }),
+    ]
+
+    expect(buildSortedTabs([], threads).map((tab) => tab.id)).toEqual(['parent', 'child'])
+  })
+
+  it('hides nested child threads until they are explicitly opened', () => {
+    const threads = [
+      thread({ id: 'parent', title: 'Parent', createdAt: 10, updatedAt: 20 }),
+      thread({
+        id: 'child',
+        title: 'Child',
+        createdAt: 15,
+        updatedAt: 30,
+        parentThreadId: 'parent',
+        nestedInParent: true,
+        kind: 'branch',
+      }),
     ]
 
     expect(buildSortedTabs([], threads).map((tab) => tab.id)).toEqual(['parent'])

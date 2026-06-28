@@ -32,6 +32,7 @@ export interface StoredThread {
   /** Last metadata-only update time. Does not imply user activity. */
   metadataUpdatedAt?: number
   parentThreadId?: string
+  nestedInParent?: boolean
   kind?: 'main' | 'branch' | 'normal'
   [k: string]: unknown
 }
@@ -221,6 +222,7 @@ export function createConversationThread(opts: {
   title?: string
   description?: string
   parentThreadId?: string | null
+  nestedInParent?: boolean
   modelId?: string
   reasoningLevel?: string
   seedPrompt?: string
@@ -235,6 +237,7 @@ export function createConversationThread(opts: {
     lastMessagePreview: '',
     kind: opts.parentThreadId ? 'branch' : 'normal',
     ...(opts.parentThreadId ? { parentThreadId: opts.parentThreadId } : {}),
+    ...(opts.nestedInParent ? { nestedInParent: true } : {}),
     ...(opts.description ? { description: opts.description } : {}),
     ...(opts.modelId ? { modelId: opts.modelId } : {}),
     ...(opts.reasoningLevel ? { reasoningLevel: opts.reasoningLevel } : {}),
