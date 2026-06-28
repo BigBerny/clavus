@@ -9,7 +9,7 @@ import {
   setThreadId as bufferSetThreadId,
   subscribe as bufferSubscribe,
 } from '../../responseEventBuffer.ts'
-import { initGatewayWs, getGatewayWs } from '../../gatewayWs.ts'
+import { initGatewayWs, getGatewayWs, shouldAutoContinueAgentError } from '../../gatewayWs.ts'
 import { rewindLastTurn, workspaceContextBlock } from '../../workspaceContext.ts'
 import { createSseParser, formatSseFrame } from '../../../src/lib/sseParse.ts'
 import {
@@ -280,6 +280,9 @@ export function responsesProxyPlugin() {
 
     // Generate a synthetic response ID for the buffer system
     const responseId = `resp_${crypto.randomUUID()}`
+    const requestIdempotencyKey = typeof req.headers['idempotency-key'] === 'string'
+      ? req.headers['idempotency-key']
+      : undefined
 
     // Create buffer and subscribe the client
     createBuffer(responseId, threadId || undefined)
@@ -307,19 +310,40 @@ export function responsesProxyPlugin() {
     attachSubscriber(res, responseId, 0)
 
     let finalStatus: 'completed' | 'failed' | 'aborted' = 'completed'
+    let wasAborted = false
+    let sawAssistantOutput = false
+    let sawToolActivity = false
+    let lastRunError: Error | null = null
 
-    try {
+    const appendFailure = (error: Error) => {
+      bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
+        type: 'response.failed',
+        response: { id: responseId, status: 'failed', error: { message: error.message } },
+      }))
+    }
+
+    const continuationPrompt = [
+      'The previous attempt in this same Clavus conversation stopped because the model timed out after partial progress.',
+      'Continue the user\'s original request from exactly where the previous attempt stopped.',
+      'Do not repeat already-visible assistant text except where necessary for coherence.',
+      'If a tool result was just read, use it and continue the work.',
+    ].join('\n')
+
+    const runAgentOnce = async (message: string, idempotencyKey?: string) => {
+      lastRunError = null
       await gw.runAgent(
         {
-          message: agentMessage,
+          message,
           sessionKey,
           model: modelOverride,
           thinking: reasoning?.effort,
           agentId,
           attachments,
+          idempotencyKey,
         },
         {
           onThinking: (delta) => {
+            if (delta.trim()) sawAssistantOutput = true
             bufferAppendEvent(responseId, 'response.reasoning_summary_text.delta', JSON.stringify({
               type: 'response.reasoning_summary_text.delta',
               delta,
@@ -331,12 +355,14 @@ export function responsesProxyPlugin() {
             }))
           },
           onToken: (delta) => {
+            if (delta) sawAssistantOutput = true
             bufferAppendEvent(responseId, 'response.output_text.delta', JSON.stringify({
               type: 'response.output_text.delta',
               delta,
             }))
           },
           onToolCall: (tc) => {
+            sawToolActivity = true
             const eventType = tc.status === 'running' ? 'response.output_item.added' : 'response.output_item.done'
             bufferAppendEvent(responseId, eventType, JSON.stringify({
               type: eventType,
@@ -356,6 +382,7 @@ export function responsesProxyPlugin() {
             // turns it into an inline image; the /api/agent-media route resolves
             // the ig_<id> to the file on disk and serves it same-origin.
             const url = `/api/agent-media/${encodeURIComponent(agentId)}/${encodeURIComponent(id)}.png`
+            sawToolActivity = true
             bufferAppendEvent(responseId, 'response.output_item.done', JSON.stringify({
               type: 'response.output_item.done',
               item: {
@@ -386,32 +413,41 @@ export function responsesProxyPlugin() {
             // Ensure response.completed was emitted even without usage
           },
           onError: (error) => {
-            finalStatus = 'failed'
-            bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
-              type: 'response.failed',
-              response: { id: responseId, status: 'failed', error: { message: error.message } },
-            }))
+            lastRunError = error
           },
         },
         (abort) => {
           activeRuns.set(responseId, () => {
+            wasAborted = true
             finalStatus = 'aborted'
             abort()
           })
         },
       )
+    }
+
+    try {
+      try {
+        await runAgentOnce(agentMessage, requestIdempotencyKey)
+      } catch (e: any) {
+        const error = lastRunError ?? (e instanceof Error ? e : new Error(String(e?.message ?? e)))
+        const canContinue = !wasAborted
+          && shouldAutoContinueAgentError(error)
+          && (sawAssistantOutput || sawToolActivity)
+        if (!canContinue) throw error
+
+        console.warn('[responses-proxy] Agent idled after partial progress; auto-continuing once:', error.message)
+        await runAgentOnce(continuationPrompt)
+      }
     } catch (e: any) {
-      // failRun() in gatewayWs both invokes onError (which already appended a
-      // response.failed above, flipping finalStatus to 'failed') AND rejects the
-      // run promise — landing us here. Only emit if nothing terminal fired yet,
-      // otherwise the client sees two response.failed events and shows the error
-      // twice. A cancelled run rejecting is the expected outcome, not a failure.
+      // failRun() in gatewayWs invokes onError and rejects the run promise.
+      // We delay appending response.failed until here so a one-shot hidden
+      // continuation can recover idle timeouts without showing a transient
+      // failure event to the browser.
       if (finalStatus === 'completed') {
         finalStatus = 'failed'
-        bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
-          type: 'response.failed',
-          response: { id: responseId, status: 'failed', error: { message: e.message } },
-        }))
+        const error = lastRunError ?? (e instanceof Error ? e : new Error(String(e?.message ?? e)))
+        appendFailure(error)
       }
     } finally {
       activeRuns.delete(responseId)

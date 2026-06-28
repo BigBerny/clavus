@@ -449,7 +449,7 @@ function dispatchResponsesEvent(
     return false
   }
 
-  if (eventName === 'response.completed') {
+  if (eventName === 'response.completed' || parsed.type === 'response.completed') {
     const response = parsed.response as Record<string, unknown> | undefined
     const finalText = finalTextFromResponse(response)
     if (finalText && !state.receivedText) {
@@ -474,10 +474,11 @@ function dispatchResponsesEvent(
     return true
   }
 
-  if (eventName === 'response.failed') {
+  if (eventName === 'response.failed' || parsed.type === 'response.failed') {
     const resp = parsed.response as Record<string, unknown> | undefined
     const respError = resp?.error as { message?: string } | undefined
     const topError = parsed.error as { message?: string } | undefined
+    state.done = true
     callbacks.onError(new Error(respError?.message || topError?.message || 'Response failed'))
     return true
   }

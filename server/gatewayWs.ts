@@ -51,11 +51,68 @@ function readRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
+function readBoolean(value: unknown): boolean {
+  return value === true || value === 'true'
+}
+
+function readErrorLike(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value
+  const rec = readRecord(value)
+  if (!rec) return undefined
+  return readString(rec.message)
+    ?? readString(rec.error)
+    ?? readString(rec.reason)
+}
+
 function extractAgentEventRunId(payload: Record<string, unknown>, data: Record<string, unknown>): string | undefined {
   return readString(payload.runId)
     ?? readString(payload.run_id)
     ?? readString(data.runId)
     ?? readString(data.run_id)
+}
+
+export function fatalAgentEventMessage(event: string, data: Record<string, unknown>): string | null {
+  const stream = readString(data.stream)
+  const status = readString(data.status)?.toLowerCase()
+  const stopReason = readString(data.stopReason)?.toLowerCase()
+    ?? readString(data.stop_reason)?.toLowerCase()
+  const explicitError = readString(data.errorMessage)
+    ?? readString(data.error_message)
+    ?? readErrorLike(data.promptError)
+    ?? readErrorLike(data.error)
+
+  if (
+    event === 'openclaw:prompt-error' ||
+    data.customType === 'openclaw:prompt-error' ||
+    data.type === 'openclaw:prompt-error'
+  ) {
+    return explicitError ?? 'Agent run failed'
+  }
+
+  const lifecycleLike = stream === 'lifecycle'
+    || event === 'model.completed'
+    || data.type === 'model.completed'
+    || data.type === 'lifecycle'
+
+  const abortedOrTimedOut = readBoolean(data.aborted)
+    || readBoolean(data.timedOut)
+    || readBoolean(data.timed_out)
+    || readBoolean(data.idleTimedOut)
+    || readBoolean(data.idle_timed_out)
+    || stopReason === 'aborted'
+    || stopReason === 'error'
+  const failedLifecycle = lifecycleLike
+    && (status === 'failed' || status === 'error' || status === 'aborted')
+
+  if (abortedOrTimedOut || failedLifecycle) {
+    return explicitError ?? 'Agent run failed'
+  }
+
+  return null
+}
+
+export function shouldAutoContinueAgentError(error: Error): boolean {
+  return /idle timeout|no response from model|hasn['’]t been responding|not responding/i.test(error.message)
 }
 
 export interface AgentRunCallbacks {
@@ -273,13 +330,14 @@ class GatewayWsClient {
       thinking?: string
       agentId?: string
       attachments?: Array<{ mimeType: string; content: string }>
+      idempotencyKey?: string
     },
     callbacks: AgentRunCallbacks,
     abortFn?: (abort: () => void) => void,
   ): Promise<void> {
     const rpcParams: Record<string, unknown> = {
       message: params.message,
-      idempotencyKey: crypto.randomUUID(),
+      idempotencyKey: params.idempotencyKey ?? crypto.randomUUID(),
     }
     if (params.sessionKey) rpcParams.sessionKey = params.sessionKey
     if (params.model) rpcParams.model = params.model
@@ -340,6 +398,12 @@ class GatewayWsClient {
         const stream = readString(payload.stream) ?? readString(data.stream)
         const phase = data.phase as string | undefined
         const status = data.status as string | undefined
+
+        const fatalMessage = fatalAgentEventMessage(_event, data)
+        if (fatalMessage && phase !== 'start') {
+          failRun(new Error(fatalMessage))
+          return
+        }
 
         // Built-in image generation (Codex `image_gen` / gpt-image-2). The
         // gateway emits a `codex_app_server.item` of type `imageGeneration`
