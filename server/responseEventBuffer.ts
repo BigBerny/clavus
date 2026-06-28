@@ -40,6 +40,15 @@ interface BufferEntry {
   diskClosed: boolean
 }
 
+type DiskMeta = {
+  responseId: string
+  threadId?: string
+  status?: BufferStatus
+  createdAt?: number
+  finishedAt?: number
+  mtimeMs: number
+}
+
 const buffers = new Map<string, BufferEntry>()
 const threadToResponse = new Map<string, string>()
 
@@ -76,6 +85,39 @@ function writeMeta(entry: BufferEntry) {
   } catch {
     // Non-fatal; we can recover from NDJSON alone
   }
+}
+
+function readDiskMetas(): DiskMeta[] {
+  let files: string[]
+  try {
+    files = fs.readdirSync(BUFFERS_ROOT)
+  } catch {
+    return []
+  }
+
+  const metas: DiskMeta[] = []
+  for (const file of files) {
+    if (!file.endsWith('.meta.json')) continue
+    const full = nodePath.join(BUFFERS_ROOT, file)
+    try {
+      const raw = fs.readFileSync(full, 'utf-8')
+      const meta = JSON.parse(raw) as Partial<DiskMeta>
+      const stat = fs.statSync(full)
+      if (meta && typeof meta.responseId === 'string') {
+        metas.push({
+          responseId: meta.responseId,
+          threadId: typeof meta.threadId === 'string' ? meta.threadId : undefined,
+          status: meta.status,
+          createdAt: typeof meta.createdAt === 'number' ? meta.createdAt : undefined,
+          finishedAt: typeof meta.finishedAt === 'number' ? meta.finishedAt : undefined,
+          mtimeMs: stat.mtimeMs,
+        })
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return metas
 }
 
 function openDiskWriter(entry: BufferEntry) {
@@ -123,42 +165,9 @@ function sweepDisk() {
 function indexDiskBuffers() {
   // Scan meta.json files so findByThread can resolve to a responseId after restart.
   // We don't fully hydrate the events (that's done lazily on first subscribe).
-  let files: string[]
-  try {
-    files = fs.readdirSync(BUFFERS_ROOT)
-  } catch {
-    return
-  }
-  // Build [responseId, meta] pairs, then take the most recent per threadId.
-  type MetaWithMtime = {
-    responseId: string
-    threadId?: string
-    status?: BufferStatus
-    createdAt?: number
-    mtimeMs: number
-  }
-  const metas: MetaWithMtime[] = []
-  for (const file of files) {
-    if (!file.endsWith('.meta.json')) continue
-    const full = nodePath.join(BUFFERS_ROOT, file)
-    try {
-      const raw = fs.readFileSync(full, 'utf-8')
-      const meta = JSON.parse(raw)
-      const stat = fs.statSync(full)
-      if (meta && typeof meta.responseId === 'string') {
-        metas.push({
-          responseId: meta.responseId,
-          threadId: typeof meta.threadId === 'string' ? meta.threadId : undefined,
-          status: meta.status,
-          createdAt: meta.createdAt,
-          mtimeMs: stat.mtimeMs,
-        })
-      }
-    } catch {
-      // ignore
-    }
-  }
-  // For each threadId, keep the most recently touched responseId.
+  const metas = readDiskMetas()
+  // For each threadId, keep the most recently touched responseId as the fast
+  // path. findByThread validates this later against recoverable older buffers.
   metas.sort((a, b) => b.mtimeMs - a.mtimeMs)
   for (const m of metas) {
     if (m.threadId && !threadToResponse.has(m.threadId)) {
@@ -310,16 +319,93 @@ export function subscribe(
   }
 }
 
-/** Find the most recent active (or recently-finished) buffer for a thread. */
+function parseEventData(ev: BufferedEvent): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(ev.data)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null
+  } catch {
+    return null
+  }
+}
+
+function eventHasRecoverableOutput(ev: BufferedEvent): boolean {
+  const parsed = parseEventData(ev)
+  if (!parsed) return false
+
+  if (ev.name === 'response.output_text.delta') {
+    return typeof parsed.delta === 'string' && parsed.delta.trim().length > 0
+  }
+
+  if (ev.name === 'response.reasoning_summary_text.delta' || ev.name === 'response.reasoning_summary_text.done') {
+    const delta = typeof parsed.delta === 'string' ? parsed.delta : ''
+    const text = typeof parsed.text === 'string' ? parsed.text : ''
+    return (delta || text).trim().length > 0
+  }
+
+  if (ev.name === 'response.output_item.added' || ev.name === 'response.output_item.done') {
+    const item = parsed.item as Record<string, unknown> | undefined
+    return item?.type === 'function_call' || item?.type === 'function_call_output'
+  }
+
+  return false
+}
+
+function entryHasRecoverableOutput(entry: BufferEntry): boolean {
+  return entry.events.some(eventHasRecoverableOutput)
+}
+
+function threadEntryRank(entry: BufferEntry): number {
+  const outputScore = entryHasRecoverableOutput(entry) ? 400 : 0
+  const statusScore =
+    entry.status === 'in_progress' ? 800 :
+    entry.status === 'completed' ? 80 :
+    entry.status === 'aborted' ? 20 :
+    entry.status === 'failed' ? 0 : 0
+  return outputScore + statusScore
+}
+
+function threadEntryTime(entry: BufferEntry): number {
+  return entry.finishedAt || entry.createdAt || 0
+}
+
+/** Find the best active or recoverable buffer for a thread. */
 export function findByThread(threadId: string): BufferEntry | null {
-  const responseId = threadToResponse.get(threadId)
-  if (!responseId) return null
-  const entry = buffers.get(responseId) || loadFromDisk(responseId)
-  if (!entry) {
+  initEventBuffer()
+
+  const candidates: BufferEntry[] = []
+  const seen = new Set<string>()
+  const addResponse = (responseId: string) => {
+    if (seen.has(responseId)) return
+    seen.add(responseId)
+    const entry = buffers.get(responseId) || loadFromDisk(responseId)
+    if (entry?.threadId === threadId) candidates.push(entry)
+  }
+
+  const mappedResponseId = threadToResponse.get(threadId)
+  if (mappedResponseId) addResponse(mappedResponseId)
+
+  for (const entry of buffers.values()) {
+    if (entry.threadId === threadId) addResponse(entry.responseId)
+  }
+
+  for (const meta of readDiskMetas()) {
+    if (meta.threadId === threadId) addResponse(meta.responseId)
+  }
+
+  if (candidates.length === 0) {
     threadToResponse.delete(threadId)
     return null
   }
-  return entry
+
+  candidates.sort((a, b) => {
+    const rankDiff = threadEntryRank(b) - threadEntryRank(a)
+    if (rankDiff !== 0) return rankDiff
+    return threadEntryTime(b) - threadEntryTime(a)
+  })
+
+  const best = candidates[0]
+  threadToResponse.set(threadId, best.responseId)
+  return best
 }
 
 /** Read-only snapshot of a buffer (for status/debug endpoints). */

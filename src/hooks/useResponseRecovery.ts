@@ -119,7 +119,11 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   // event. Until then, the buffer endpoint may still 404 (no buffer for this
   // thread) — in which case we never create a bubble.
   let resumeReceivedEvent = false
+  let resumeProducedContent = false
   let lastActivityMark = 0
+  const markProducedContent = () => {
+    resumeProducedContent = true
+  }
   const markThrottled = () => {
     const now = Date.now()
     if (now - lastActivityMark > 2000) {
@@ -128,10 +132,19 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     }
   }
   const resumeCallbacks = {
-    onThinking: (token: string) => { markThrottled(); useChatStore.getState().appendThinking(threadId, ensureSlot(), token) },
+    onThinking: (token: string) => {
+      if (token.trim()) markProducedContent()
+      markThrottled()
+      useChatStore.getState().appendThinking(threadId, ensureSlot(), token)
+    },
     onThinkingDone: () => useChatStore.getState().setThinkingDone(threadId, ensureSlot()),
-    onToken: (token: string) => { markThrottled(); useChatStore.getState().appendToMessage(threadId, ensureSlot(), token) },
+    onToken: (token: string) => {
+      if (token) markProducedContent()
+      markThrottled()
+      useChatStore.getState().appendToMessage(threadId, ensureSlot(), token)
+    },
     onToolCall: (tc: import('../gateway/chat.ts').ToolCallEvent) => {
+      markProducedContent()
       const id = ensureSlot()
       const cur = useChatStore.getState().getThreadState(threadId).messages.find(m => m.id === id)
       const existing = cur?.toolCalls || []
@@ -168,16 +181,44 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     },
   }
 
-  try {
-    await resumeChatStream({ responseId, threadId, fromSeq }, resumeCallbacks)
-    if (resumeReceivedEvent) {
-      console.log('[Recovery] Resume completed for', threadId)
-      return 'recovered'
+  const tryResumeBuffer = async (
+    request: { responseId?: string; threadId: string; fromSeq?: number },
+    label: string,
+  ): Promise<boolean> => {
+    resumeReceivedEvent = false
+    resumeProducedContent = false
+
+    try {
+      await resumeChatStream(request, resumeCallbacks)
+    } catch (e) {
+      console.warn(`[Recovery] Buffer resume (${label}) not available:`, e)
+      return false
     }
-    // Resume returned 200 but emitted no events (unlikely with our buffer) —
-    // fall through to legacy recovery.
-  } catch (e) {
-    console.warn('[Recovery] Buffer resume not available, trying backend-store recovery:', e)
+
+    if (resumeProducedContent) {
+      console.log('[Recovery] Resume completed for', threadId, label)
+      return true
+    }
+
+    if (resumeReceivedEvent) {
+      console.warn('[Recovery] Buffer resume produced no visible content:', label)
+    }
+    return false
+  }
+
+  const recoveredFromResponseId = await tryResumeBuffer({ responseId, threadId, fromSeq }, responseId ? 'response id' : 'thread')
+  if (recoveredFromResponseId) return 'recovered'
+
+  if (responseId) {
+    // A stale assistant slot can point at a newer failed/empty retry. Fall back
+    // to the best thread-level buffer; it may be an older partial response with
+    // real text or tool activity that should be shown instead.
+    useChatStore.getState().setStreaming(threadId, true)
+    const recoveredFromThread = await tryResumeBuffer({ threadId, fromSeq: 0 }, 'thread fallback')
+    if (recoveredFromThread) return 'recovered'
+  }
+
+  if (assistantId) {
     useChatStore.getState().setStreaming(threadId, false)
   }
 

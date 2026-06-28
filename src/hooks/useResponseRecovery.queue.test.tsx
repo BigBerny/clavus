@@ -86,4 +86,68 @@ describe('useResponseRecovery queue drain', () => {
     })
     expect(useChatStore.getState().getThreadState(thread.id).queuedMessage).toBeNull()
   })
+
+  it('falls back to thread recovery when the stored response is failed and empty', async () => {
+    useChatStore.setState({
+      threadStates: {
+        [thread.id]: {
+          messages: [
+            makeMessage({ id: 'msg-user', role: 'user', content: 'Question' }),
+            makeMessage({
+              id: 'msg-assistant',
+              role: 'assistant',
+              content: '',
+              backendResponseId: 'resp_failed_empty',
+            }),
+          ],
+          isStreaming: false,
+          abortController: null,
+          queuedMessage: null,
+        },
+      },
+    })
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([
+      { id: 'msg-user', role: 'user', content: 'Question', timestamp: Date.now() - 30_000 },
+      {
+        id: 'msg-assistant',
+        role: 'assistant',
+        content: '',
+        timestamp: Date.now() - 20_000,
+        backendResponseId: 'resp_failed_empty',
+      },
+    ]), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+
+    gatewayMocks.resumeChatStream
+      .mockImplementationOnce(async (
+        _request: unknown,
+        callbacks: StreamCallbacks,
+      ) => {
+        callbacks.onSeq?.(2)
+        callbacks.onError?.(new Error('model did not respond'))
+      })
+      .mockImplementationOnce(async (
+        _request: unknown,
+        callbacks: StreamCallbacks,
+      ) => {
+        callbacks.onSeq?.(0)
+        callbacks.onResponseId?.('resp_partial')
+        callbacks.onToken?.('Recovered partial answer')
+        callbacks.onDone?.()
+      })
+
+    const { result } = renderHook(() => useResponseRecovery())
+
+    result.current.checkRecovery(thread.id)
+
+    await waitFor(() => {
+      const assistant = useChatStore.getState().getThreadState(thread.id).messages.find(m => m.id === 'msg-assistant')
+      expect(assistant?.content).toBe('Recovered partial answer')
+      expect(assistant?.backendResponseId).toBe('resp_partial')
+    })
+    expect(gatewayMocks.resumeChatStream).toHaveBeenCalledTimes(2)
+    expect(gatewayMocks.resumeChatStream.mock.calls[0][0]).toMatchObject({ responseId: 'resp_failed_empty' })
+    expect(gatewayMocks.resumeChatStream.mock.calls[1][0]).toMatchObject({ threadId: thread.id, fromSeq: 0 })
+    expect(gatewayMocks.resumeChatStream.mock.calls[1][0]).not.toHaveProperty('responseId')
+  })
 })
