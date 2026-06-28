@@ -5,11 +5,11 @@ import { THREADS_DATA_DIR } from '../../serverEnv.ts'
 import { emitThreadChange } from './bus.ts'
 
 // Shared, in-process on-disk store for threads + messages. Reads/writes the
-// same files threadsApi.ts serves over HTTP, so Jane's router and summary
+// same files threadsApi.ts serves over HTTP, so the router and metadata
 // maintenance can file messages and update metadata without an HTTP self-call.
 
-/** Stable id of the persistent "Jane" conversation. Mirrors MAIN_THREAD_ID in
- *  src/state/threads.ts and threadsApi.ts. */
+/** Legacy id of the former persistent Jane/Main conversation. Kept only so old
+ *  data can be migrated and old imports do not recreate special behavior. */
 export const MAIN_THREAD_ID = 'main'
 
 const threadsFile = nodePath.join(THREADS_DATA_DIR, 'threads.json')
@@ -25,6 +25,12 @@ export interface StoredThread {
   summary?: string
   /** number of (non-system) messages present when `summary` was last computed */
   summaryMsgCount?: number
+  /** Internal route-facing description of the concrete discussion. */
+  description?: string
+  /** number of topic messages present when `description` was last computed */
+  descriptionMsgCount?: number
+  /** Last metadata-only update time. Does not imply user activity. */
+  metadataUpdatedAt?: number
   parentThreadId?: string
   kind?: 'main' | 'branch' | 'normal'
   [k: string]: unknown
@@ -45,10 +51,29 @@ function ensureDirs() {
   if (!fs.existsSync(messagesDir)) fs.mkdirSync(messagesDir, { recursive: true })
 }
 
+export function normalizeLegacyMainThread<T extends StoredThread>(thread: T): T {
+  if (thread.id !== MAIN_THREAD_ID && thread.kind !== 'main') return thread
+  return {
+    ...thread,
+    archived: true,
+    kind: 'normal',
+  }
+}
+
+function normalizeThreads(threads: StoredThread[]): StoredThread[] {
+  let changed = false
+  const next = threads.map((t) => {
+    const normalized = normalizeLegacyMainThread(t)
+    if (normalized !== t) changed = true
+    return normalized
+  })
+  return changed ? next : threads
+}
+
 export function readAllThreads(): StoredThread[] {
   try {
     const d = fs.existsSync(threadsFile) ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8')) : []
-    return Array.isArray(d) ? d : []
+    return Array.isArray(d) ? normalizeThreads(d) : []
   } catch {
     return []
   }
@@ -56,7 +81,22 @@ export function readAllThreads(): StoredThread[] {
 
 export function writeAllThreads(threads: StoredThread[]): void {
   ensureDirs()
-  fs.writeFileSync(threadsFile, JSON.stringify(threads), 'utf-8')
+  fs.writeFileSync(threadsFile, JSON.stringify(normalizeThreads(threads)), 'utf-8')
+}
+
+export function migrateLegacyMainThread(): boolean {
+  const raw = (() => {
+    try {
+      return fs.existsSync(threadsFile) ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8')) : []
+    } catch {
+      return []
+    }
+  })()
+  if (!Array.isArray(raw)) return false
+  const next = normalizeThreads(raw)
+  const changed = JSON.stringify(next) !== JSON.stringify(raw)
+  if (changed) writeAllThreads(next)
+  return changed
 }
 
 function msgFileFor(threadId: string): string {
@@ -143,31 +183,47 @@ export function appendThreadMessage(
   emitThreadChange({ type: 'threads' })
 }
 
-/** Update a thread's rolling summary. Deliberately does NOT bump updatedAt —
- *  summarizing is not user activity. Clients adopt it via mergeThreadsFromServer's
+/** Update route-facing metadata. Deliberately does NOT bump updatedAt —
+ *  metadata is not user activity. Clients adopt it via mergeThreadsFromServer's
  *  server-authoritative-metadata branch. */
-export function setThreadSummary(threadId: string, summary: string, msgCount: number): void {
+export function setThreadMetadata(
+  threadId: string,
+  metadata: { title?: string; description?: string; msgCount: number },
+): void {
   const threads = readAllThreads()
   const idx = threads.findIndex((t) => t.id === threadId)
   if (idx < 0) return
-  if (threads[idx].summary === summary && threads[idx].summaryMsgCount === msgCount) return
-  threads[idx] = { ...threads[idx], summary, summaryMsgCount: msgCount }
+  const current = threads[idx]
+  const title = metadata.title?.trim().slice(0, 80)
+  const description = metadata.description?.trim().replace(/\s+/g, ' ').slice(0, 900)
+  const next: StoredThread = {
+    ...current,
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+    descriptionMsgCount: metadata.msgCount,
+    metadataUpdatedAt: Date.now(),
+  }
+  if (
+    next.title === current.title
+    && next.description === current.description
+    && next.descriptionMsgCount === current.descriptionMsgCount
+  ) return
+  threads[idx] = next
   writeAllThreads(threads)
   emitThreadChange({ type: 'threads' })
 }
 
-/**
- * Create a new branch conversation: a fresh thread (kind 'branch') seeded with a
- * single hidden seed message that frames the topic. Returns the created thread.
- * Broadcasts threads + messages changes so all devices adopt it live.
- */
-export function createBranchThread(opts: {
-  title: string
-  summary?: string
-  seedPrompt: string
-  parentThreadId?: string
+export function setThreadSummary(threadId: string, summary: string, msgCount: number): void {
+  setThreadMetadata(threadId, { description: summary, msgCount })
+}
+
+export function createConversationThread(opts: {
+  title?: string
+  description?: string
+  parentThreadId?: string | null
   modelId?: string
   reasoningLevel?: string
+  seedPrompt?: string
 }): StoredThread {
   const now = Date.now()
   const id = `thread-${now}-${Math.random().toString(36).slice(2, 8)}`
@@ -177,9 +233,9 @@ export function createBranchThread(opts: {
     createdAt: now,
     updatedAt: now,
     lastMessagePreview: '',
-    kind: 'branch',
-    parentThreadId: opts.parentThreadId || MAIN_THREAD_ID,
-    ...(opts.summary ? { summary: opts.summary } : {}),
+    kind: opts.parentThreadId ? 'branch' : 'normal',
+    ...(opts.parentThreadId ? { parentThreadId: opts.parentThreadId } : {}),
+    ...(opts.description ? { description: opts.description } : {}),
     ...(opts.modelId ? { modelId: opts.modelId } : {}),
     ...(opts.reasoningLevel ? { reasoningLevel: opts.reasoningLevel } : {}),
   }
@@ -187,43 +243,77 @@ export function createBranchThread(opts: {
   threads.unshift(thread)
   writeAllThreads(threads)
 
-  const seed: StoredMessage = {
-    id: `msg-${now}-seed`,
-    role: 'system',
-    content: opts.seedPrompt,
-    timestamp: now,
-    meta: 'seed',
+  if (opts.seedPrompt) {
+    const seed: StoredMessage = {
+      id: `msg-${now}-seed`,
+      role: 'system',
+      content: opts.seedPrompt,
+      timestamp: now,
+      meta: 'seed',
+    }
+    writeThreadMessages(id, [seed])
+    emitThreadChange({ type: 'messages', threadId: id })
+  } else {
+    writeThreadMessages(id, [])
   }
-  writeThreadMessages(id, [seed])
 
   emitThreadChange({ type: 'threads' })
-  emitThreadChange({ type: 'messages', threadId: id })
   return thread
+}
+
+/**
+ * Legacy endpoint compatibility: create a conversation with a hidden seed and
+ * optional parent, but do not default the parent to the old Main thread.
+ */
+export function createBranchThread(opts: {
+  title: string
+  summary?: string
+  seedPrompt: string
+  parentThreadId?: string
+  modelId?: string
+  reasoningLevel?: string
+}): StoredThread {
+  return createConversationThread({
+    title: opts.title,
+    description: opts.summary,
+    parentThreadId: opts.parentThreadId || null,
+    modelId: opts.modelId,
+    reasoningLevel: opts.reasoningLevel,
+    seedPrompt: opts.seedPrompt,
+  })
 }
 
 export interface RegistryEntry {
   id: string
   title: string
+  description?: string
   summary?: string
   lastMessageAt: number
   kind?: string
-  isMain: boolean
+  parentThreadId?: string
+  lastMessagePreview?: string
 }
 
-/** Compact list of conversations Jane can route into. Pure threads.json read
+/** Compact list of conversations the neutral router can route into. Pure threads.json read
  *  (no per-thread message-file scans) so it stays cheap on the router's hot path. */
-export function buildConversationRegistry(opts?: { includeArchived?: boolean }): RegistryEntry[] {
+export function buildConversationRegistry(opts?: { includeArchived?: boolean; sinceMs?: number; limit?: number }): RegistryEntry[] {
+  const now = Date.now()
+  const sinceMs = opts?.sinceMs ?? 2 * 60 * 60 * 1000
   const threads = readAllThreads()
-  const entries: RegistryEntry[] = threads
-    .filter((t) => opts?.includeArchived || !t.archived || t.kind === 'main')
+  let entries: RegistryEntry[] = threads
+    .filter((t) => opts?.includeArchived || !t.archived)
+    .filter((t) => opts?.includeArchived || (now - (t.updatedAt || t.createdAt || 0)) <= sinceMs)
     .map((t) => ({
       id: t.id,
       title: t.title || 'Untitled',
+      description: t.description || t.summary,
       summary: t.summary,
       lastMessageAt: t.updatedAt || t.createdAt || 0,
       kind: t.kind,
-      isMain: t.id === MAIN_THREAD_ID || t.kind === 'main',
+      parentThreadId: t.parentThreadId,
+      lastMessagePreview: t.lastMessagePreview,
     }))
   entries.sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+  if (opts?.limit) entries = entries.slice(0, opts.limit)
   return entries
 }

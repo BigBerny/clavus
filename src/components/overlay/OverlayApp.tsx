@@ -8,6 +8,7 @@ import { ChatViewPanel } from '../chat/ChatViewPanel'
 import { InputBar } from '../chat/InputBar'
 import { OverlayHome } from './OverlayHome'
 import { decideOpenTarget, recordLastChat, recordVisiblePanel, readVisiblePanel } from '../../lib/openTarget'
+import { createServerThread, routeConversationStart, type RouteStartResponse } from '../../lib/conversationRouting'
 
 /**
  * Desktop overlay mode (?overlay=1) — the frameless liquid-glass surface
@@ -97,6 +98,14 @@ function useSwipeBack(enabled: boolean, onBack: () => void) {
 }
 
 const EMPTY_STREAMING = false
+type OverlayRouteSelection = {
+  text: string
+  images?: string[]
+  files?: PendingFile[]
+  candidates: Extract<RouteStartResponse, { action: 'ask' }>['candidates']
+  suggestedTitle?: string
+  suggestedDescription?: string
+}
 
 export function OverlayApp() {
   const [open, setOpen] = useState(false)
@@ -104,6 +113,7 @@ export function OverlayApp() {
   const [chatOpen, setChatOpen] = useState(false)
   const [entering, setEntering] = useState(false)
   const [threadId, setThreadId] = useState<string | null>(null)
+  const [routeSelection, setRouteSelection] = useState<OverlayRouteSelection | null>(null)
   // Frosted desktop screenshot from the shell — rendered (CSS-blurred)
   // inside the matte so the whole frost fades with the content. The native
   // NSVisualEffectView couldn't fade: window alpha doesn't touch the
@@ -279,11 +289,97 @@ export function OverlayApp() {
     void send(threadId, text, images, files)
   }, [send, threadId])
 
-  const sendFromHome = useCallback((text: string, images?: string[], files?: PendingFile[]) => {
+  const createOverlayConversation = useCallback(async (opts?: { title?: string; description?: string }) => {
+    const serverThread = await createServerThread({
+      title: opts?.title || 'New conversation',
+      description: opts?.description,
+      parentThreadId: null,
+    })
+    if (serverThread) {
+      useThreadsStore.getState().upsertThread(serverThread)
+      return serverThread.id
+    }
     const id = useThreadsStore.getState().createThread()
+    if (opts?.title && opts.title !== 'New conversation') {
+      useThreadsStore.getState().updateThreadTitle(id, opts.title)
+    }
+    return id
+  }, [])
+
+  const sendFromHome = useCallback((text: string, images?: string[], files?: PendingFile[]) => {
+    void (async () => {
+      const decision = await routeConversationStart({
+        text,
+        source: 'overlay-home',
+        imagesCount: images?.length || 0,
+      })
+
+      if (!decision) {
+        const id = await createOverlayConversation()
+        pushChat(id)
+        setTimeout(() => { void send(id, text, images, files) }, 60)
+        return
+      }
+
+      if (decision.action === 'existing') {
+        let thread = useThreadsStore.getState().threads.find((t) => t.id === decision.targetThreadId)
+        if (!thread) {
+          await refreshThreadsMetadata()
+          thread = useThreadsStore.getState().threads.find((t) => t.id === decision.targetThreadId)
+        }
+        if (thread) {
+          pushChat(thread.id)
+          setTimeout(() => { void send(thread!.id, text, images, files) }, 60)
+          return
+        }
+        const id = await createOverlayConversation()
+        pushChat(id)
+        setTimeout(() => { void send(id, text, images, files) }, 60)
+        return
+      }
+
+      if (decision.action === 'new') {
+        const id = await createOverlayConversation({
+          title: decision.suggestedTitle,
+          description: decision.suggestedDescription,
+        })
+        pushChat(id)
+        setTimeout(() => { void send(id, text, images, files) }, 60)
+        return
+      }
+
+      setRouteSelection({
+        text,
+        images,
+        files,
+        candidates: decision.candidates.slice(0, 3),
+        suggestedTitle: decision.suggestedTitle,
+        suggestedDescription: decision.suggestedDescription,
+      })
+    })()
+  }, [createOverlayConversation, pushChat, send])
+
+  const chooseRouteCandidate = useCallback((id: string) => {
+    const pending = routeSelection
+    if (!pending) return
+    setRouteSelection(null)
     pushChat(id)
-    setTimeout(() => { void send(id, text, images, files) }, 60)
-  }, [pushChat, send])
+    setTimeout(() => { void send(id, pending.text, pending.images, pending.files) }, 60)
+  }, [pushChat, routeSelection, send])
+
+  const chooseRouteNew = useCallback(() => {
+    const pending = routeSelection
+    if (!pending) return
+    setRouteSelection(null)
+    void (async () => {
+      const id = await createOverlayConversation({
+        title: pending.suggestedTitle,
+        description: pending.suggestedDescription,
+      })
+      pushChat(id)
+      setTimeout(() => { void send(id, pending.text, pending.images, pending.files) }, 60)
+    })()
+  }, [createOverlayConversation, pushChat, routeSelection, send])
 
   const compose = useCallback((kind: 'message' | 'slack' | 'email') => {
     const id = useThreadsStore.getState().createThread()
@@ -367,6 +463,36 @@ export function OverlayApp() {
           </div>
         )}
       </div>
+      {routeSelection && (
+        <div className="ovl-route-picker" onMouseDown={(e) => e.stopPropagation()}>
+          <div className="ovl-route-card">
+            <div className="ovl-route-title">Choose conversation</div>
+            <div className="ovl-route-subtitle">Clavus is not certain where this should go.</div>
+            <div className="ovl-route-list">
+              {routeSelection.candidates.map((candidate) => (
+                <button key={candidate.threadId} className="ovl-route-row" type="button" onClick={() => chooseRouteCandidate(candidate.threadId)}>
+                  <span className="ovl-route-row-main">
+                    <span className="ovl-route-row-title">{candidate.title}</span>
+                    {candidate.lastMessagePreview && <span className="ovl-route-row-preview">{candidate.lastMessagePreview}</span>}
+                  </span>
+                  <span className="ovl-route-row-time">
+                    {new Date(candidate.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </button>
+              ))}
+              <button className="ovl-route-row" type="button" onClick={chooseRouteNew}>
+                <span className="ovl-route-row-main">
+                  <span className="ovl-route-row-title">Start new conversation</span>
+                  {routeSelection.suggestedTitle && <span className="ovl-route-row-preview">{routeSelection.suggestedTitle}</span>}
+                </span>
+              </button>
+            </div>
+            <div className="ovl-route-actions">
+              <button type="button" onClick={() => setRouteSelection(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

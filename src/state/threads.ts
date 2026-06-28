@@ -30,21 +30,19 @@ export interface Thread {
   /** Last time the user actually looked at this thread (any device — synced).
    *  updatedAt > lastSeenAt with an assistant last-message ⇒ unseen answer. */
   lastSeenAt?: number
-  /** Rolling topic summary, maintained server-side, used by Jane's router to
-   *  decide where new input belongs. Server is authoritative for this field. */
+  /** Legacy rolling topic summary. Read only as fallback for old server data. */
   summary?: string
-  /** For branches: the thread this conversation was spun off from (Main).
-   *  Lets Jane trace lineage and read sibling branches on demand. */
+  /** Internal route-facing description, maintained server-side. */
+  description?: string
+  descriptionMsgCount?: number
+  metadataUpdatedAt?: number
+  /** For spawned conversations: the thread this conversation was spun off from. */
   parentThreadId?: string
-  /** Conversation role. 'main' = the persistent Jane conversation (never
-   *  auto-archived); 'branch' = a topic spun off from Main; undefined/'normal'
-   *  = an ordinary thread. Server is authoritative for this field. */
+  /** Legacy conversation role. No behavior should depend on `main`. */
   kind?: 'main' | 'branch' | 'normal'
 }
 
-/** Stable id of the persistent "Jane" conversation. Everything Jane-directed
- *  defaults here; branches are spun off from it. Bootstrapped on first run both
- *  client- and server-side. */
+/** Legacy id of the former persistent Jane/Main conversation. */
 export const MAIN_THREAD_ID = 'main'
 
 interface ThreadsState {
@@ -52,6 +50,7 @@ interface ThreadsState {
   activeThreadId: string
 
   createThread: () => string
+  upsertThread: (thread: Thread) => void
   /** Create a branch thread with a server-minted id (idempotent: no-op if it
    *  already exists). Used when Jane reroutes a typed Main turn into a new branch. */
   ensureBranchThread: (id: string, title: string, parentThreadId?: string) => void
@@ -95,6 +94,25 @@ function generateThreadId(): string {
   return `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function normalizeLegacyMainThread(thread: Thread): Thread {
+  if (thread.id !== MAIN_THREAD_ID && thread.kind !== 'main') return thread
+  return { ...thread, archived: true, kind: 'normal' }
+}
+
+function mergeThreadMetadata(local: Thread | undefined, incoming: Thread): Thread {
+  if (!local) return normalizeLegacyMainThread(incoming)
+  return normalizeLegacyMainThread({
+    ...local,
+    description: incoming.description ?? incoming.summary ?? local.description,
+    descriptionMsgCount: incoming.descriptionMsgCount ?? local.descriptionMsgCount,
+    metadataUpdatedAt: incoming.metadataUpdatedAt ?? local.metadataUpdatedAt,
+    summary: incoming.summary ?? local.summary,
+    kind: incoming.kind ?? local.kind,
+    parentThreadId: incoming.parentThreadId ?? local.parentThreadId,
+    lastSeenAt: Math.max(local.lastSeenAt ?? 0, incoming.lastSeenAt ?? 0) || undefined,
+  })
+}
+
 /** Map a message's model marker (shortLabel like "Opus", or a raw API id
  *  like "anthropic/claude-opus-4-8") back to a MODEL_OPTIONS id. */
 function matchModelOption(label: string): string | null {
@@ -132,7 +150,7 @@ function loadThreads(): Thread[] {
     if (!raw) return []
     const parsed = JSON.parse(raw) as Thread[]
     if (!Array.isArray(parsed)) return []
-    return parsed
+    return parsed.map(normalizeLegacyMainThread)
   } catch {
     return []
   }
@@ -140,12 +158,12 @@ function loadThreads(): Thread[] {
 
 function saveThreads(threads: Thread[]) {
   try {
-    localStorage.setItem(THREADS_KEY, JSON.stringify(threads))
+    localStorage.setItem(THREADS_KEY, JSON.stringify(threads.map(normalizeLegacyMainThread)))
   } catch {
     // localStorage full or unavailable
   }
   // Async server sync
-  syncThreadsToServer(threads)
+  syncThreadsToServer(threads.map(normalizeLegacyMainThread))
 }
 
 function getActiveThreadId(): string {
@@ -309,7 +327,7 @@ export function archiveStaleThreads(): number {
   const current = useThreadsStore.getState().threads
   let count = 0
   const next = current.map((t) => {
-    if (!t.archived && !t.favorite && t.kind !== 'main' && t.updatedAt < cutoff) {
+    if (!t.archived && !t.favorite && t.updatedAt < cutoff) {
       count++
       return { ...t, archived: true }
     }
@@ -336,21 +354,25 @@ export async function syncFromServer(): Promise<boolean> {
     // Merge: for each thread, keep the one with newer updatedAt. lastSeenAt
     // merges as max independently — seen-markers don't bump updatedAt.
     const merged = new Map<string, Thread>()
-    for (const t of localThreads) merged.set(t.id, t)
+    for (const t of localThreads) merged.set(t.id, normalizeLegacyMainThread(t))
     for (const t of serverThreads) {
-      const existing = merged.get(t.id)
-      if (!existing || t.updatedAt > existing.updatedAt) {
+      const incoming = normalizeLegacyMainThread(t)
+      const existing = merged.get(incoming.id)
+      if (!existing || incoming.updatedAt > existing.updatedAt) {
         const lastSeenAt = Math.max(existing?.lastSeenAt ?? 0, t.lastSeenAt ?? 0) || undefined
-        merged.set(t.id, { ...t, lastSeenAt })
+        merged.set(incoming.id, mergeThreadMetadata({ ...existing, ...incoming, lastSeenAt }, incoming))
       } else if ((t.lastSeenAt ?? 0) > (existing.lastSeenAt ?? 0)) {
-        merged.set(t.id, { ...existing, lastSeenAt: t.lastSeenAt })
+        merged.set(incoming.id, mergeThreadMetadata({ ...existing, lastSeenAt: t.lastSeenAt }, incoming))
+      } else {
+        const mergedMetadata = mergeThreadMetadata(existing, incoming)
+        if (JSON.stringify(mergedMetadata) !== JSON.stringify(existing)) merged.set(incoming.id, mergedMetadata)
       }
     }
     
     // Drop threads tombstoned on any device, so a delete elsewhere can't be
     // resurrected by our still-present local copy.
     const deletedIds = data.deleted || {}
-    const mergedThreads = Array.from(merged.values()).filter((t) => !deletedIds[t.id])
+    const mergedThreads = Array.from(merged.values()).map(normalizeLegacyMainThread).filter((t) => !deletedIds[t.id])
 
     // Save merged threads to localStorage
     try {
@@ -406,7 +428,7 @@ export async function syncFromServer(): Promise<boolean> {
     let archiveDirty = false
     for (let i = 0; i < mergedThreads.length; i++) {
       const t = mergedThreads[i]
-      if (!t.archived && !t.favorite && t.kind !== 'main' && t.updatedAt < archiveCutoff) {
+      if (!t.archived && !t.favorite && t.updatedAt < archiveCutoff) {
         mergedThreads[i] = { ...t, archived: true }
         archiveDirty = true
       }
@@ -488,45 +510,41 @@ export function mergeThreadsFromServer(serverThreads: Thread[]): boolean {
   let changed = false
 
   for (const incoming of serverThreads) {
-    const local = localById.get(incoming.id)
+    const normalizedIncoming = normalizeLegacyMainThread(incoming)
+    const local = localById.get(normalizedIncoming.id)
     if (!local) {
-      localById.set(incoming.id, incoming)
+      localById.set(normalizedIncoming.id, normalizedIncoming)
       changed = true
       continue
     }
-    if (incoming.updatedAt > local.updatedAt) {
+    if (normalizedIncoming.updatedAt > local.updatedAt) {
       // Preserve per-device local-only prefs (model + reasoning) which the
       // server copy may not have or may be stale on.
       const merged: Thread = {
         ...local,
-        ...incoming,
-        modelId: local.modelId ?? incoming.modelId,
-        reasoningLevel: local.reasoningLevel ?? incoming.reasoningLevel,
-        lastSeenAt: Math.max(local.lastSeenAt ?? 0, incoming.lastSeenAt ?? 0) || undefined,
+        ...normalizedIncoming,
+        modelId: local.modelId ?? normalizedIncoming.modelId,
+        reasoningLevel: local.reasoningLevel ?? normalizedIncoming.reasoningLevel,
+        lastSeenAt: Math.max(local.lastSeenAt ?? 0, normalizedIncoming.lastSeenAt ?? 0) || undefined,
       }
-      localById.set(incoming.id, merged)
+      localById.set(normalizedIncoming.id, mergeThreadMetadata(merged, normalizedIncoming))
       changed = true
     } else {
-      // Server is authoritative for routing metadata (summary/kind/parentThreadId)
+      // Server is authoritative for routing metadata (description/kind/parentThreadId)
       // and seen-markers — none of these bump updatedAt, so adopt them
       // independently of the updatedAt comparison above.
-      const nextSummary = incoming.summary ?? local.summary
-      const nextKind = incoming.kind ?? local.kind
-      const nextParent = incoming.parentThreadId ?? local.parentThreadId
-      const nextSeen = Math.max(local.lastSeenAt ?? 0, incoming.lastSeenAt ?? 0) || undefined
+      const next = mergeThreadMetadata(local, normalizedIncoming)
       if (
-        nextSummary !== local.summary
-        || nextKind !== local.kind
-        || nextParent !== local.parentThreadId
-        || nextSeen !== local.lastSeenAt
+        next.description !== local.description
+        || next.descriptionMsgCount !== local.descriptionMsgCount
+        || next.metadataUpdatedAt !== local.metadataUpdatedAt
+        || next.summary !== local.summary
+        || next.kind !== local.kind
+        || next.parentThreadId !== local.parentThreadId
+        || next.lastSeenAt !== local.lastSeenAt
+        || next.archived !== local.archived
       ) {
-        localById.set(incoming.id, {
-          ...local,
-          summary: nextSummary,
-          kind: nextKind,
-          parentThreadId: nextParent,
-          lastSeenAt: nextSeen,
-        })
+        localById.set(normalizedIncoming.id, next)
         changed = true
       }
     }
@@ -555,20 +573,7 @@ export async function refreshThreadsMetadata(): Promise<boolean> {
 
 // Initialize threads
 const initialThreads = loadThreads()
-
-// Bootstrap the persistent Main ("Jane") conversation if it doesn't exist yet.
-// The server bootstraps the same stable id, so a fresh device and a fresh
-// server converge on one thread after sync (dedup by id).
-if (!initialThreads.find((t) => t.id === MAIN_THREAD_ID)) {
-  const now = Date.now()
-  initialThreads.unshift({
-    id: MAIN_THREAD_ID,
-    title: 'Jane',
-    createdAt: now,
-    updatedAt: now,
-    lastMessagePreview: '',
-    kind: 'main',
-  })
+if (initialThreads.some((t) => t.id === MAIN_THREAD_ID || t.kind === 'main')) {
   saveThreads(initialThreads)
 }
 
@@ -635,7 +640,19 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
     return id
   },
 
-  ensureBranchThread: (id, title, parentThreadId = MAIN_THREAD_ID) => {
+  upsertThread: (thread) => {
+    const normalized = normalizeLegacyMainThread(thread)
+    set((state) => {
+      const exists = state.threads.some((t) => t.id === normalized.id)
+      const threads = exists
+        ? state.threads.map((t) => (t.id === normalized.id ? { ...t, ...normalized } : t))
+        : [normalized, ...state.threads]
+      saveThreads(threads)
+      return { threads }
+    })
+  },
+
+  ensureBranchThread: (id, title, parentThreadId) => {
     set((state) => {
       if (state.threads.some((t) => t.id === id)) return state
       const now = Date.now()
@@ -645,8 +662,8 @@ export const useThreadsStore = create<ThreadsState>((set, get) => ({
         createdAt: now,
         updatedAt: now,
         lastMessagePreview: '',
-        kind: 'branch',
-        parentThreadId,
+        kind: parentThreadId ? 'branch' : 'normal',
+        ...(parentThreadId ? { parentThreadId } : {}),
       }
       const threads = [thread, ...state.threads]
       saveThreads(threads)

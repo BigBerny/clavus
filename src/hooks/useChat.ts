@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useChatStore, composeMessageText, type Message } from '../state/chat.ts'
 import { useUIStore } from '../state/ui.ts'
-import { sendChatStream, resumeChatStream, generateTitleViaOpenRouter, recoverResponse, cancelActiveResponse, isTransientLockError } from '../gateway/chat.ts'
-import { useThreadsStore, MAIN_THREAD_ID } from '../state/threads.ts'
-import { pushHash } from '../state/router.ts'
+import { sendChatStream, resumeChatStream, recoverResponse, cancelActiveResponse, isTransientLockError } from '../gateway/chat.ts'
+import { useThreadsStore } from '../state/threads.ts'
 import { getConfig } from '../gateway/config.ts'
 import { useModelStore } from '../state/preset.ts'
 import { useChatSettingsStore } from '../state/chatSettings.ts'
@@ -24,10 +23,8 @@ const LOCK_MAX_RETRIES = 4
 const LOCK_RETRY_BASE = 2000
 const LOCK_RETRY_MAX = 15000
 const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/g
-const ROUTE_CONTEXT_LIMIT = 8
 // Fork-rewind seed: how many recent turns of surviving history to carry into a
-// forked branch's empty gateway session. Larger than ROUTE_CONTEXT_LIMIT since
-// this is a full-history rewind, not a routing hint. Server caps to match.
+// forked branch's empty gateway session. Server caps to match.
 const SEED_CONTEXT_LIMIT = 24
 
 function buildMediaUrl(filePath: string): string {
@@ -48,21 +45,6 @@ function extractMediaFromToolResult(result: unknown): import('../state/chat.ts')
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-function quoteForRoutingCard(content: string): string {
-  const trimmed = content.trim()
-  if (!trimmed) return ''
-  return trimmed.length > 700 ? `${trimmed.slice(0, 700).trim()}...` : trimmed
-}
-
-function buildBranchContextCard(messages: Message[], currentUserId?: string): string {
-  const history = messages
-    .filter((m) => m.role !== 'system' && m.id !== currentUserId && m.content.trim())
-    .slice(-ROUTE_CONTEXT_LIMIT)
-  if (history.length === 0) return ''
-  const lines = history.map((m) => `${m.role === 'user' ? 'You' : 'Jane'}: ${quoteForRoutingCard(m.content)}`)
-  return ['Context from Jane before this new conversation:', ...lines].join('\n\n')
 }
 
 export function useChat() {
@@ -106,12 +88,7 @@ export function useChat() {
   const send = useCallback(async (inputThreadId: string, content: string, images?: string[], files?: import('../state/chat').PendingFile[], retryCount = 0, idempotencyKey?: string, seedContext?: RouteContextMessage[], clientMeta?: ClientMeta) => {
     if (!content.trim() && (!images || images.length === 0) && (!files || files.length === 0)) return
 
-    // Mutable: Jane's server-side router may refile this turn into a different
-    // thread mid-send (see onRouted). Everything after the routing point — token
-    // appends, completion, error/resume handling, retries — must target the
-    // resolved thread, so the rest of this function reads `threadId`, not the arg.
-    let threadId = inputThreadId
-    let userMsgId: string | undefined
+    const threadId = inputThreadId
 
     const {
       getThreadState,
@@ -150,13 +127,11 @@ export function useChat() {
     }
 
     if (retryCount === 0) {
-      userMsgId = addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files, clientMeta })
+      addMessage(threadId, { role: 'user', content: content.trim(), images, attachments: files, clientMeta })
       // Claim the streaming slot before any awaits so a concurrent recovery sweep
       // (or a second submit) doesn't see "last message is user, isStreaming=false"
       // and kick off a duplicate run. Auto-classify below can await up to 3s.
       setStreaming(threadId, true)
-      // Fire title generation immediately (async, non-blocking)
-      generateTitleIfNeeded(threadId)
       // Reactivate thread if it was auto-archived
       const t = useThreadsStore.getState().threads.find(t => t.id === threadId)
       if (t?.archived) useThreadsStore.getState().unarchiveThread(threadId)
@@ -292,50 +267,6 @@ export function useChat() {
         const merged = [...existing, ...files.filter((f) => !seen.has(f.path))]
         store.getState().setWorkspaceFiles(threadId, lastUser.id, merged)
       },
-      onRouted: ({ threadId: routed, target, title }: { threadId: string; target: string; title?: string; rationale?: string }) => {
-        // Jane filed this turn into a different conversation. The user's message
-        // STAYS in Main (Jane's home keeps everything addressed to her, so the
-        // user can always navigate back); only the streaming answer moves into the
-        // target, and Main gets a tappable breadcrumb pointing to where it landed.
-        if (!routed || routed === threadId) return
-        const sourceThreadId = threadId
-        const sourceMessages = store.getState().getThreadState(sourceThreadId).messages
-        const userContent = (userMsgId
-          ? sourceMessages.find((m) => m.id === userMsgId)?.content
-          : '') || content
-        const threads = useThreadsStore.getState()
-        if (target === 'new-branch') threads.ensureBranchThread(routed, title || 'New conversation')
-        // Seed the branch so it reads coherently on its own: prior Jane context
-        // (new branch only), then the user's question, then the answer (relocated
-        // below). The user's question is copied — not moved — so it remains in Main.
-        if (target === 'new-branch') {
-          const contextCard = buildBranchContextCard(sourceMessages, userMsgId)
-          if (contextCard) {
-            store.getState().addMessage(routed, {
-              role: 'system',
-              content: contextCard,
-              meta: 'branch-context',
-            })
-          }
-        }
-        if (userContent.trim()) {
-          store.getState().addMessage(routed, { role: 'user', content: userContent })
-        }
-        store.getState().relocateMessages(sourceThreadId, routed, [assistantId].filter((x): x is string => !!x))
-        store.getState().addMessage(sourceThreadId, {
-          role: 'assistant',
-          meta: 'routing',
-          content: `Jane answered this in [${title || 'another conversation'}](clavus://thread/${routed})`,
-        })
-        // Hand the streaming slot from the source thread to the routed one.
-        store.getState().setStreaming(sourceThreadId, false)
-        store.getState().setAbortController(sourceThreadId, null)
-        store.getState().setStreaming(routed, true)
-        store.getState().setAbortController(routed, controller)
-        markStreamActivity(routed)
-        pushHash({ kind: 'chat', threadId: routed })
-        threadId = routed
-      },
       onResponseId: (responseId: string) => {
         store.getState().setBackendResponseId(threadId, assistantId, responseId)
       },
@@ -399,9 +330,6 @@ export function useChat() {
           // silently fall back to the default level).
           reasoningEffort: reasoningEffort === 'none' ? 'off' : reasoningEffort,
           idempotencyKey: idemKey,
-          // Opt typed Main sends into Jane's server-side router (first attempt
-          // only; retries target whatever thread we already resolved to).
-          route: retryCount === 0 && inputThreadId === MAIN_THREAD_ID,
           // Fork-rewind: seed a freshly forked branch's empty gateway session
           // with the prior transcript. Carried across retries via the param.
           seedContext,
@@ -629,9 +557,8 @@ export function useChat() {
       .slice(-SEED_CONTEXT_LIMIT)
       .map((m) => ({ role: m.role, content: m.content.slice(0, 2500) }))
 
-    // Archive the original so the rewind "replaces" it. Never Main — it's the
-    // persistent home thread and not archivable.
-    if (sourceThreadId !== MAIN_THREAD_ID) threadsApi.archiveThread(sourceThreadId)
+    // Archive the original so the rewind "replaces" it.
+    threadsApi.archiveThread(sourceThreadId)
 
     sendRef.current?.(newThreadId, newContent, images, files, 0, undefined, seedContext)
     return newThreadId
@@ -662,21 +589,4 @@ export function useChat() {
   }, [store, forkRewindAndSend])
 
   return { send, abort, sendNow, regenerate, editAndResend, forkRewindAndSend }
-}
-
-function generateTitleIfNeeded(threadId: string) {
-  const currentMessages = useChatStore.getState().getThreadState(threadId).messages.filter(m => m.role !== 'system')
-  const userMessages = currentMessages.filter(m => m.role === 'user')
-  const userMsgCount = userMessages.length
-  if (userMsgCount > 0 && (userMsgCount & (userMsgCount - 1)) === 0) {
-    const config = getConfig()
-    if (config.openrouterApiKey) {
-      const userTexts = userMessages.map(m => m.content)
-      generateTitleViaOpenRouter(config.openrouterApiKey, userTexts).then(title => {
-        if (title) {
-          useThreadsStore.getState().updateThreadTitle(threadId, title)
-        }
-      })
-    }
-  }
 }

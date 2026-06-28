@@ -1,6 +1,6 @@
 import { OPENROUTER_KEY } from '../../serverEnv.ts'
 
-// Shared Gemini Flash call used by Jane's router and summary maintenance.
+// Shared Gemini Flash call used by conversation routing and metadata maintenance.
 // Mirrors the OpenRouter request shape in composeApi.ts (same model/headers).
 
 const ROUTER_MODEL = 'google/gemini-3.5-flash'
@@ -41,7 +41,7 @@ export async function runFlash(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${OPENROUTER_KEY}`,
         'HTTP-Referer': 'https://openclaw.random-hamster.win',
-        'X-Title': 'Clavus Jane Router',
+        'X-Title': 'Clavus Conversation Router',
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(opts?.timeoutMs ?? 15000),

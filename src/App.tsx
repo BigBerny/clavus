@@ -4,7 +4,7 @@ import { InputBar } from './components/chat/InputBar.tsx'
 import { HomeScreen } from './components/home/HomeScreen.tsx'
 import { useChat } from './hooks/useChat.ts'
 import { useUIStore } from './state/ui.ts'
-import { useThreadsStore, syncFromServer, archiveStaleThreads, refreshThreadsMetadata, MAIN_THREAD_ID } from './state/threads.ts'
+import { useThreadsStore, syncFromServer, archiveStaleThreads, refreshThreadsMetadata } from './state/threads.ts'
 import { useChatStore, refreshThreadMessages } from './state/chat.ts'
 import { restartThreadsSync, startThreadsSync } from './state/sync.ts'
 import { useTabsStore, ensureChatTab, openOrFocusFinderTab, type ChatTab, type FileTab, type MarksenseTab, type FinderTab } from './state/tabs.ts'
@@ -38,9 +38,24 @@ import {
 import { ChatViewPanel } from './components/chat/ChatViewPanel.tsx'
 import { waitForScrollSettle } from './lib/scrollSettle.ts'
 import { decideOpenTarget, recordLastChat, recordVisiblePanel, readVisiblePanel } from './lib/openTarget.ts'
+import { createServerThread, routeConversationStart, type RouteStartResponse, type RouteStartSource } from './lib/conversationRouting.ts'
+import { getFileTypeInfo } from './lib/fileTypes.ts'
 
 const CONNECTION_RELOAD_GUARD_KEY = 'clavus-connection-reload-attempted-at'
 const CONNECTION_RELOAD_COOLDOWN_MS = 60_000
+
+type PendingFile = import('./state/chat').PendingFile
+type ClientMeta = import('./gateway/chat.ts').ClientMeta
+type PendingRouteSelection = {
+  text: string
+  images?: string[]
+  files?: PendingFile[]
+  clientMeta?: ClientMeta
+  source: RouteStartSource
+  candidates: Extract<RouteStartResponse, { action: 'ask' }>['candidates']
+  suggestedTitle?: string
+  suggestedDescription?: string
+}
 
 function shouldHardReloadForConnectionRetry(): boolean {
   try {
@@ -56,6 +71,11 @@ function shouldHardReloadForConnectionRetry(): boolean {
 
 function clearConnectionReloadGuard() {
   try { sessionStorage.removeItem(CONNECTION_RELOAD_GUARD_KEY) } catch { /* ignore */ }
+}
+
+function isMarkdownPath(path: string): boolean {
+  const filename = path.split('/').filter(Boolean).pop() || path
+  return getFileTypeInfo(filename).kind === 'markdown'
 }
 
 export function App() {
@@ -83,6 +103,7 @@ export function App() {
   const [composeChannel, setComposeChannel] = useState<'messaging' | 'slack' | 'email' | null>(null)
   const [realtimeOpen, setRealtimeOpen] = useState(false)
   const [transcriptsOpen, setTranscriptsOpen] = useState(false)
+  const [routeSelection, setRouteSelection] = useState<PendingRouteSelection | null>(null)
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   // Track which panel is visible (tab id or 'home')
@@ -637,9 +658,10 @@ export function App() {
     const handleOpenFile = (e: Event) => {
       const detail = (e as CustomEvent).detail as { path?: string; title?: string }
       if (!detail?.path) return
-      // Desktop browser only: open .md in split view next to the active chat.
-      // Pager mode opens it as the right-hand pane instead.
-      if (!pagerMode && detail.path.endsWith('.md')) {
+      // Conversation markdown links open beside the active chat.
+      // Desktop browser uses a separate split column; pager/window mode uses
+      // the linked-doc split inside the chat pane.
+      if (!pagerMode && isMarkdownPath(detail.path)) {
         const currentPanel = visiblePanelRef.current
         const tabs = useTabsStore.getState().tabs
         const currentTab = tabs.find(t => t.id === currentPanel)
@@ -653,14 +675,18 @@ export function App() {
       const tabId = applyRoute({ kind: 'file', path: detail.path, title: detail.title })
       if (tabId) {
         // Pager: a markdown opened from a conversation (or from the doc pane
-        // itself) becomes the doc pane right of the conversation — the chat
-        // stays mounted, so an active recording keeps running.
+        // itself) opens split with the conversation by default — the chat stays
+        // mounted, so an active recording keeps running.
         if (pagerMode && tabId.startsWith('marksense:')) {
           const current = visiblePanelRef.current
           const currentTab = useTabsStore.getState().tabs.find(t => t.id === current)
-          if (currentTab?.type === 'chat' || current === docPaneIdRef.current) {
+          const chatPaneId = currentTab?.type === 'chat'
+            ? currentTab.id
+            : current === docPaneIdRef.current ? paneTabIdRef.current : null
+          if (chatPaneId) {
+            setPagerSplitDoc(true)
             setDocPaneId(tabId)
-            scrollToTabRef.current(tabId)
+            if (current !== chatPaneId) scrollToTabRef.current(chatPaneId)
             return
           }
         }
@@ -685,7 +711,7 @@ export function App() {
       window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, pagerMode, checkRecovery, setVisiblePanel, reconnectAfterResumeIfNeeded])
+  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, pagerMode, checkRecovery, setVisiblePanel, reconnectAfterResumeIfNeeded, setPagerSplitDoc])
 
   // Initial scroll. If the app was opened via a deep link, land directly
   // on that file/chat panel. Otherwise start on Home — the leftmost panel
@@ -975,6 +1001,21 @@ export function App() {
     return panelIndex <= 0
   }, [visiblePanel])
 
+  const openThreadPanel = useCallback((threadId: string, title = 'Conversation') => {
+    switchThread(threadId)
+    ensureChatTab(threadId, title)
+    setVisiblePanel(threadId)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const panel = panelRefs.current.get(threadId)
+        if (panel) {
+          panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
+        }
+      })
+    })
+  }, [switchThread, setVisiblePanel])
+
   const createConversationFromHome = useCallback((title = 'New conversation') => {
     // Capture the model/reasoning the user selected on the home screen before
     // switching threads, since switchThread restores per-thread settings.
@@ -982,6 +1023,9 @@ export function App() {
     const homeReasoning = useChatSettingsStore.getState().globalReasoning
     const newThreadId = useThreadsStore.getState().createThread()
 
+    if (title && title !== 'New conversation') {
+      useThreadsStore.getState().updateThreadTitle(newThreadId, title)
+    }
     useThreadsStore.getState().updateThreadModel(newThreadId, homeModelId)
     if (homeReasoning) {
       useThreadsStore.getState().updateThreadReasoning(newThreadId, homeReasoning)
@@ -989,21 +1033,37 @@ export function App() {
     useModelStore.getState().setSelectedModelId(homeModelId)
     useChatSettingsStore.getState().setGlobalReasoning(homeReasoning)
 
-    switchThread(newThreadId)
-    ensureChatTab(newThreadId, title)
-    setVisiblePanel(newThreadId)
-
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const panel = panelRefs.current.get(newThreadId)
-        if (panel) {
-          panel.scrollIntoView({ behavior: 'smooth', inline: 'start' })
-        }
-      })
-    })
+    openThreadPanel(newThreadId, title)
 
     return newThreadId
-  }, [switchThread, setVisiblePanel])
+  }, [openThreadPanel])
+
+  const createRoutedConversation = useCallback(async (decision?: Extract<RouteStartResponse, { action: 'new' }> | PendingRouteSelection) => {
+    const homeModelId = useModelStore.getState().selectedModelId
+    const homeReasoning = useChatSettingsStore.getState().globalReasoning
+    const title = decision?.suggestedTitle || 'New conversation'
+    const description = decision?.suggestedDescription
+    const parentThreadId = decision && 'parentThreadId' in decision ? decision.parentThreadId ?? null : null
+    const serverThread = await createServerThread({
+      title,
+      description,
+      parentThreadId,
+      modelId: homeModelId,
+      reasoningLevel: homeReasoning,
+    })
+
+    if (serverThread) {
+      useThreadsStore.getState().upsertThread(serverThread)
+      useThreadsStore.getState().updateThreadModel(serverThread.id, homeModelId)
+      if (homeReasoning) useThreadsStore.getState().updateThreadReasoning(serverThread.id, homeReasoning)
+      useModelStore.getState().setSelectedModelId(homeModelId)
+      useChatSettingsStore.getState().setGlobalReasoning(homeReasoning)
+      openThreadPanel(serverThread.id, serverThread.title || title)
+      return serverThread.id
+    }
+
+    return createConversationFromHome(title)
+  }, [createConversationFromHome, openThreadPanel])
 
   const ensureVoiceThread = useCallback(() => {
     if (isHomeVisible()) return createConversationFromHome()
@@ -1011,6 +1071,88 @@ export function App() {
     const tab = sortedTabs.find(t => t.id === visiblePanel)
     return tab?.type === 'chat' ? visiblePanel : null
   }, [createConversationFromHome, isHomeVisible, sortedTabs, visiblePanel])
+
+  const sendToThread = useCallback((
+    threadId: string,
+    title: string,
+    text: string,
+    images?: string[],
+    files?: PendingFile[],
+    clientMeta?: ClientMeta,
+  ) => {
+    openThreadPanel(threadId, title)
+    send(threadId, text, images, files, 0, undefined, undefined, clientMeta)
+  }, [openThreadPanel, send])
+
+  const routeAndSendStart = useCallback(async (
+    source: RouteStartSource,
+    text: string,
+    images?: string[],
+    files?: PendingFile[],
+    clientMeta?: ClientMeta,
+  ) => {
+    const decision = await routeConversationStart({
+      text,
+      source,
+      imagesCount: images?.length || 0,
+      appContext: clientMeta?.app
+        ? {
+            appName: clientMeta.app.name,
+            bundleId: clientMeta.app.bundleId,
+            fieldType: clientMeta.app.fieldType,
+          }
+        : undefined,
+    })
+
+    if (!decision) {
+      const threadId = await createRoutedConversation()
+      sendToThread(threadId, 'New conversation', text, images, files, clientMeta)
+      return
+    }
+
+    if (decision.action === 'existing') {
+      let thread = useThreadsStore.getState().threads.find((t) => t.id === decision.targetThreadId)
+      if (!thread) {
+        await refreshThreadsMetadata()
+        thread = useThreadsStore.getState().threads.find((t) => t.id === decision.targetThreadId)
+      }
+      sendToThread(decision.targetThreadId, thread?.title || 'Conversation', text, images, files, clientMeta)
+      return
+    }
+
+    if (decision.action === 'new') {
+      const threadId = await createRoutedConversation(decision)
+      sendToThread(threadId, decision.suggestedTitle || 'New conversation', text, images, files, clientMeta)
+      return
+    }
+
+    setRouteSelection({
+      text,
+      images,
+      files,
+      clientMeta,
+      source,
+      candidates: decision.candidates.slice(0, 3),
+      suggestedTitle: decision.suggestedTitle,
+      suggestedDescription: decision.suggestedDescription,
+    })
+  }, [createRoutedConversation, sendToThread])
+
+  const chooseRouteCandidate = useCallback((threadId: string) => {
+    const pending = routeSelection
+    if (!pending) return
+    setRouteSelection(null)
+    const thread = useThreadsStore.getState().threads.find((t) => t.id === threadId)
+    sendToThread(threadId, thread?.title || 'Conversation', pending.text, pending.images, pending.files, pending.clientMeta)
+  }, [routeSelection, sendToThread])
+
+  const chooseRouteNew = useCallback(async () => {
+    const pending = routeSelection
+    if (!pending) return
+    setRouteSelection(null)
+    const threadId = await createRoutedConversation(pending)
+    sendToThread(threadId, pending.suggestedTitle || 'New conversation', pending.text, pending.images, pending.files, pending.clientMeta)
+  }, [createRoutedConversation, routeSelection, sendToThread])
 
   // Handle sending from any panel — thread-scoped. `clientMeta` carries how the
   // message was produced (typed/dictated, focused app). `supersedePrevious`
@@ -1037,8 +1179,7 @@ export function App() {
       }
     }
     if (isHomeVisible()) {
-      const newThreadId = createConversationFromHome()
-      send(newThreadId, text, images, files, 0, undefined, undefined, clientMeta)
+      void routeAndSendStart('home', text, images, files, clientMeta)
     } else {
       // Send to the visible thread directly (only for chat tabs)
       if (visiblePanel !== 'home') {
@@ -1060,7 +1201,7 @@ export function App() {
         console.warn('[Clavus] handleSend dropped — visiblePanel is home but isHomeVisible() was false')
       }
     }
-  }, [createConversationFromHome, isHomeVisible, visiblePanel, send, switchThread, sortedTabs, forkRewindAndSend, setVisiblePanel])
+  }, [isHomeVisible, visiblePanel, send, switchThread, sortedTabs, forkRewindAndSend, setVisiblePanel, routeAndSendStart])
 
   useEffect(() => {
     const handleInteractiveSend = (event: Event) => {
@@ -1077,25 +1218,26 @@ export function App() {
     return () => window.removeEventListener('clavus:interactive-send', handleInteractiveSend)
   }, [handleSend])
 
-  // Desktop dictation that Jane's router decided is for her (not a paste into a
-  // foreign app): send it into the Main conversation, where the server router
-  // re-files it into main/branch/new-branch/ask exactly like a typed Main send.
+  // Desktop dictation Chat mode: route before creating/sending so it can land
+  // in an existing conversation, a new conversation, or the selector.
   useEffect(() => {
-    const handleJaneDictation = (event: Event) => {
+    const handleRoutedDictationChat = (event: Event) => {
       const detail = (event as CustomEvent<{ content?: string; images?: string[]; clientMeta?: import('./gateway/chat.ts').ClientMeta }>).detail
       const content = detail?.content?.trim() ?? ''
       const rawImages = Array.isArray(detail?.images) ? detail.images : []
       if (!content && rawImages.length === 0) return
       // Desktop dictation → tag as dictated (carry app context if present).
       const meta: import('./gateway/chat.ts').ClientMeta = { source: 'dictated', ...detail?.clientMeta }
-      pushHash({ kind: 'chat', threadId: MAIN_THREAD_ID })
-      switchThread(MAIN_THREAD_ID)
       Promise.all(rawImages.map((img) => compressImageToDataUrl(img).catch(() => img)))
-        .then((images) => send(MAIN_THREAD_ID, content, images.length ? images : undefined, undefined, 0, undefined, undefined, meta))
+        .then((images) => routeAndSendStart('dictation-chat', content, images.length ? images : undefined, undefined, meta))
     }
-    window.addEventListener('clavus:jane-dictation', handleJaneDictation)
-    return () => window.removeEventListener('clavus:jane-dictation', handleJaneDictation)
-  }, [send, switchThread])
+    window.addEventListener('clavus:routed-chat', handleRoutedDictationChat)
+    window.addEventListener('clavus:jane-dictation', handleRoutedDictationChat)
+    return () => {
+      window.removeEventListener('clavus:routed-chat', handleRoutedDictationChat)
+      window.removeEventListener('clavus:jane-dictation', handleRoutedDictationChat)
+    }
+  }, [routeAndSendStart])
 
   // Abort scoped to visible thread
   const handleAbort = useCallback(() => {
@@ -1497,7 +1639,7 @@ export function App() {
             onGoHome={() => { setVisiblePanel('home'); setSplitDocPath(null); setSplitExpanded(null) }}
             onOpenDoc={(path, title) => {
               // On desktop, if a chat tab is active, open the doc in split view
-              if (visibleTab?.type === 'chat' && path.endsWith('.md')) {
+              if (visibleTab?.type === 'chat' && isMarkdownPath(path)) {
                 setSplitDocPath(path)
                 setSplitDocTitle(title || path.split('/').pop() || 'Document')
                 setSplitExpanded(null)
@@ -1921,6 +2063,62 @@ export function App() {
         )}
         </div>
       </div>
+
+      {routeSelection && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/30 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-lg border border-border-light bg-surface-light shadow-2xl dark:border-border-dark dark:bg-surface-dark">
+            <div className="border-b border-border-light px-4 py-3 dark:border-border-dark">
+              <div className="text-sm font-semibold text-foreground">Choose conversation</div>
+              <div className="mt-0.5 text-xs text-text-light-muted dark:text-text-dark-muted">
+                Clavus is not certain where this should go.
+              </div>
+            </div>
+            <div className="max-h-[50vh] overflow-y-auto p-2">
+              {routeSelection.candidates.map((candidate) => (
+                <button
+                  key={candidate.threadId}
+                  type="button"
+                  onClick={() => chooseRouteCandidate(candidate.threadId)}
+                  className="block w-full rounded-md px-3 py-2 text-left hover:bg-surface-light-2 dark:hover:bg-surface-dark-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate text-sm font-medium text-foreground">{candidate.title}</span>
+                    <span className="shrink-0 text-[11px] text-text-light-muted dark:text-text-dark-muted">
+                      {new Date(candidate.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  {candidate.lastMessagePreview && (
+                    <div className="mt-0.5 truncate text-xs text-text-light-muted dark:text-text-dark-muted">
+                      {candidate.lastMessagePreview}
+                    </div>
+                  )}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={chooseRouteNew}
+                className="mt-1 block w-full rounded-md px-3 py-2 text-left hover:bg-surface-light-2 dark:hover:bg-surface-dark-3"
+              >
+                <div className="text-sm font-medium text-foreground">Start new conversation</div>
+                {routeSelection.suggestedTitle && (
+                  <div className="mt-0.5 truncate text-xs text-text-light-muted dark:text-text-dark-muted">
+                    {routeSelection.suggestedTitle}
+                  </div>
+                )}
+              </button>
+            </div>
+            <div className="flex justify-end border-t border-border-light px-3 py-2 dark:border-border-dark">
+              <button
+                type="button"
+                onClick={() => setRouteSelection(null)}
+                className="rounded-md px-3 py-1.5 text-sm text-text-light-muted hover:bg-surface-light-2 dark:text-text-dark-muted dark:hover:bg-surface-dark-3"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Persistent recording indicator — visible on panels without the
           composer (Markdown / Finder / File viewer) so the user can stop

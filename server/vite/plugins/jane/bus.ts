@@ -1,4 +1,4 @@
-// Decouples server-side writers (Jane's router, summary maintenance) from the
+// Decouples server-side writers (router, metadata maintenance) from the
 // SSE broadcaster that lives inside threadsApiPlugin. threadsApi registers its
 // broadcaster on init; store helpers emit through it after writing to disk so
 // all connected devices converge.

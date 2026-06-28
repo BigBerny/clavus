@@ -18,13 +18,11 @@ import {
   GATEWAY_TOKEN,
   OPENCLAW_API_TARGET,
 } from '../serverEnv.ts'
-import { routeUtterance } from './jane/router.ts'
-import { MAIN_THREAD_ID } from './jane/store.ts'
 import { screenCaptureHint } from './screenCapture.ts'
 
 /** Render the client-supplied prior transcript (clavusSeedContext) into a single
  *  text block used to seed a freshly forked branch's empty gateway session.
- *  Mirrors the new-branch routing seed shape (User:/Assistant: lines). Returns
+ *  Mirrors the fork-rewind seed shape (User:/Assistant: lines). Returns
  *  '' when there's nothing usable so plain (non-fork) sends are untouched. */
 function renderSeedContext(raw: unknown): string {
   if (!Array.isArray(raw)) return ''
@@ -177,108 +175,6 @@ export function responsesProxyPlugin() {
     // If buffer was already finished at subscribe time, the callback above
     // already emitted done. Otherwise, we're now live.
     return true
-  }
-
-  /**
-   * Stream a synthetic assistant turn (no gateway run) into a thread's buffer.
-   * Used for Jane's `ask` clarifying question: she answers directly in Main
-   * instead of dispatching the run anywhere.
-   */
-  function synthesizeAssistantTurn(res: any, threadId: string, text: string) {
-    const responseId = `resp_${crypto.randomUUID()}`
-    createBuffer(responseId, threadId || undefined)
-    if (threadId) bufferSetThreadId(responseId, threadId)
-    writeSseHeaders(res)
-    bufferAppendEvent(responseId, 'response.created', JSON.stringify({
-      type: 'response.created',
-      response: { id: responseId, object: 'response', created_at: Math.floor(Date.now() / 1000), status: 'in_progress', model: 'openclaw/default', output: [], usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } },
-    }))
-    attachSubscriber(res, responseId, 0)
-    bufferAppendEvent(responseId, 'response.output_text.delta', JSON.stringify({
-      type: 'response.output_text.delta',
-      delta: text,
-    }))
-    bufferAppendEvent(responseId, 'response.completed', JSON.stringify({
-      type: 'response.completed',
-      response: { id: responseId, status: 'completed', model: 'openclaw/default', usage: { input_tokens: 0, output_tokens: 0, total_tokens: 0 } },
-    }))
-    markFinished(responseId, 'completed')
-  }
-
-  /**
-   * Jane's server-side routing pre-pass for typed sends. Header-gated by
-   * `X-Clavus-Route: 1` (set by the client only on Main/Home auto-sends), so it
-   * is inert until the client opts in and reversible by dropping the header.
-   *
-   * Returns { handled: true } when it fully answered the request (the `ask`
-   * short-circuit). Otherwise rewrites `parsed`'s session keys to the resolved
-   * target thread and returns it via `threadId` + response headers so the run
-   * and its buffer land in the right conversation.
-   */
-  async function applyJaneRouting(
-    req: any, res: any, parsed: any, threadId: string,
-  ): Promise<{ handled: boolean; threadId: string }> {
-    if (req.headers['x-clavus-route'] !== '1') return { handled: false, threadId }
-    const utterance = extractLatestUserText(parsed.input)
-    if (!utterance.trim()) return { handled: false, threadId }
-    const routeContext = Array.isArray(parsed.clavusRouteContext)
-      ? parsed.clavusRouteContext
-          .filter((m: any) => (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string' && m.content.trim())
-          .slice(-12)
-          .map((m: any) => ({ role: m.role, content: m.content.slice(0, 2500) }))
-      : []
-
-    let decision
-    try {
-      decision = await routeUtterance({ utterance, recentMessages: routeContext, source: 'typed', focusedInClavus: true })
-    } catch {
-      return { handled: false, threadId }
-    }
-
-    // paste is impossible from inside Clavus; router already maps it to main.
-    if (decision.target === 'ask') {
-      synthesizeAssistantTurn(res, MAIN_THREAD_ID, decision.clarifyingQuestion || 'Where should this go?')
-      return { handled: true, threadId }
-    }
-
-    // For a new branch, mint the id here so the gateway session + buffer key
-    // match, but let the CLIENT materialize the visible thread (single writer
-    // for branch contents — avoids clobbering races). Seed the gateway session
-    // by prepending the curated seed to the input the agent receives.
-    let targetThreadId = decision.routedThreadId || MAIN_THREAD_ID
-    let newBranchTitle = ''
-    if (decision.target === 'new-branch') {
-      targetThreadId = `thread-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      newBranchTitle = decision.newBranchTitle || utterance.slice(0, 40) || 'New conversation'
-      const recentContext = routeContext.length
-        ? routeContext
-            .map((m: any) => `${m.role === 'user' ? 'User' : 'Jane'}: ${m.content}`)
-            .join('\n\n')
-        : ''
-      const seed = [
-        decision.seedPrompt || utterance,
-        recentContext ? `Recent visible Jane MAIN context:\n${recentContext}` : '',
-      ].filter(Boolean).join('\n\n')
-      if (typeof parsed.input === 'string') {
-        parsed.input = `${seed}\n\n${parsed.input}`
-      } else if (Array.isArray(parsed.input)) {
-        parsed.input = [{ role: 'user', content: seed }, ...parsed.input]
-      }
-    }
-    delete parsed.clavusRouteContext
-
-    // Tell the client where the answer is being filed so it can auto-follow.
-    try {
-      res.setHeader('X-Clavus-Routed-Thread', targetThreadId)
-      res.setHeader('X-Clavus-Route-Target', decision.target)
-      if (newBranchTitle) res.setHeader('X-Clavus-Route-Title', encodeURIComponent(newBranchTitle))
-      if (decision.rationale) res.setHeader('X-Clavus-Route-Rationale', encodeURIComponent(decision.rationale))
-    } catch { /* headers already sent — ignore */ }
-
-    // Rewrite session keys so the gateway run + buffer key match the target.
-    parsed.user = `clavus:${targetThreadId}`
-    parsed.conversation = `clavus:${targetThreadId}`
-    return { handled: false, threadId: targetThreadId }
   }
 
   /**
@@ -513,17 +409,7 @@ export function responsesProxyPlugin() {
       ? req.headers['x-openclaw-session-key']
       : ''
     const session = conversation || user || headerSession
-    let threadId = session.startsWith('clavus:') ? session.slice('clavus:'.length) : ''
-
-    // Jane's server-side routing pre-pass (header-gated, inert until the client
-    // opts in). May fully answer the request (ask) or rewrite the destination.
-    try {
-      const routed = await applyJaneRouting(req, res, parsed, threadId)
-      if (routed.handled) return
-      threadId = routed.threadId
-    } catch (e: any) {
-      console.warn('[responses-proxy] Jane routing failed, continuing unrouted:', e?.message)
-    }
+    const threadId = session.startsWith('clavus:') ? session.slice('clavus:'.length) : ''
 
     // Try the WebSocket agent RPC path for OpenClaw (provides real-time thinking)
     if (CHAT_BACKEND === 'openclaw') {

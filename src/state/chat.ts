@@ -142,7 +142,7 @@ interface ChatState {
   /** Bulk-set the entire messages array for a thread (e.g. for branching). */
   setThreadMessages: (threadId: string, messages: Message[]) => void
   /** Move the given messages (by id, preserving objects/order) from one thread
-   *  to another. Used when Jane reroutes a typed Main turn into a branch. */
+   *  to another. Kept for explicit thread-management flows. */
   relocateMessages: (fromThreadId: string, toThreadId: string, messageIds: string[]) => void
   /** Queue a message (or append to an existing one) while a response is streaming. */
   enqueueOrAppend: (threadId: string, msg: QueuedMessage) => void

@@ -3,11 +3,15 @@ import nodePath from 'path'
 
 import { THREADS_DATA_DIR, sendPushToAll } from '../serverEnv.ts'
 import { registerThreadBroadcaster } from './jane/bus.ts'
-import { appendThreadMessage, createBranchThread } from './jane/store.ts'
-
-/** Stable id of the persistent "Jane" conversation. Mirrors MAIN_THREAD_ID in
- *  src/state/threads.ts. */
-const MAIN_THREAD_ID = 'main'
+import { scheduleThreadMetadataRefresh } from './jane/metadata.ts'
+import { routeStart } from './jane/router.ts'
+import {
+  appendThreadMessage,
+  createBranchThread,
+  createConversationThread,
+  migrateLegacyMainThread,
+  normalizeLegacyMainThread,
+} from './jane/store.ts'
 
 export function threadsApiPlugin() {
   // Ensure data directory exists
@@ -46,14 +50,14 @@ export function threadsApiPlugin() {
   function readThreads(): any[] {
     try {
       const data = fs.existsSync(threadsFile) ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8')) : []
-      return Array.isArray(data) ? data : []
+      return Array.isArray(data) ? data.map((t: any) => normalizeLegacyMainThread(t)) : []
     } catch {
       return []
     }
   }
 
   function writeThreads(threads: any[]) {
-    fs.writeFileSync(threadsFile, JSON.stringify(threads), 'utf-8')
+    fs.writeFileSync(threadsFile, JSON.stringify(threads.map((t: any) => normalizeLegacyMainThread(t))), 'utf-8')
   }
 
   // ── Deletion tombstones ────────────────────────────────────────────────
@@ -100,23 +104,9 @@ export function threadsApiPlugin() {
     return Array.from(byId.values())
   }
 
-  // Bootstrap the persistent Main ("Jane") conversation so every device that
-  // syncs adopts the same stable thread id.
-  function ensureMainThread() {
-    const threads = readThreads()
-    if (threads.find((t: any) => t?.id === MAIN_THREAD_ID)) return
-    const now = Date.now()
-    threads.unshift({
-      id: MAIN_THREAD_ID,
-      title: 'Jane',
-      createdAt: now,
-      updatedAt: now,
-      lastMessagePreview: '',
-      kind: 'main',
-    })
-    try { writeThreads(threads) } catch { /* ignore */ }
-  }
-  ensureMainThread()
+  // Preserve old Main/Jane messages but stop bootstrapping or treating that
+  // thread as special. Existing `main` becomes normal archived legacy history.
+  migrateLegacyMainThread()
 
   // Cross-device change broadcaster. Every open EventSource connection registers
   // itself here; PUTs to threads/messages broadcast a JSON event. The originating
@@ -136,14 +126,14 @@ export function threadsApiPlugin() {
     }
   }
 
-  // Let server-side writers (Jane's router, summary maintenance) broadcast
+  // Let server-side writers (router, metadata maintenance) broadcast
   // through the same SSE fan-out without an HTTP self-call.
   registerThreadBroadcaster(broadcast)
 
-  // Backfill missing thread summaries shortly after startup, off the hot path.
+  // Backfill missing route metadata shortly after startup, off the hot path.
   setTimeout(() => {
-    import('./jane/summary.ts')
-      .then((m) => m.backfillSummaries())
+    import('./jane/metadata.ts')
+      .then((m) => m.backfillMetadata())
       .catch(() => { /* best-effort */ })
   }, 5000)
 
@@ -189,10 +179,7 @@ export function threadsApiPlugin() {
 
         try {
           if (req.url === '/api/threads' && req.method === 'GET') {
-            const data = fs.existsSync(threadsFile)
-              ? JSON.parse(fs.readFileSync(threadsFile, 'utf-8'))
-              : []
-            res.end(JSON.stringify(data))
+            res.end(JSON.stringify(readThreads()))
             return
           }
 
@@ -209,12 +196,39 @@ export function threadsApiPlugin() {
             return
           }
 
+          if (req.url === '/api/threads/route-start' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            const decision = await routeStart({
+              text: typeof body.text === 'string' ? body.text : '',
+              source: body.source,
+              currentThreadId: typeof body.currentThreadId === 'string' ? body.currentThreadId : undefined,
+              imagesCount: typeof body.imagesCount === 'number' ? body.imagesCount : undefined,
+              appContext: body.appContext && typeof body.appContext === 'object' ? body.appContext : undefined,
+            })
+            res.end(JSON.stringify(decision))
+            return
+          }
+
+          if (req.url === '/api/threads/create' && req.method === 'POST') {
+            const body = JSON.parse(await readBody(req))
+            const thread = createConversationThread({
+              title: typeof body.title === 'string' ? body.title : undefined,
+              description: typeof body.description === 'string' ? body.description : undefined,
+              parentThreadId: typeof body.parentThreadId === 'string' ? body.parentThreadId : null,
+              modelId: typeof body.modelId === 'string' ? body.modelId : undefined,
+              reasoningLevel: typeof body.reasoningLevel === 'string' ? body.reasoningLevel : undefined,
+            })
+            res.statusCode = 201
+            res.end(JSON.stringify({ threadId: thread.id, thread }))
+            return
+          }
+
           // Explicit thread deletion: tombstone the id (so a merge can't bring it
           // back), drop it from the list, and remove its message + queue files.
           // Single-segment path only — `/api/threads/messages/…` etc. are matched
           // earlier and have an extra segment, so they never reach this.
           const threadIdMatch = req.url.match(/^\/api\/threads\/([^/?]+)$/)
-          const RESERVED_SEGMENTS = new Set(['sync', 'search', 'push', 'append', 'branch', 'events'])
+          const RESERVED_SEGMENTS = new Set(['sync', 'search', 'push', 'append', 'branch', 'create', 'route-start', 'events'])
           if (threadIdMatch && req.method === 'DELETE' && !RESERVED_SEGMENTS.has(threadIdMatch[1])) {
             const threadId = decodeURIComponent(threadIdMatch[1])
             const tombstones = readDeleted()
@@ -248,6 +262,7 @@ export function threadsApiPlugin() {
             fs.writeFileSync(msgFile, body, 'utf-8')
             res.end(JSON.stringify({ ok: true }))
             broadcast({ type: 'messages', threadId }, originClientId)
+            scheduleThreadMetadataRefresh(threadId)
             return
           }
 
@@ -352,7 +367,7 @@ export function threadsApiPlugin() {
           }
 
           // Append a message to an existing (or implicitly created) thread.
-          // Generalizes /push (create-only) for Jane's router + reassign: bumps
+          // Generalizes /push (create-only) for server-side helpers: bumps
           // preview/updatedAt and broadcasts via the shared store helper.
           if (req.url === '/api/threads/append' && req.method === 'POST') {
             const body = JSON.parse(await readBody(req))
@@ -373,12 +388,13 @@ export function threadsApiPlugin() {
               ...(typeof body.meta === 'string' ? { meta: body.meta } : {}),
             }
             appendThreadMessage(threadId, message, { bumpActivity: body.bumpActivity !== false })
+            scheduleThreadMetadataRefresh(threadId)
             res.statusCode = 201
             res.end(JSON.stringify({ ok: true, messageId: message.id }))
             return
           }
 
-          // Create a branch conversation with a curated hidden seed message.
+          // Legacy branch endpoint: create a child conversation with a hidden seed.
           if (req.url === '/api/threads/branch' && req.method === 'POST') {
             const body = JSON.parse(await readBody(req))
             const seedPrompt: string = typeof body.seedPrompt === 'string' ? body.seedPrompt : ''
@@ -389,7 +405,7 @@ export function threadsApiPlugin() {
             }
             const thread = createBranchThread({
               title: body.title || seedPrompt.slice(0, 40),
-              summary: body.summary,
+              summary: body.description || body.summary,
               seedPrompt,
               parentThreadId: body.parentThreadId,
               modelId: body.modelId,

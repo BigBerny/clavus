@@ -6,9 +6,8 @@ import { mentionsJane } from './gate.ts'
 //
 //  1. The GATE (mentionsJane) — deterministic, unit-tested here. Decides whether
 //     a transcript is even escalated to the LLM router. No Jane = pasted as usual.
-//  2. The ROUTER (jane/router.ts via Gemini Flash) — a judgement call we can't run
-//     deterministically in CI. Its expected behaviour is encoded below as a living
-//     checklist (it.skip) so the calibration we agreed on is captured in code.
+//  2. The ROUTER (jane/router.ts via Gemini Flash) — the app now uses it to
+//     choose existing/new/ask after a chat handoff.
 
 describe('dictation gate — mentionsJane()', () => {
   // Plain dictation that never names Jane: must NOT be escalated → pasted as-is.
@@ -24,8 +23,7 @@ describe('dictation gate — mentionsJane()', () => {
     expect(mentionsJane(text)).toBe(false)
   })
 
-  // Utterances that name Jane: escalated to the router (which then decides
-  // paste vs main vs branch — see the router checklist below).
+  // Utterances that name Jane: escalated to the chat handoff/router.
   const escalates = [
     'Hey Jane, schreib mir eine Slack-Nachricht',
     'Jane, lass uns zusammen etwas draften',
@@ -49,22 +47,12 @@ describe('dictation gate — mentionsJane()', () => {
 })
 
 // ── Router behaviour checklist (LLM — not run in CI) ─────────────────────────
-// These encode the paste-vs-main-vs-branch calibration. They run against the
-// real Gemini-Flash router, so they're skipped by default; flip to `it` and
-// supply OPENROUTER creds to spot-check after prompt changes.
-describe.skip('router behaviour — conservative dictation path', () => {
-  it('quick task → main, NOT a new branch: "Hey Jane, schreib mir eine Slack-Nachricht"', () => {})
-  it('one-off question → main: "Jane, was ist die Hauptstadt von Portugal?"', () => {})
-  it('explicit collaborative project → new-branch: "Jane, lass uns zusammen ein Konzept draften"', () => {})
-  it('follow-up to recent Main activity → main (never a fresh branch)', () => {})
-
-  // KNOWN LIMITATION: the gate passes any utterance containing "Jane", so a
-  // transcript that merely MENTIONS her (not a request to her) reaches the
-  // router. The router must recognise mention-not-address and choose "paste".
-  it('mention, not address → paste: "Ich habe Jane gestern davon erzählt"', () => {})
-  it("mention, not address → paste: \"Jane's idea was good, send her the file\"", () => {})
-
-  // A new-branch must carry the REAL topic into its seed + title (resolve
-  // "this"/"daraus" against recent Main), never a stale earlier subject.
-  it('new-branch seed/title reflect the actual branched topic', () => {})
+// These run against the real Gemini-Flash router, so they're skipped by default;
+// flip to `it` and supply OPENROUTER creds to spot-check prompt changes.
+describe.skip('router behaviour — neutral conversation path', () => {
+  it('quick task → new conversation when no recent candidate fits', () => {})
+  it('clear follow-up → existing recent conversation', () => {})
+  it('medium-confidence broad topic match → ask, not silent existing', () => {})
+  it('same broad title but different descriptions → ask or new', () => {})
+  it('uncertain dictation with editable focused field → ask with paste option', () => {})
 })

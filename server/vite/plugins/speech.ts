@@ -3,10 +3,7 @@ import nodePath from 'path'
 
 import { ELEVENLABS_KEY, THREADS_DATA_DIR } from '../serverEnv.ts'
 import { mentionsJane } from './jane/gate.ts'
-import { routeUtterance, type RouterDecision } from './jane/router.ts'
-import { buildRecentRouterMessages, MAIN_THREAD_ID } from './jane/store.ts'
-
-const CLAVUS_BUNDLE_ID = 'win.random-hamster.clavus'
+import { routeStart, type RouteStartDecision } from './jane/router.ts'
 
 /** Pull compact word-level timestamps out of an ElevenLabs Scribe response.
  *  Scribe returns a `words` array (`{ text, start, end, type }`, times in
@@ -23,14 +20,13 @@ function extractWords(parsed: any): Array<{ text: string; start: number; end: nu
 }
 
 /** Compact routing shape sent back to the desktop overlay. The overlay only
- *  needs `target` (paste vs Jane-directed); the rest rides along for display. */
-function trimRouting(d: RouterDecision) {
+ *  needs to know whether to keep inserting or hand the text to Clavus chat. */
+function trimRouting(d: RouteStartDecision) {
   return {
-    target: d.target,
-    routedThreadId: d.routedThreadId,
-    label: d.label,
+    target: d.action === 'ask' ? 'ask' : 'chat',
+    action: d.action,
+    includePasteOption: d.action === 'ask' ? d.includePasteOption === true : false,
     rationale: d.rationale,
-    newBranchTitle: d.newBranchTitle,
   }
 }
 
@@ -205,28 +201,29 @@ export function desktopDictationPlugin() {
         const fieldType = headerString(req.headers, 'x-clavus-field-type')
         const fieldEditable = headerBool(req.headers, 'x-clavus-field-editable')
 
-        // Jane's server-side router: decide where this dictation belongs (paste
-        // into the focused app vs. main/branch/new-branch/ask). The desktop
-        // overlay branches on `routing.target`. Fail-open — never block the
-        // transcript if routing hiccups (overlay then keeps its paste default).
+        // Lightweight uncertain-dictation router. Explicit Chat mode is handled
+        // by the overlay and the main app's neutral conversation router. Here we
+        // only detect likely chat when Insert mode was auto-selected.
         let routing: ReturnType<typeof trimRouting> | null = null
         if (parsed?.text && resp.ok && mentionsJane(parsed.text)) {
           try {
-            const decision = await routeUtterance({
-              utterance: parsed.text,
-              recentMessages: buildRecentRouterMessages(MAIN_THREAD_ID),
-              appName: appName || undefined,
-              bundleId: bundleId || undefined,
-              fieldType: fieldType || undefined,
-              fieldEditable,
-              source: 'desktop-dictation',
-              focusedInClavus: bundleId === CLAVUS_BUNDLE_ID,
-              conservative: true,
+            const decision = await routeStart({
+              text: parsed.text,
+              source: 'dictation-uncertain',
+              appContext: {
+                appName: appName || undefined,
+                bundleId: bundleId || undefined,
+                fieldType: fieldType || undefined,
+                fieldEditable,
+              },
             })
             routing = trimRouting(decision)
             parsed.routing = routing
           } catch {
-            // Best-effort; the overlay treats absent routing as "paste as usual".
+            routing = fieldEditable
+              ? { target: 'ask', action: 'ask', includePasteOption: true, rationale: 'routing failed; paste field is editable' }
+              : { target: 'chat', action: 'new', includePasteOption: false, rationale: 'routing failed; no editable field detected' }
+            parsed.routing = routing
           }
         }
         // Jane not named → routing stays null and the overlay pastes as usual.

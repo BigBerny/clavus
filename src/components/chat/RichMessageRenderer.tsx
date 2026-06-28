@@ -105,8 +105,8 @@ function openFileInline(path: string, title: string) {
   }))
 }
 
-/** Detect a Clavus conversation link (`clavus://thread/<id>`), used as the
- *  breadcrumb card Jane leaves in Main when she reroutes a turn into a branch. */
+/** Detect a Clavus conversation link (`clavus://thread/<id>`), used by
+ *  breadcrumb cards that point to another conversation. */
 function parseClavusThreadUrl(href: string): { threadId: string } | null {
   const prefix = 'clavus://thread/'
   if (!href.startsWith(prefix)) return null
