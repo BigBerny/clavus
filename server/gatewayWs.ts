@@ -115,6 +115,12 @@ export function shouldAutoContinueAgentError(error: Error): boolean {
   return /idle timeout|no response from model|hasn['’]t been responding|not responding/i.test(error.message)
 }
 
+export function separateAssistantDeltaAfterTool(previousText: string, delta: string, toolSinceText: boolean): string {
+  if (!toolSinceText || !previousText || !delta) return delta
+  if (/\s$/.test(previousText) || /^\s/.test(delta)) return delta
+  return `\n\n${delta}`
+}
+
 export interface AgentRunCallbacks {
   onThinking?: (delta: string) => void
   onToken?: (delta: string) => void
@@ -375,6 +381,8 @@ class GatewayWsClient {
     // Subscribe to events for this run
     return new Promise<void>((resolve, reject) => {
       let thinkingDoneFired = false
+      let assistantText = ''
+      let toolSinceAssistantText = false
       let done = false
 
       const failRun = (err: Error) => {
@@ -418,6 +426,7 @@ class GatewayWsClient {
           if (itemId) {
             const sessionKey = readString(payload.sessionKey) ?? ''
             const agentId = sessionKey.startsWith('agent:') ? sessionKey.split(':')[1] : 'main'
+            if (assistantText) toolSinceAssistantText = true
             callbacks.onMedia?.({ id: itemId, agentId: agentId || 'main' })
           }
           return
@@ -436,11 +445,14 @@ class GatewayWsClient {
           const delta = typeof data.delta === 'string' ? data.delta
             : typeof data.text === 'string' ? data.text : ''
           if (delta) {
+            const separatedDelta = separateAssistantDeltaAfterTool(assistantText, delta, toolSinceAssistantText)
+            assistantText += separatedDelta
+            toolSinceAssistantText = false
             if (!thinkingDoneFired) {
               thinkingDoneFired = true
               callbacks.onThinkingDone?.()
             }
-            callbacks.onToken?.(delta)
+            callbacks.onToken?.(separatedDelta)
           }
           return
         }
@@ -481,6 +493,7 @@ class GatewayWsClient {
           let tcStatus: 'running' | 'completed' | 'error' = 'running'
           if (phase === 'end' || status === 'completed') tcStatus = 'completed'
           else if (status === 'failed' || status === 'blocked' || status === 'error') tcStatus = 'error'
+          if (assistantText) toolSinceAssistantText = true
           callbacks.onToolCall?.({ id, name, args, result: data.output ?? data.result, status: tcStatus })
         }
       }

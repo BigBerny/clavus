@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { fatalAgentEventMessage, shouldAutoContinueAgentError } from './gatewayWs'
+import {
+  fatalAgentEventMessage,
+  separateAssistantDeltaAfterTool,
+  shouldAutoContinueAgentError,
+} from './gatewayWs'
 
 describe('gatewayWs agent event failure detection', () => {
   it('treats lifecycle end with an aborted stop reason as fatal', () => {
@@ -37,5 +41,19 @@ describe('gatewayWs agent event failure detection', () => {
   it('only auto-continues model idle/stall errors', () => {
     expect(shouldAutoContinueAgentError(new Error('LLM idle timeout (120s): no response from model'))).toBe(true)
     expect(shouldAutoContinueAgentError(new Error('OPENCLAW_SESSION_WRITE_LOCK_TIMEOUT'))).toBe(false)
+  })
+
+  it('separates assistant text segments when a tool ran between them', () => {
+    expect(separateAssistantDeltaAfterTool('Ich prüef "Avey".', 'Es git äis', true))
+      .toBe('\n\nEs git äis')
+  })
+
+  it('does not alter normal stream chunks or already-spaced segments', () => {
+    expect(separateAssistantDeltaAfterTool('Ich pr', 'üef "Avey".', false))
+      .toBe('üef "Avey".')
+    expect(separateAssistantDeltaAfterTool('Ich prüef "Avey".\n\n', 'Es git äis', true))
+      .toBe('Es git äis')
+    expect(separateAssistantDeltaAfterTool('Ich prüef "Avey".', '\n\nEs git äis', true))
+      .toBe('\n\nEs git äis')
   })
 })
