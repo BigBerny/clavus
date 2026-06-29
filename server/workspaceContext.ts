@@ -10,7 +10,7 @@
 //     note isn't re-injected (it's already in the chat history).
 
 const WSI_PACK_URL = process.env.WSI_PACK_URL || 'http://127.0.0.1:5178/pack'
-const WSI_TIMEOUT_MS = Number(process.env.WSI_PACK_TIMEOUT_MS) || 2000
+const WSI_TIMEOUT_MS = Number(process.env.WSI_PACK_TIMEOUT_MS) || 6000
 const ENABLED = process.env.WSI_PREPASS !== '0'
 const WINDOW_CHARS = 6000 // ~1500 tokens of recent user turns
 const SESSION_TTL_MS = 30 * 60 * 1000
@@ -156,7 +156,11 @@ export async function workspaceContextBlock(threadId: string | undefined, messag
       session.lastTurnAddedInjects = addedThisTurn
     }
     return { block: formatBlock(r), files: collectFiles(r) }
-  } catch {
+  } catch (error) {
+    const reason = error instanceof Error && error.name === 'AbortError'
+      ? `timed out after ${WSI_TIMEOUT_MS}ms`
+      : error instanceof Error ? error.message : String(error)
+    console.warn(`[workspace-context] /pack skipped${threadId ? ` for ${threadId}` : ''}: ${reason}`)
     return { block: null, files: [] } // fail-open: a slow or unreachable indexer must never block chat
   } finally {
     clearTimeout(timer)
