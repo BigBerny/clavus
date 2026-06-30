@@ -280,6 +280,15 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     adjustHeight()
   }, [value, adjustHeight])
 
+  // Toast (slash command + paste feedback)
+  const [toast, setToast] = useState<string | null>(null)
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showToast = useCallback((msg: string) => {
+    setToast(msg)
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = setTimeout(() => setToast(null), 2500)
+  }, [])
+
   // Image paste handler + long text auto-attach
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items
@@ -302,20 +311,33 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
       }
     }
 
-    // Long text paste: auto-attach as a file instead of filling the textarea
+    // Long text paste: auto-attach as a file instead of flooding the textarea.
+    // We preventDefault up front so the blob never lands in the field, then
+    // upload in the background. The upload can fail (cold/slow tunnel, transient
+    // network error, no thread context yet on Home) — if it does we must NOT
+    // silently swallow the paste. Fall back to dropping the raw text into the
+    // composer so it is never lost; worst case it sends inline instead of as a
+    // file attachment.
     const textData = e.clipboardData?.getData('text/plain')
     if (textData && textData.length > 2000 && pendingFiles.length < MAX_FILES) {
       e.preventDefault()
       const blob = new Blob([textData], { type: 'text/plain' })
       const file = new File([blob], `pasted-${Date.now()}.txt`, { type: 'text/plain' })
       uploadFile(file, threadId).then((uploaded) => {
-        if (!uploaded) return
-        setPendingFiles((prev) => prev.length >= MAX_FILES ? prev : [
-          ...prev, { name: file.name, content: '', size: textData.length, localPath: uploaded.path },
-        ])
+        if (uploaded) {
+          setPendingFiles((prev) => prev.length >= MAX_FILES ? prev : [
+            ...prev, { name: file.name, content: '', size: textData.length, localPath: uploaded.path },
+          ])
+          return
+        }
+        // Upload failed — recover the text into the composer rather than drop it.
+        setComposing(true)
+        setValue((prev) => ((prev ? `${prev}\n` : '') + textData).slice(0, 100000))
+        showToast('Couldn’t attach file — pasted as text')
+        requestAnimationFrame(() => textareaRef.current?.focus())
       })
     }
-  }, [pendingImages.length, pendingFiles.length, threadId])
+  }, [pendingImages.length, pendingFiles.length, threadId, showToast])
 
   // Listen for screenshots from the Clavus desktop dictation overlay.
   useEffect(() => {
@@ -334,14 +356,6 @@ export function InputBar({ onSend, onAbort, onSendNow, isStreaming, onRecordingC
     return () => window.removeEventListener('clavus-screenshot', handler)
   }, [acceptScreenshots])
 
-  // Toast (slash command feedback)
-  const [toast, setToast] = useState<string | null>(null)
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showToast = useCallback((msg: string) => {
-    setToast(msg)
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
-    toastTimerRef.current = setTimeout(() => setToast(null), 2500)
-  }, [])
 
   // Help overlay
   const [helpOpen, setHelpOpen] = useState(false)
