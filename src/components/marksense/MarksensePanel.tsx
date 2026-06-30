@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useState, useRef, Suspense, Component, type ReactNode } from 'react'
 import { writeFile, DOCUMENTS_API } from '../../lib/workspaceApi'
+import { getWorkspaceFileUrl } from '../../lib/fileTypes'
 import { openOrFocusFinderTab } from '../../state/tabs'
 import { lazyWithRetry } from '../../lib/lazyWithRetry'
 
@@ -318,6 +319,14 @@ export function MarksensePanel({ path, title, isVisible, onOpenFinder, splitTogg
                   defaultFullWidth: true,
                   aiProvider: 'offlinePreferred',
                   typewiseToken: import.meta.env.VITE_TYPEWISE_TOKEN || '',
+                  // Resolve relative image paths (e.g. `![](reference/x.png)`)
+                  // against this file's own directory so embedded images load.
+                  // The editor prepends this base to relative img srcs on load
+                  // and strips it again before onSave, so the stored markdown
+                  // keeps its portable relative paths (no round-trip corruption).
+                  documentDirWebviewUri: path
+                    ? getWorkspaceFileUrl(path.slice(0, path.lastIndexOf('/'))).replace(/\/$/, '')
+                    : '',
                 }}
               />
             </Suspense>

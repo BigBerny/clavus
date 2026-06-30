@@ -332,6 +332,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...(newMedia.length > 0 ? { media: [...(m.media || []), ...newMedia] } : {}),
         }
       })
+      // Instrumentation: the durable persistence boundary. If an async/failed
+      // run's visible reply never logs here, it was never finalized client-side.
+      const finalized = messages.find((m) => m.id === id)
+      if (finalized?.role === 'assistant') {
+        console.log('[recovery-diag] finalize', {
+          threadId,
+          id,
+          rid: finalized.backendResponseId ?? finalized.hermesResponseId ?? null,
+          len: (finalized.content || '').length,
+        })
+      }
       saveMessages(threadId, messages)
       return {
         threadStates: {
@@ -681,8 +692,28 @@ export function mergeMessagesFromServer(threadId: string, serverMessages: Messag
     if (serverIds.has(local.id)) continue
     const rid = local.backendResponseId ?? local.hermesResponseId
     if (rid && serverResponseIds.has(rid)) continue
-    merged.push(local)
+    // Place the local-only message at its chronological position instead of
+    // blindly appending at the end. A local message that is OLDER than the
+    // server tail (e.g. a recovered mid-thread reply, or a just-sent message
+    // racing a newer server message) would otherwise land last and read as an
+    // out-of-order duplicate. Server order is preserved; only the local message
+    // is slotted in by timestamp.
+    let at = merged.length
+    while (at > 0 && merged[at - 1].timestamp > local.timestamp) at -= 1
+    merged.splice(at, 0, local)
   }
+
+  // Instrumentation: this is the server-sync boundary that can replace the
+  // visible array. Pairs with [recovery-diag] finalize to tell whether an async
+  // reply was client-finalized then clobbered, vs only ever arrived via sync.
+  console.log('[recovery-diag] merge-from-server', {
+    threadId,
+    server: normalizedServerMessages.length,
+    local: ts.messages.length,
+    merged: merged.length,
+    lastRole: merged[merged.length - 1]?.role ?? null,
+    lastId: merged[merged.length - 1]?.id ?? null,
+  })
 
   try {
     const toSave = merged.slice(-100).map((m) => (

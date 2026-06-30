@@ -1,7 +1,29 @@
 import { useEffect, useMemo, useState } from 'react'
-import Markdown from 'react-markdown'
+import Markdown, { defaultUrlTransform } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { getFileTypeInfo, getOfficeDesktopUrl, getWorkspaceFileUrl } from '../../lib/fileTypes.ts'
+
+// Resolve image/link URLs inside an opened Markdown file. A relative path like
+// `reference/generated/v8/scene-01.png` is meant relative to the .md file's own
+// directory, but react-markdown emits it verbatim so the browser resolves it
+// against the page origin (→ 404). Anchor it to the file's directory within the
+// documents root and rewrite to the raw file endpoint so embedded images load.
+function resolveDocUrl(url: string, filePath: string): string {
+  if (!url) return url
+  // Leave external schemes (http:, data:, mailto: …), protocol-relative URLs,
+  // in-page anchors, and already-served API paths untouched.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//') || url.startsWith('#') || url.startsWith('/api/')) {
+    return defaultUrlTransform(url)
+  }
+  const dir = filePath.slice(0, filePath.lastIndexOf('/') + 1) || '/'
+  const stack: string[] = []
+  for (const seg of (url.startsWith('/') ? url : dir + url).split('/')) {
+    if (seg === '' || seg === '.') continue
+    if (seg === '..') stack.pop()
+    else stack.push(seg)
+  }
+  return getWorkspaceFileUrl('/' + stack.join('/'))
+}
 
 interface Props {
   path: string
@@ -168,7 +190,7 @@ export function FileViewerPanel({ path, title, isVisible, onClose }: Props) {
 
         {!loading && !error && info.kind === 'markdown' && (
           <div className="prose prose-sm dark:prose-invert max-w-none text-[13px] leading-relaxed [&>*:first-child]:mt-0">
-            <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
+            <Markdown remarkPlugins={[remarkGfm]} urlTransform={(url) => resolveDocUrl(url, path)}>{content}</Markdown>
           </div>
         )}
 

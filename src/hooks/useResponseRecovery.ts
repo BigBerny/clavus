@@ -12,6 +12,22 @@ type RecoveryResult = 'recovered' | 'no-buffer' | 'skipped'
  *  re-send also fails to produce a saved response. */
 const autoRetriedThreads = new Set<string>()
 
+/** Per-thread: the terminal user-message id we already attempted recovery for
+ *  and found nothing durable to add. Without this, every visibilitychange /
+ *  focus / panel switch re-runs recovery for the same unanswered turn and
+ *  re-streams the buffered response into a throwaway bubble — the "answer
+ *  flashes, shows twice, then vanishes on reload" loop the user hit while an
+ *  async run's real reply was still pending server-side. A newer user message
+ *  (different id) or a reload clears it; the server-sync path can still surface
+ *  a late reply independently of this guard. */
+const recoveryResolvedUserMsg = new Map<string, string>()
+
+function markRecoveryResolved(threadId: string) {
+  const ts = useChatStore.getState().getThreadState(threadId)
+  const last = ts.messages[ts.messages.length - 1]
+  if (last && last.role === 'user') recoveryResolvedUserMsg.set(threadId, last.id)
+}
+
 type AutoRetryCallback = (threadId: string, content: string, images?: string[], files?: PendingFile[]) => void
 let autoRetryHandler: AutoRetryCallback | null = null
 let drainQueuedHandler: AutoRetryCallback | null = null
@@ -50,6 +66,10 @@ function needsRecovery(threadId: string): boolean {
   // auto-classify await can take up to 3s) and treating an in-flight send as
   // needing recovery races the user's own stream and produces a duplicate run.
   if (last.role === 'user') {
+    // Already tried recovery for this exact unanswered turn and had nothing
+    // durable to show — don't re-stream a throwaway copy on the next
+    // focus/visibility tick. A newer user message re-enables recovery.
+    if (recoveryResolvedUserMsg.get(threadId) === last.id) return false
     const age = Date.now() - last.timestamp
     if (age < 15_000) return false
     return true
@@ -285,6 +305,7 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     if (assistantId && (createdSlot || isDisposableEmptyAssistant(staleSlot))) {
       useChatStore.getState().removeMessage(threadId, assistantId)
     }
+    markRecoveryResolved(threadId)
     return 'no-buffer'
   }
 
@@ -296,6 +317,7 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
       console.log('[Recovery] Already have this response, skipping')
       useChatStore.getState().setStreaming(threadId, false)
       drainQueuedAfterRecoveredResponse(threadId)
+      markRecoveryResolved(threadId)
       return 'skipped'
     }
   }
@@ -348,6 +370,7 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   if (assistantId && (createdSlot || isDisposableEmptyAssistant(staleSlot))) {
     useChatStore.getState().removeMessage(threadId, assistantId)
   }
+  markRecoveryResolved(threadId)
   console.log('[Recovery] Cannot recover — status:', recovered.status, 'text:', recovered.text?.length || 0)
   return 'no-buffer'
 }
