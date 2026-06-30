@@ -29,3 +29,4 @@ dist-ssr
 # TLS certs live in ~/.local/share/tailscale/certs — never in the repo
 *.crt
 *.key
+scripts/bench-results-*.jsonl

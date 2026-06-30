@@ -1,9 +1,11 @@
 import { OPENROUTER_KEY } from '../../serverEnv.ts'
 
-// Shared Gemini Flash call used by conversation routing and metadata maintenance.
+// Shared LLM call used by conversation routing and metadata maintenance.
 // Mirrors the OpenRouter request shape in composeApi.ts (same model/headers).
+// Benchmarked gpt-5.4-mini (low) over gemini-3.5-flash: ~2-3x faster, ~half the
+// cost, equal JSON validity / routing agreement on real Clavus examples.
 
-const ROUTER_MODEL = 'google/gemini-3.5-flash'
+const ROUTER_MODEL = 'openai/gpt-5.4-mini'
 
 export interface FlashResult {
   out: string
@@ -26,7 +28,7 @@ export async function runFlash(
   const body: Record<string, unknown> = {
     model: ROUTER_MODEL,
     stream: false,
-    reasoning: { effort: 'minimal' },
+    reasoning: { effort: 'low' },
     temperature: 0,
     messages: [
       { role: 'system', content: systemPrompt },

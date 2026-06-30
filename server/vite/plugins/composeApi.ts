@@ -92,9 +92,9 @@ export function composeApiPlugin() {
       const runOpenRouter = async (systemPrompt: string, userMessage: string) => {
         const startedAt = Date.now()
         const openrouterBody: Record<string, unknown> = {
-          model: 'google/gemini-3.5-flash',
+          model: 'openai/gpt-5.4-mini',
           stream: false,
-          reasoning: { effort: 'minimal' },
+          reasoning: { effort: 'low' },
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage },
