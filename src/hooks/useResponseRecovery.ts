@@ -66,6 +66,18 @@ function previousUserTimestamp(messages: Message[], beforeIndex: number): number
   return undefined
 }
 
+function isDisposableEmptyAssistant(message: Message | null | undefined): boolean {
+  return Boolean(
+    message
+    && message.role === 'assistant'
+    && !message.content.trim()
+    && !message.streaming
+    && !message.thinking?.trim()
+    && !message.toolCalls?.length
+    && !message.media?.length,
+  )
+}
+
 async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
   console.log('[Recovery] Attempting recovery for', threadId)
 
@@ -237,12 +249,40 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     useChatStore.getState().setStreaming(threadId, false)
   }
 
-  // 2) Legacy fallback: backend-store-only recovery when the selected backend supports it.
+  // 2) OpenClaw suspend/resume fallback: a yielded turn may complete later
+  // outside Clavus's response buffer. Fetching server messages runs the
+  // server-side OpenClaw session-tail reconciler before returning.
+  const refreshedSessionTail = await refreshThreadMessages(threadId).catch(() => false)
+  if (refreshedSessionTail) {
+    const freshStore = useChatStore.getState()
+    const freshMessages = freshStore.getThreadState(threadId).messages
+    const recoveredTail = [...freshMessages].reverse().find((m) =>
+      m.role === 'assistant'
+      && (m.meta === 'openclaw-session-recovery' || m.meta === 'openclaw-announce')
+      && m.content.trim()
+      && (minCreatedAt == null || m.timestamp >= minCreatedAt))
+    if (recoveredTail) {
+      const staleSlot = assistantId ? freshMessages.find((m) => m.id === assistantId) : null
+      if (staleSlot && staleSlot.id !== recoveredTail.id && !staleSlot.content.trim()) {
+        freshStore.removeMessage(threadId, staleSlot.id)
+      }
+      freshStore.setStreaming(threadId, false)
+      drainQueuedAfterRecoveredResponse(threadId)
+      console.log('[Recovery] Response recovered via OpenClaw session tail for thread', threadId, recoveredTail.backendResponseId)
+      return 'recovered'
+    }
+  }
+
+  // 3) Legacy fallback: backend-store-only recovery when the selected backend supports it.
   const recovered = await recoverResponse(threadId, getConfig())
   if (!recovered) {
     console.log('[Recovery] No backend response found for', threadId)
-    // If we eagerly created a slot but neither path produced content, remove it.
-    if (createdSlot && assistantId) {
+    // If neither path produced content, remove empty shells but preserve slots
+    // with tool/media evidence for later diagnostics.
+    const staleSlot = assistantId
+      ? useChatStore.getState().getThreadState(threadId).messages.find((m) => m.id === assistantId)
+      : null
+    if (assistantId && (createdSlot || isDisposableEmptyAssistant(staleSlot))) {
       useChatStore.getState().removeMessage(threadId, assistantId)
     }
     return 'no-buffer'
@@ -300,8 +340,12 @@ async function attemptRecovery(threadId: string): Promise<RecoveryResult> {
     return 'recovered'
   }
 
-  // Recovered but neither completed nor with text — drop any eager slot.
-  if (createdSlot && assistantId) {
+  // Recovered but neither completed nor with text — drop empty shells but keep
+  // tool/media evidence for diagnostics.
+  const staleSlot = assistantId
+    ? useChatStore.getState().getThreadState(threadId).messages.find((m) => m.id === assistantId)
+    : null
+  if (assistantId && (createdSlot || isDisposableEmptyAssistant(staleSlot))) {
     useChatStore.getState().removeMessage(threadId, assistantId)
   }
   console.log('[Recovery] Cannot recover — status:', recovered.status, 'text:', recovered.text?.length || 0)

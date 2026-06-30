@@ -151,6 +151,86 @@ describe('useResponseRecovery queue drain', () => {
     expect(gatewayMocks.resumeChatStream.mock.calls[1][0]).not.toHaveProperty('responseId')
   })
 
+  it('removes stale empty assistant shells when no recovery source has content', async () => {
+    const userTimestamp = Date.now() - 30_000
+    const messages = [
+      { id: 'msg-user', role: 'user', content: 'Question', timestamp: userTimestamp },
+      {
+        id: 'msg-assistant',
+        role: 'assistant',
+        content: '',
+        timestamp: userTimestamp + 1,
+        backendResponseId: 'resp_failed_empty',
+      },
+    ]
+    useChatStore.setState({
+      threadStates: {
+        [thread.id]: {
+          messages: messages.map((m) => makeMessage(m as Partial<Message>)),
+          isStreaming: false,
+          abortController: null,
+          queuedMessage: null,
+        },
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(messages), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    gatewayMocks.resumeChatStream.mockRejectedValue(new Error('No response buffer'))
+    gatewayMocks.recoverResponse.mockResolvedValue(null)
+
+    const { result } = renderHook(() => useResponseRecovery())
+
+    result.current.checkRecovery(thread.id)
+
+    await waitFor(() => {
+      const current = useChatStore.getState().getThreadState(thread.id).messages
+      expect(current.some((m) => m.id === 'msg-assistant')).toBe(false)
+    })
+  })
+
+  it('keeps empty assistant slots with tool evidence for diagnostics', async () => {
+    const userTimestamp = Date.now() - 30_000
+    const messages = [
+      { id: 'msg-user', role: 'user', content: 'Question', timestamp: userTimestamp },
+      {
+        id: 'msg-assistant',
+        role: 'assistant',
+        content: '',
+        timestamp: userTimestamp + 1,
+        backendResponseId: 'resp_failed_with_tools',
+        toolCalls: [{ id: 'tool-1', name: 'video_generate', args: {}, status: 'completed', result: 'Background task started' }],
+      },
+    ]
+    useChatStore.setState({
+      threadStates: {
+        [thread.id]: {
+          messages: messages.map((m) => makeMessage(m as Partial<Message>)),
+          isStreaming: false,
+          abortController: null,
+          queuedMessage: null,
+        },
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(messages), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    gatewayMocks.resumeChatStream.mockRejectedValue(new Error('No response buffer'))
+    gatewayMocks.recoverResponse.mockResolvedValue(null)
+
+    const { result } = renderHook(() => useResponseRecovery())
+
+    result.current.checkRecovery(thread.id)
+
+    await waitFor(() => {
+      expect(gatewayMocks.resumeChatStream).toHaveBeenCalled()
+    })
+    const current = useChatStore.getState().getThreadState(thread.id).messages
+    expect(current.find((m) => m.id === 'msg-assistant')?.toolCalls).toHaveLength(1)
+  })
+
   it('bounds thread fallback recovery to the current user turn', async () => {
     const pendingTimestamp = Date.now() - 30_000
     useChatStore.setState({
@@ -229,5 +309,58 @@ describe('useResponseRecovery queue drain', () => {
       fromSeq: 0,
       minCreatedAt: pendingTimestamp,
     })
+  })
+
+  it('accepts recovered OpenClaw session-tail messages before auto-resending', async () => {
+    const onAutoRetry = vi.fn()
+    const userTimestamp = Date.now() - 30_000
+    let fetchCount = 0
+    useChatStore.setState({
+      threadStates: {
+        [thread.id]: {
+          messages: [
+            makeMessage({ id: 'msg-user', role: 'user', content: 'Ask council', timestamp: userTimestamp }),
+            makeMessage({ id: 'msg-assistant', role: 'assistant', content: '', timestamp: userTimestamp + 1 }),
+          ],
+          isStreaming: false,
+          abortController: null,
+          queuedMessage: null,
+        },
+      },
+    })
+
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      fetchCount += 1
+      const recovered = fetchCount >= 2
+      return new Response(JSON.stringify([
+        { id: 'msg-user', role: 'user', content: 'Ask council', timestamp: userTimestamp },
+        ...(recovered ? [{
+          id: 'msg-recovered-tail',
+          role: 'assistant',
+          content: 'Final council synthesis',
+          timestamp: userTimestamp + 20_000,
+          meta: 'openclaw-session-recovery',
+          backendResponseId: 'resumed-run',
+        }] : [{
+          id: 'msg-assistant',
+          role: 'assistant',
+          content: '',
+          timestamp: userTimestamp + 1,
+        }]),
+      ]), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    }))
+
+    gatewayMocks.resumeChatStream.mockRejectedValue(new Error('No response buffer'))
+    gatewayMocks.recoverResponse.mockResolvedValue(null)
+
+    const { result } = renderHook(() => useResponseRecovery({ onAutoRetry }))
+
+    result.current.checkRecovery(thread.id)
+
+    await waitFor(() => {
+      const messages = useChatStore.getState().getThreadState(thread.id).messages
+      expect(messages.some((m) => m.content === 'Final council synthesis')).toBe(true)
+    })
+    expect(onAutoRetry).not.toHaveBeenCalled()
   })
 })

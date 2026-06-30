@@ -41,6 +41,16 @@ interface PendingRequest {
 
 type EventHandler = (event: string, payload: Record<string, unknown>) => void
 
+export interface AgentRunLifecycleEvent {
+  runId: string
+  sessionKey?: string
+  phase?: string
+  status?: string
+  yieldDetected?: boolean
+  aborted?: boolean
+  timedOut?: boolean
+}
+
 function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
@@ -131,6 +141,7 @@ export interface AgentRunCallbacks {
    *  the /api/agent-media route resolve the file on disk. */
   onMedia?: (media: { id: string; agentId: string }) => void
   onUsage?: (usage: { inputTokens: number; outputTokens: number; totalTokens: number; model?: string }) => void
+  onLifecycle?: (event: AgentRunLifecycleEvent) => void
   onDone?: () => void
   onError?: (error: Error) => void
 }
@@ -321,6 +332,13 @@ class GatewayWsClient {
     })
   }
 
+  onEvent(handler: EventHandler): () => void {
+    this.eventHandlers.add(handler)
+    return () => {
+      this.eventHandlers.delete(handler)
+    }
+  }
+
   // --- Agent RPC ---
 
   /**
@@ -411,12 +429,6 @@ class GatewayWsClient {
         const phase = data.phase as string | undefined
         const status = data.status as string | undefined
 
-        const fatalMessage = fatalAgentEventMessage(_event, data)
-        if (fatalMessage && phase !== 'start') {
-          failRun(new Error(fatalMessage))
-          return
-        }
-
         // Built-in image generation (Codex `image_gen` / gpt-image-2). The
         // gateway emits a `codex_app_server.item` of type `imageGeneration`
         // with just the `ig_<id>` item id — no path, no url, no base64. We
@@ -460,6 +472,20 @@ class GatewayWsClient {
         // Lifecycle
         if (stream === 'lifecycle') {
           if (phase === 'end') {
+            const fatalMessage = fatalAgentEventMessage(_event, data)
+            callbacks.onLifecycle?.({
+              runId,
+              sessionKey: readString(payload.sessionKey) ?? readString(data.sessionKey) ?? params.sessionKey,
+              phase,
+              status,
+              yieldDetected: readBoolean(data.yieldDetected) || readBoolean(data.yield_detected),
+              aborted: readBoolean(data.aborted),
+              timedOut: readBoolean(data.timedOut) || readBoolean(data.timed_out),
+            })
+            if (fatalMessage) {
+              failRun(new Error(fatalMessage))
+              return
+            }
             const usage = data.usage as Record<string, number> | undefined
             if (usage && callbacks.onUsage) {
               callbacks.onUsage({
@@ -482,6 +508,12 @@ class GatewayWsClient {
             failRun(new Error(msg))
             return
           }
+          return
+        }
+
+        const fatalMessage = fatalAgentEventMessage(_event, data)
+        if (fatalMessage && phase !== 'start') {
+          failRun(new Error(fatalMessage))
           return
         }
 

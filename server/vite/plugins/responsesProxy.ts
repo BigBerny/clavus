@@ -1,3 +1,5 @@
+import nodePath from 'node:path'
+
 import {
   appendEvent as bufferAppendEvent,
   createBuffer,
@@ -9,20 +11,33 @@ import {
   setThreadId as bufferSetThreadId,
   subscribe as bufferSubscribe,
 } from '../../responseEventBuffer.ts'
-import { initGatewayWs, getGatewayWs, shouldAutoContinueAgentError } from '../../gatewayWs.ts'
+import { initGatewayWs, getGatewayWs, shouldAutoContinueAgentError, type AgentRunLifecycleEvent } from '../../gatewayWs.ts'
 import { rewindLastTurn, workspaceContextBlock } from '../../workspaceContext.ts'
 import { createSseParser, formatSseFrame } from '../../../src/lib/sseParse.ts'
 import {
   CHAT_API_TARGET,
   CHAT_BACKEND,
+  DOCUMENTS_ROOT,
   GATEWAY_TOKEN,
   OPENCLAW_API_TARGET,
 } from '../serverEnv.ts'
 import { screenCaptureHint } from './screenCapture.ts'
-import { recoverOpenClawAnnouncementsForThread } from './jane/openclawAnnounceRecovery.ts'
-import { readThreadMessages } from './jane/store.ts'
+import {
+  logOpenClawAsyncRecovery,
+  recordOpenClawAsyncPending,
+  recoverOpenClawSessionTailForThread,
+  threadIdFromOpenClawSessionKey,
+} from './jane/openclawAnnounceRecovery.ts'
+import { scheduleThreadMetadataRefresh } from './jane/metadata.ts'
+import { appendThreadMessage, readThreadMessages } from './jane/store.ts'
 
 const OPENCLAW_AGENT_RUN_TIMEOUT_SECONDS = 15 * 60
+const OPENCLAW_RECOVERY_SWEEP_DELAYS_MS = [0, 1000, 5000, 15000, 30000, 60000, 120000, 300000, 600000]
+const FILE_WRITE_RECOVERY_META = 'openclaw-file-write-recovery'
+
+export interface CompletedFileWriteForRecovery {
+  path: string
+}
 
 /** Render the client-supplied prior transcript (clavusSeedContext) into a single
  *  text block used to seed a freshly forked branch's empty gateway session.
@@ -44,7 +59,11 @@ function renderSeedContext(raw: unknown): string {
  *  parent agent does not keep believing the background work is still running. */
 function renderRecoveredAnnouncementContext(threadId: string): string {
   const messages = readThreadMessages(threadId)
-    .filter((m) => m.role === 'assistant' && m.meta === 'openclaw-announce' && typeof m.content === 'string' && m.content.trim())
+    .filter((m) =>
+      m.role === 'assistant'
+      && (m.meta === 'openclaw-announce' || m.meta === 'openclaw-session-recovery')
+      && typeof m.content === 'string'
+      && m.content.trim())
     .slice(-3)
   if (messages.length === 0) return ''
 
@@ -54,10 +73,138 @@ function renderRecoveredAnnouncementContext(threadId: string): string {
   })
   return [
     'Recovered background completion context.',
-    'These assistant messages were produced by OpenClaw background/subagent announcements and are already visible in Clavus, but may be absent from the gateway transcript. Treat them as prior assistant context, not as a new task.',
+    'These assistant messages were produced by OpenClaw background, subagent, or yielded-session completions and are already visible in Clavus, but may be absent from the gateway transcript. Treat them as prior assistant context, not as a new task.',
     '',
     ...lines,
   ].join('\n\n')
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function readBoolean(value: unknown): boolean {
+  return value === true || value === 'true'
+}
+
+function cleanRecoveredFilePath(raw: string): string {
+  return raw.trim().replace(/^["'`]+|["'`]+$/g, '')
+}
+
+function readWriteResultPath(result: unknown): string | undefined {
+  const text = readString(result)
+  if (!text) return undefined
+  const match = text.match(/Successfully wrote\s+[\d,]+\s+bytes\s+to\s+(.+?)(?:\r?\n|$)/i)
+  return match?.[1] ? cleanRecoveredFilePath(match[1]) : undefined
+}
+
+export function detectCompletedFileWriteForRecovery(toolCall: {
+  name?: unknown
+  status?: unknown
+  args?: unknown
+  result?: unknown
+}): CompletedFileWriteForRecovery | null {
+  if (toolCall.status !== 'completed') return null
+  const name = readString(toolCall.name)?.toLowerCase()
+  if (!name || !['write', 'write_file', 'file_write'].includes(name)) return null
+
+  const args = readRecord(toolCall.args)
+  const fromArgs = readString(args?.path)
+    ?? readString(args?.filePath)
+    ?? readString(args?.filename)
+  const path = fromArgs ? cleanRecoveredFilePath(fromArgs) : readWriteResultPath(toolCall.result)
+  return path ? { path } : null
+}
+
+function uniqueCompletedFileWrites(writes: CompletedFileWriteForRecovery[]): CompletedFileWriteForRecovery[] {
+  const seen = new Set<string>()
+  const unique: CompletedFileWriteForRecovery[] = []
+  for (const write of writes) {
+    const key = write.path
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    unique.push(write)
+  }
+  return unique
+}
+
+function workspaceRelativePath(filePath: string): string | null {
+  const expanded = filePath.startsWith('~/')
+    ? nodePath.join(process.env.HOME || '', filePath.slice(2))
+    : filePath
+  if (nodePath.isAbsolute(expanded)) {
+    const rel = nodePath.relative(DOCUMENTS_ROOT, expanded)
+    if (!rel || rel.startsWith('..') || nodePath.isAbsolute(rel)) return null
+    return '/' + rel.split(nodePath.sep).join('/')
+  }
+  return '/' + expanded.replace(/^\/+/, '')
+}
+
+function clavusFileLink(filePath: string): string | null {
+  const relative = workspaceRelativePath(filePath)
+  if (!relative) return null
+  const filename = relative.split('/').filter(Boolean).pop() || 'File'
+  const encoded = encodeURIComponent(relative.replace(/^\/+/, ''))
+  return `[${filename}](clavus://file/${encoded})`
+}
+
+export function renderFileWriteFailureRecoveryMessage(
+  writes: CompletedFileWriteForRecovery[],
+  responseId: string,
+): string {
+  const unique = uniqueCompletedFileWrites(writes)
+  const visible = unique.slice(-5)
+  const intro = unique.length === 1
+    ? 'Der OpenClaw-Run ist nach dem Schreiben der Datei abgebrochen, aber die Datei wurde erstellt:'
+    : 'Der OpenClaw-Run ist nach dem Schreiben dieser Dateien abgebrochen, aber sie wurden erstellt:'
+  const rows = visible.map((write) => `- ${clavusFileLink(write.path) ?? `\`${write.path}\``}`)
+  const remaining = unique.length > visible.length ? [`- ...und ${unique.length - visible.length} weitere Datei(en).`] : []
+  return [
+    intro,
+    '',
+    ...rows,
+    ...remaining,
+    '',
+    `Die Antwort endete danach mit \`Agent run failed\` (${responseId}).`,
+  ].join('\n')
+}
+
+function appendFileWriteFailureRecovery(
+  threadId: string,
+  responseId: string,
+  writes: CompletedFileWriteForRecovery[],
+): boolean {
+  const unique = uniqueCompletedFileWrites(writes)
+  if (!threadId || !responseId || unique.length === 0) return false
+
+  const existing = readThreadMessages(threadId)
+  if (existing.some((m) => m.meta === FILE_WRITE_RECOVERY_META && m.backendResponseId === responseId)) {
+    return false
+  }
+
+  appendThreadMessage(threadId, {
+    id: `msg-file-write-recovery-${responseId}`,
+    role: 'assistant',
+    content: renderFileWriteFailureRecoveryMessage(unique, responseId),
+    timestamp: Date.now(),
+    meta: FILE_WRITE_RECOVERY_META,
+    backendResponseId: responseId,
+    filePaths: unique.map((write) => write.path),
+  })
+  logOpenClawAsyncRecovery({
+    event: 'file_write_failure_recovered',
+    threadId,
+    responseId,
+    source: 'responses-proxy',
+    meta: { paths: unique.map((write) => write.path) },
+  })
+  return true
 }
 
 /** Render per-message client metadata (clavusClientMeta) into a compact note
@@ -134,12 +281,106 @@ function prependContext(input: any, ctx: string): any {
  */
 export function responsesProxyPlugin() {
   let runtimeInitialized = false
+  let recoveryMonitorRegistered = false
 
   // Abort handles for in-flight gateway runs, keyed by responseId. A run keeps
   // going server-side when the client disconnects (that's what makes recovery
   // possible) — so Stop/edit/regenerate need an explicit cancel path, or the
   // agent's session context silently accumulates answers the user never saw.
   const activeRuns = new Map<string, () => void>()
+
+  function runOpenClawSessionRecovery(threadId: string) {
+    if (!threadId) return
+    logOpenClawAsyncRecovery({ event: 'sweep_started', threadId, source: 'responses-proxy' })
+    const recovered = recoverOpenClawSessionTailForThread(threadId)
+    if (recovered.added > 0) {
+      scheduleThreadMetadataRefresh(threadId)
+      console.log(`[responses-proxy] Recovered ${recovered.added} OpenClaw async message(s) for ${threadId}`)
+    }
+  }
+
+  function scheduleOpenClawRecoverySweeps(threadId: string, delays = OPENCLAW_RECOVERY_SWEEP_DELAYS_MS) {
+    if (!threadId) return
+    for (const delay of delays) {
+      logOpenClawAsyncRecovery({ event: 'sweep_scheduled', threadId, delayMs: delay, source: 'responses-proxy' })
+      const timer = setTimeout(() => runOpenClawSessionRecovery(threadId), delay)
+      timer.unref?.()
+    }
+  }
+
+  function registerOpenClawRecoveryMonitor() {
+    if (recoveryMonitorRegistered) return
+    recoveryMonitorRegistered = true
+
+    getGatewayWs().onEvent((event, payload) => {
+      const data = readRecord(payload.data) ?? payload
+      const sessionKey = readString(payload.sessionKey) ?? readString(data.sessionKey)
+      const threadId = threadIdFromOpenClawSessionKey(sessionKey)
+      if (!threadId) return
+
+      const runId = readString(payload.runId) ?? readString(payload.run_id) ?? readString(data.runId) ?? readString(data.run_id)
+      const stream = readString(payload.stream) ?? readString(data.stream)
+      const phase = readString(data.phase)
+      const yieldDetected = readBoolean(payload.yieldDetected)
+        || readBoolean(payload.yield_detected)
+        || readBoolean(data.yieldDetected)
+        || readBoolean(data.yield_detected)
+      const completionLike = event === 'model.completed'
+        || data.type === 'model.completed'
+        || (stream === 'lifecycle' && phase === 'end')
+      if (!completionLike) return
+
+      logOpenClawAsyncRecovery({
+        event: 'monitor_completion_seen',
+        threadId,
+        sessionKey,
+        runId,
+        source: 'gateway-ws',
+        meta: {
+          gatewayEvent: event,
+          stream,
+          phase,
+          yieldDetected,
+        },
+      })
+
+      if (runId && yieldDetected) {
+        recordOpenClawAsyncPending({
+          threadId,
+          sessionKey,
+          parentRunId: runId,
+          yieldedAt: Date.parse(readString(payload.ts) ?? readString(data.ts) ?? '') || Date.now(),
+        })
+      }
+
+      scheduleOpenClawRecoverySweeps(threadId, [0, 1000, 5000, 15000, 30000])
+    })
+  }
+
+  function handleYieldedAgentRun(
+    threadId: string,
+    responseId: string,
+    lifecycle: AgentRunLifecycleEvent,
+  ) {
+    if (!threadId || !lifecycle.yieldDetected || lifecycle.aborted) return
+    logOpenClawAsyncRecovery({
+      event: 'yield_detected',
+      threadId,
+      sessionKey: lifecycle.sessionKey,
+      runId: lifecycle.runId,
+      responseId,
+      source: 'agent-lifecycle',
+      meta: { status: lifecycle.status, phase: lifecycle.phase, timedOut: lifecycle.timedOut },
+    })
+    recordOpenClawAsyncPending({
+      threadId,
+      sessionKey: lifecycle.sessionKey,
+      parentRunId: lifecycle.runId,
+      parentResponseId: responseId,
+      yieldedAt: Date.now(),
+    })
+    scheduleOpenClawRecoverySweeps(threadId)
+  }
 
   function ensureRuntimeInitialized() {
     if (runtimeInitialized) return
@@ -152,6 +393,7 @@ export function responsesProxyPlugin() {
       const gwUrl = OPENCLAW_API_TARGET.replace(/^http/, 'ws')
       console.log(`[responses-proxy] Connecting to gateway WS at ${gwUrl}`)
       initGatewayWs(gwUrl, GATEWAY_TOKEN)
+      registerOpenClawRecoveryMonitor()
     }
   }
 
@@ -245,7 +487,8 @@ export function responsesProxyPlugin() {
     if (seedBlock) agentMessage = `${seedBlock}\n\n${agentMessage}`
 
     if (threadId) {
-      recoverOpenClawAnnouncementsForThread(threadId)
+      const recovered = recoverOpenClawSessionTailForThread(threadId)
+      if (recovered.added > 0) scheduleThreadMetadataRefresh(threadId)
       const announceContext = renderRecoveredAnnouncementContext(threadId)
       if (announceContext) agentMessage = `${announceContext}\n\n${agentMessage}`
     }
@@ -316,6 +559,7 @@ export function responsesProxyPlugin() {
     let sawAssistantOutput = false
     let sawToolActivity = false
     let lastRunError: Error | null = null
+    const completedFileWrites: CompletedFileWriteForRecovery[] = []
 
     const appendFailure = (error: Error) => {
       bufferAppendEvent(responseId, 'response.failed', JSON.stringify({
@@ -366,6 +610,10 @@ export function responsesProxyPlugin() {
           },
           onToolCall: (tc) => {
             sawToolActivity = true
+            const completedWrite = detectCompletedFileWriteForRecovery(tc)
+            if (completedWrite && !completedFileWrites.some((write) => write.path === completedWrite.path)) {
+              completedFileWrites.push(completedWrite)
+            }
             const eventType = tc.status === 'running' ? 'response.output_item.added' : 'response.output_item.done'
             bufferAppendEvent(responseId, eventType, JSON.stringify({
               type: eventType,
@@ -412,6 +660,7 @@ export function responsesProxyPlugin() {
               },
             }))
           },
+          onLifecycle: (event) => handleYieldedAgentRun(threadId, responseId, event),
           onDone: () => {
             // Ensure response.completed was emitted even without usage
           },
@@ -454,6 +703,11 @@ export function responsesProxyPlugin() {
       }
     } finally {
       activeRuns.delete(responseId)
+    }
+
+    if (finalStatus === 'failed' && threadId && completedFileWrites.length > 0) {
+      const recovered = appendFileWriteFailureRecovery(threadId, responseId, completedFileWrites)
+      if (recovered) scheduleThreadMetadataRefresh(threadId)
     }
 
     markFinished(responseId, finalStatus)
@@ -636,6 +890,7 @@ export function responsesProxyPlugin() {
       minCreatedAt: typeof minCreatedAt === 'number' && Number.isFinite(minCreatedAt) ? minCreatedAt : undefined,
     })
     if (!entry) {
+      runOpenClawSessionRecovery(threadId)
       res.statusCode = 404
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: { message: 'No active response for this thread' } }))
