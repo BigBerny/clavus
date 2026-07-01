@@ -248,6 +248,10 @@ export function App() {
   // desktop *browser* keeps the sidebar + grid layout.
   const isTauriShell = document.documentElement.hasAttribute('data-tauri')
   const pagerMode = !isDesktop || isTauriShell
+  // True mobile: small touch screen (not the Tauri desktop window). On mobile a
+  // markdown opened from a chat always takes a full swipeable column — the
+  // side-by-side split (and its toggle) is only offered on wider pager surfaces.
+  const isMobile = !isDesktop
 
   // Pre-warm the Marksense editor bundle (Tiptap + ~25 extensions + CodeMirror)
   // while the user is reading chat. Without this, opening a markdown for the
@@ -695,8 +699,10 @@ export function App() {
       const tabId = applyRoute({ kind: 'file', path: detail.path, title: detail.title })
       if (tabId) {
         // Pager: a markdown opened from a conversation (or from the doc pane
-        // itself) opens split with the conversation by default — the chat stays
-        // mounted, so an active recording keeps running.
+        // itself) mounts as a linked-doc pane right of the chat, which stays
+        // mounted so an active recording keeps running. On mobile the doc takes
+        // a full-width column and we page straight to it (swipe left to return
+        // to the chat); on wider pager surfaces it opens split beside the chat.
         if (pagerMode && tabId.startsWith('marksense:')) {
           const current = visiblePanelRef.current
           const currentTab = useTabsStore.getState().tabs.find(t => t.id === current)
@@ -704,9 +710,14 @@ export function App() {
             ? currentTab.id
             : current === docPaneIdRef.current ? paneTabIdRef.current : null
           if (chatPaneId) {
-            setPagerSplitDoc(true)
             setDocPaneId(tabId)
-            if (current !== chatPaneId) scrollToTabRef.current(chatPaneId)
+            if (isMobile) {
+              // Full-width doc column: reveal it immediately.
+              scrollToTabRef.current(tabId)
+            } else {
+              setPagerSplitDoc(true)
+              if (current !== chatPaneId) scrollToTabRef.current(chatPaneId)
+            }
             return
           }
         }
@@ -731,7 +742,7 @@ export function App() {
       window.removeEventListener('clavus:open-file', handleOpenFile)
       window.removeEventListener('clavus:open-file-tab', handleOpenFileTab)
     }
-  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, pagerMode, checkRecovery, setVisiblePanel, reconnectAfterResumeIfNeeded, setPagerSplitDoc])
+  }, [needsToken, navigateToThread, checkPendingNavigation, setConnectionStatus, pagerMode, isMobile, checkRecovery, setVisiblePanel, reconnectAfterResumeIfNeeded, setPagerSplitDoc])
 
   // Initial scroll. If the app was opened via a deep link, land directly
   // on that file/chat panel. Otherwise start on Home — the leftmost panel
@@ -1501,7 +1512,9 @@ export function App() {
     ? (docTab as MarksenseTab)
     : null
   // Pager split: doc rides in the chat column instead of as a separate column.
-  const splitDocActive = !!(pagerMode && pagerSplitDoc && docPane && paneTab?.type === 'chat')
+  // Never on mobile — there the doc always opens as its own full-width column
+  // right of the conversation, so it can be swiped between.
+  const splitDocActive = !!(pagerMode && !isMobile && pagerSplitDoc && docPane && paneTab?.type === 'chat')
   // Ref tracks the MOUNTED doc pane — scroll handlers must never target a
   // panel that isn't in the DOM (the split-mode doc has no column of its own).
   docPaneIdRef.current = splitDocActive ? null : (docPane?.id ?? null)
@@ -2121,7 +2134,7 @@ export function App() {
                         title={docPane.title}
                         isVisible={isActive}
                         onOpenFinder={handleOpenFinder}
-                        splitToggle={paneTab?.type === 'chat' ? {
+                        splitToggle={paneTab?.type === 'chat' && !isMobile ? {
                           mode: 'pane',
                           onToggle: () => {
                             scrollToTabRef.current(paneTab.id)
